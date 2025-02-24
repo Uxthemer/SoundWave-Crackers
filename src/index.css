@@ -1,0 +1,128 @@
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 255 255 255;
+    --text: 30 30 30;
+    --card: 243 244 246;
+    --card-border: 229 231 235;
+  }
+
+  :root.dark {
+    --background: 30 30 30;
+    --text: 255 255 255;
+    --card: 13 27 42;
+    --card-border: 255 255 255;
+  }
+
+  body {
+    @apply bg-background text-text font-body transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-6 py-3 bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow
+           text-white font-montserrat font-bold rounded-lg
+           transform transition-all duration-300
+           hover:scale-105 hover:shadow-lg hover:shadow-primary-red/20
+           border border-white/10;
+  }
+
+  .card {
+    @apply bg-card backdrop-blur-md rounded-xl p-6
+           border border-card-border/10 shadow-xl
+           hover:border-primary-orange/30 transition-all duration-300
+           hover:shadow-primary-orange/20;
+  }
+
+  .glass-effect {
+    @apply bg-card/20 backdrop-blur-lg border-t border-card-border/10
+           hover:bg-card/30 transition-all duration-300;
+  }
+
+  .theme-toggle {
+    @apply p-2 rounded-full transition-colors duration-300
+           hover:bg-card/50 focus:outline-none focus:ring-2
+           focus:ring-primary-orange focus:ring-opacity-50;
+  }
+}
+
+.hero-gradient {
+  @apply dark:bg-gradient-to-r dark:from-primary-red/15 dark:via-secondary-purple/15 dark:to-secondary-blue/15
+         bg-gradient-to-r from-primary-yellow/10 via-primary-orange/10 to-primary-red/10;
+}
+
+.text-glow {
+  @apply dark:text-shadow-glow;
+}
+
+@layer utilities {
+  .text-shadow-glow {
+    text-shadow: 0 0 15px rgba(255, 87, 34, 0.7),
+                 0 0 30px rgba(255, 87, 34, 0.4);
+  }
+}
+
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 20s linear infinite;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 40s linear infinite;
+  display: inline-block;
+}
+
+@keyframes glow {
+  0% { text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107; }
+  50% { text-shadow: 0 0 20px #ff6347, 0 0 30px #ffd700; }
+  100% { text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107; }
+}
+
+.animate-glow {
+  animation: glow 1.5s infinite alternate;
+}
+
+@keyframes typing {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes blink {
+  50% {
+    border-color: transparent;
+  }
+}
+
+.typing-effect {
+  overflow: hidden;
+  white-space: nowrap;
+  border-right: 3px solid #6B46C1; /* Purple-600 */
+  width: 100%;
+  animation: typing 3s steps(30, end) forwards, blink 0.7s infinite;
+}
