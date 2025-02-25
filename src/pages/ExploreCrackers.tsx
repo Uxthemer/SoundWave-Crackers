@@ -1,23 +1,79 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { LayoutGrid, LayoutList, Filter } from 'lucide-react';
+import { LayoutGrid, LayoutList, Filter, Plus, Minus, ShoppingCart } from 'lucide-react';
 import { products } from '../data/products';
 import { useCartStore } from '../store/cartStore';
 
 export function ExploreCrackers() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const { addToCart } = useCartStore();
+  const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [quantities, setQuantities] = useState<Record<number, number>>({});
 
   const categories = ['all', ...new Set(products.map(p => p.category))];
-
   const filteredProducts = selectedCategory === 'all'
     ? products
     : products.filter(p => p.category === selectedCategory);
 
+  const handleQuantityChange = (productId: number, value: string) => {
+    const newQuantity = Math.max(0, parseInt(value) || 0);
+    setQuantities(prev => ({ ...prev, [productId]: newQuantity }));
+  };
+
+  const handleIncrement = (product: typeof products[0]) => {
+    const currentQuantity = quantities[product.id] || 0;
+    const newQuantity = currentQuantity + 1;
+    setQuantities(prev => ({ ...prev, [product.id]: newQuantity }));
+    addToCart(product, 1);
+  };
+
+  const handleDecrement = (product: typeof products[0]) => {
+    const currentQuantity = quantities[product.id] || 0;
+    if (currentQuantity > 0) {
+      const newQuantity = currentQuantity - 1;
+      setQuantities(prev => ({ ...prev, [product.id]: newQuantity }));
+      addToCart(product, -1);
+    }
+  };
+
+  const handleAddToCart = (product: typeof products[0]) => {
+    setQuantities(prev => ({ ...prev, [product.id]: 1 }));
+    addToCart(product, 1);
+  };
+
   return (
-    <div className="pt-24 min-h-screen">
-      <div className="container mx-auto px-6 py-8">
+    <div className="pt-6 min-h-screen">
+      <div className="sticky top-[0px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
+        <div className="container mx-auto px-6">
+          <div className="py-4">
+            <div className="flex flex-wrap items-center gap-4 bg-card/50 p-4 rounded-xl">
+              <div className="flex-1 min-w-[120px] text-center">
+                <p className="text-sm text-text/60">Selected Products</p>
+                <p className="font-montserrat font-bold text-xl">{items.length}</p>
+              </div>
+              <div className="flex-1 min-w-[120px] text-center">
+                <p className="text-sm text-text/60">Total Quantity</p>
+                <p className="font-montserrat font-bold text-xl">{totalQuantity}</p>
+              </div>
+              <div className="flex-1 min-w-[120px] text-center">
+                <p className="text-sm text-text/60">Total Amount</p>
+                <p className="font-montserrat font-bold text-xl text-primary-orange">
+                  ₹{totalAmount.toFixed(2)}
+                </p>
+              </div>
+              <button 
+                className="btn-primary flex items-center gap-2 w-full md:w-auto"
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                <span>View Cart</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-6 py-8 mt-20">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 space-y-4 md:space-y-0">
           <h1 className="font-heading text-4xl">Explore Crackers</h1>
           <div className="flex items-center space-x-4">
@@ -83,12 +139,39 @@ export function ExploreCrackers() {
                   <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full text-sm">
                     {product.discount}% OFF
                   </span>
-                  <button
-                    onClick={() => addToCart(product, 1)}
-                    className="btn-primary"
-                  >
-                    Add to Cart
-                  </button>
+                  {quantities[product.id] ? (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleDecrement(product)}
+                        className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        value={quantities[product.id] || 0}
+                        onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                        className="w-16 px-2 py-1 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        aria-label="Quantity"
+                      />
+                      <button
+                        onClick={() => handleIncrement(product)}
+                        className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                        aria-label="Increase quantity"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleAddToCart(product)}
+                      className="btn-primary"
+                    >
+                      Add to Cart
+                    </button>
+                  )}
                 </div>
               </div>
             </motion.div>

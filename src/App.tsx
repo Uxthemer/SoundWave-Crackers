@@ -7,7 +7,7 @@ import { AnnouncementBar } from './components/AnnouncementBar';
 import { MarqueeText } from './components/MarqueeText';
 import { HeroSlider } from './components/HeroSlider';
 import { AboutSection } from './components/AboutSection';
-import { BrandLogos } from './components/BrandLogos';
+import { HowItWorks } from './components/HowItWorks';
 import { CrackerCategories } from './components/CrackerCategories';
 import { TrendingCrackers } from './components/TrendingCrackers';
 import { CompanyScroll } from './components/CompanyScroll';
@@ -52,7 +52,7 @@ export default function App() {
         <MarqueeText />
         
         {/* Navigation */}
-        <nav className={`glass-effect w-full z-50 px-4 py-1 ${isScrolled ? 'md:relative fixed' : 'relative'}`}>
+        <nav className={`glass-effect w-full z-50 px-4 py-1 ${isScrolled ? 'md:relative sticky top-[0px]' : 'relative'}`}>
           <div className="container mx-auto flex items-center justify-between">
             <Link to="/" className="flex items-center space-x-2">
               <img src="/assets/img/logo/logo_1.png" alt='SoundWave Crackers' className="hidden dark:block h-20 w-auto dark:invert" />
@@ -103,7 +103,7 @@ export default function App() {
               <CrackerCategories />
               <TrendingCrackers />
               <CTASection />
-              <BrandLogos />
+              <HowItWorks />
               <ContactSection />
             </>
           } />

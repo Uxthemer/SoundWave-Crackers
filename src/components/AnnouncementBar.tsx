@@ -8,15 +8,15 @@ export function AnnouncementBar() {
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-2">
               <Phone className="w-4 h-4" />
-              <a href="tel:+91 8668029052">+91 8668029052</a>
+              <a href="tel:+91 8668029052">8668029052</a>
             </div>
             <div className="flex items-center space-x-2">
               <Phone className="w-4 h-4" />
-              <a href="tel:+91 9789785488">+91 9789785488</a>
+              <a href="tel:+91 9789785488">9789785488</a>
             </div>
             <div className="flex items-center space-x-2">
               <Mail className="w-4 h-4" />
-              <a href="mailto:info@soundwavecrackers.com">info@soundwavecrackers.com</a>
+              <a href="mailto:info@soundwavecrackers.com">soundwavecrackers@gmail.com</a>
             </div>
           </div>
           <div className="flex items-center space-x-4">

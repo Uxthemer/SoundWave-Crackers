@@ -25,7 +25,7 @@ export function CompanyScroll() {
   return (
     <div className="py-12 bg-card/30 overflow-hidden">
       <div className="container mx-auto px-6 mb-8">
-        <h2 className="font-heading text-3xl text-center">Trusted by Leading Brands</h2>
+        <h2 className="font-heading text-3xl text-center">Top Fire Cracker Brands</h2>
       </div>
       <div className="relative">
         <div className="flex space-x-8 animate-scroll">

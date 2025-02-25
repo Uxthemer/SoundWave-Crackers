@@ -1,12 +1,43 @@
 import { motion } from 'framer-motion';
-import { ArrowRight, Star } from 'lucide-react';
+import { ArrowRight, Star, Plus, Minus, ShoppingCart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { products } from '../data/products';
+import { useState } from 'react';
 
 export function TrendingCrackers() {
   const { addToCart } = useCartStore();
   const trendingProducts = products.slice(0, 4); // Show first 4 products as trending
+  const [quantities, setQuantities] = useState<Record<number, number>>(
+    Object.fromEntries(trendingProducts.map(p => [p.id, 0]))
+  );
+
+  const handleQuantityChange = (productId: number, value: string) => {
+    const newQuantity = Math.max(0, parseInt(value) || 0);
+    setQuantities(prev => ({ ...prev, [productId]: newQuantity }));
+  };
+
+  const handleIncrement = (product: typeof products[0]) => {
+    const newQuantity = (quantities[product.id] || 0) + 1;
+    setQuantities(prev => ({ ...prev, [product.id]: newQuantity }));
+    addToCart(product, 1);
+  };
+
+  const handleDecrement = (product: typeof products[0]) => {
+    if (quantities[product.id] > 0) {
+      const newQuantity = quantities[product.id] - 1;
+      setQuantities(prev => ({ ...prev, [product.id]: newQuantity }));
+      addToCart(product, -1);
+    }
+  };
+
+  const handleAddToCart = (product: typeof products[0]) => {
+    const quantity = quantities[product.id] || 0;
+    if (quantity > 0) {
+      addToCart(product, quantity);
+      setQuantities(prev => ({ ...prev, [product.id]: 0 }));
+    }
+  };
 
   return (
     <section className="py-16">
@@ -51,18 +82,47 @@ export function TrendingCrackers() {
                   ))}
                 </div>
                 <p className="text-sm text-text/60 mb-3">{product.content}</p>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm text-text/60 line-through">₹{product.actualPrice}</p>
                     <p className="font-bold text-primary-orange">₹{product.offerPrice}</p>
                   </div>
-                  <button
-                    onClick={() => addToCart(product, 1)}
-                    className="btn-primary"
-                  >
-                    Add to Cart
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => handleDecrement(product)}
+                      className="p-1 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      value={quantities[product.id] || 0}
+                      onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                      className="w-16 px-2 py-1 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      aria-label="Quantity"
+                    />
+                    <button
+                      onClick={() => handleIncrement(product)}
+                      className="p-1 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+                <button
+                  onClick={() => handleAddToCart(product)}
+                  className={`w-full flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors ${
+                    quantities[product.id] > 0
+                      ? 'bg-primary-orange text-white hover:bg-primary-red'
+                      : 'bg-card/50 text-text/60 hover:bg-card'
+                  }`}
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>Add to Cart</span>
+                </button>
               </div>
             </motion.div>
           ))}
