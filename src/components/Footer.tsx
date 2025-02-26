@@ -149,12 +149,18 @@ export function Footer() {
               </button>
             </form>
           </div> */}
-          <div>
-          <h3 className="font-montserrat font-bold text-lg mb-6">
-              Scan QR Code for Payment
+           {/* Right Section - Important Notice */}
+          <div className="" >
+            <h3 className="text-lg font-semibold text-primary-orange">
+              Important Notice
             </h3>
-            <img src="" alt="Scan QR Code for Payment">
-            </img>
+            <p className="text-sm text-gray-400 mt-2">
+              We value our customers and respect the law, so we cannot sell
+              firecrackers online as per the 2018 Supreme Court order. Please
+              add your desired products to the cart and use the enquiry button
+              to submit your request. We will contact you within 24 hours to
+              confirm your order through WhatsApp or a phone call.
+            </p>
           </div>
         </div>
 

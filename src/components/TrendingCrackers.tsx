@@ -65,7 +65,7 @@ export function TrendingCrackers() {
                 <img
                   src={product.image}
                   alt={product.name}
-                  className="w-full h-48 object-cover transform group-hover:scale-110 transition-transform duration-500"
+                  className="w-full h-50 object-cover transform group-hover:scale-110 transition-transform duration-500"
                 />
                 <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm">
                   {product.discount}% OFF
@@ -73,14 +73,14 @@ export function TrendingCrackers() {
               </div>
               <div>
                 <h3 className="font-montserrat font-bold text-lg mb-1">{product.name}</h3>
-                <div className="flex items-center space-x-1 mb-2">
+                {/* <div className="flex items-center space-x-1 mb-2">
                   {[...Array(5)].map((_, i) => (
                     <Star
                       key={i}
                       className="w-4 h-4 fill-primary-yellow text-primary-yellow"
                     />
                   ))}
-                </div>
+                </div> */}
                 <p className="text-sm text-text/60 mb-3">{product.content}</p>
                 <div className="flex items-center justify-between mb-4">
                   <div>

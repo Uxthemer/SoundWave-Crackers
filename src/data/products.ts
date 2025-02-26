@@ -4,7 +4,7 @@ export const products: Product[] = [
   {
     id: 1,
     name: "Sparkle Supreme",
-    image: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p1.jpg",
     category: "Aerial Fireworks",
     actualPrice: 499,
     content: "1 Box - 10 Pieces",
@@ -14,7 +14,7 @@ export const products: Product[] = [
   {
     id: 2,
     name: "Thunder King",
-    image: "https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p2.jpg",
     category: "Ground Spinners",
     actualPrice: 299,
     content: "1 Box - 5 Pieces",
@@ -24,7 +24,7 @@ export const products: Product[] = [
   {
     id: 3,
     name: "Rainbow Burst",
-    image: "https://images.unsplash.com/photo-1533230408708-8f9f91d1235a?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p3.jpg",
     category: "Sparklers",
     actualPrice: 199,
     content: "1 Box - 20 Pieces",
@@ -34,7 +34,7 @@ export const products: Product[] = [
   {
     id: 4,
     name: "Golden Shower",
-    image: "https://images.unsplash.com/photo-1514912885225-5c9ec8507d68?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p4.jpg",
     category: "Fountains",
     actualPrice: 399,
     content: "1 Box - 2 Pieces",
@@ -44,7 +44,7 @@ export const products: Product[] = [
   {
     id: 5,
     name: "Color Pearl",
-    image: "https://images.unsplash.com/photo-1552673597-e3cd6747a996?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p5.jpg",
     category: "Fountains",
     actualPrice: 299,
     content: "1 Box - 3 Pieces",
@@ -54,7 +54,7 @@ export const products: Product[] = [
   {
     id: 6,
     name: "Silver Swirl",
-    image: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p6.jpg",
     category: "Ground Spinners",
     actualPrice: 199,
     content: "1 Box - 10 Pieces",
@@ -64,7 +64,7 @@ export const products: Product[] = [
   {
     id: 7,
     name: "Sky Blaster",
-    image: "https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p7.jpg",
     category: "Aerial Fireworks",
     actualPrice: 799,
     content: "1 Box - 5 Pieces",
@@ -74,7 +74,7 @@ export const products: Product[] = [
   {
     id: 8,
     name: "Magic Wand",
-    image: "https://images.unsplash.com/photo-1533230408708-8f9f91d1235a?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p8.jpg",
     category: "Sparklers",
     actualPrice: 149,
     content: "1 Box - 30 Pieces",
@@ -84,7 +84,7 @@ export const products: Product[] = [
   {
     id: 9,
     name: "Crackling Palms",
-    image: "https://images.unsplash.com/photo-1514912885225-5c9ec8507d68?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p1.jpg",
     category: "Aerial Fireworks",
     actualPrice: 599,
     content: "1 Box - 8 Pieces",
@@ -94,7 +94,7 @@ export const products: Product[] = [
   {
     id: 10,
     name: "Diamond Sparkle",
-    image: "https://images.unsplash.com/photo-1552673597-e3cd6747a996?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p2.jpg",
     category: "Sparklers",
     actualPrice: 249,
     content: "1 Box - 25 Pieces",
@@ -104,7 +104,7 @@ export const products: Product[] = [
   {
     id: 11,
     name: "Flower Pot",
-    image: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p3.jpg",
     category: "Fountains",
     actualPrice: 349,
     content: "1 Box - 4 Pieces",
@@ -114,7 +114,7 @@ export const products: Product[] = [
   {
     id: 12,
     name: "Color Wheel",
-    image: "https://images.unsplash.com/photo-1467810563316-b5476525c0f9?w=800&auto=format&fit=crop",
+    image: "/assets/img/crackers/p4.jpg",
     category: "Ground Spinners",
     actualPrice: 279,
     content: "1 Box - 8 Pieces",

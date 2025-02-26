@@ -31,6 +31,8 @@ export default {
       animation: {
         'sparkle': 'sparkle 1.5s linear infinite',
         'fadeIn': "fadeIn 2s ease-in-out",
+        'fadeInOut': "fadeInOut 3s ease-in-out infinite",
+        'marquee': "marquee 40s linear infinite",
       },
       keyframes: {
         sparkle: {
@@ -40,6 +42,14 @@ export default {
         fadeIn: {
           "0%": { opacity: 0, transform: "translateY(10px)" },
           "100%": { opacity: 1, transform: "translateY(0)" },
+        },
+        fadeInOut: {
+          "0%, 100%": { opacity: 0, transform: "translateY(10px)" },
+          "10%, 90%": { opacity: 1, transform: "translateY(0)" },
+        },
+        marquee: {
+          "0%": { transform: "translateX(100%)" },
+          "100%": { transform: "translateX(-100%)" },
         },
       },
     },

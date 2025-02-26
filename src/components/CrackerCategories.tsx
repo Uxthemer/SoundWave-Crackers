@@ -28,7 +28,7 @@ const categories = [
 
 export function CrackerCategories() {
   return (
-    <section className="py-16 bg-card/30">
+    <section className="py-12 bg-card/30">
       <div className="container mx-auto px-6">
         <div className="flex justify-between items-center mb-12">
           <h2 className="font-heading text-4xl">Cracker Categories</h2>
