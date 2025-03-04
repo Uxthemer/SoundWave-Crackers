@@ -9,12 +9,12 @@ export function Footer() {
           <div>
             <Link to="/" className="flex items-center mb-6">
               <img
-                src="/assets/img/logo/logo_1.png"
+                src="/assets/img/logo/logo_2.png"
                 alt="SoundWave Crackers"
                 className="hidden dark:block h-20 w-auto dark:invert"
               />
               <img
-                src="/assets/img/logo/logo_1.png"
+                src="/assets/img/logo/logo_2.png"
                 alt="SoundWave Crackers"
                 className="block dark:hidden h-20 w-auto light:invert"
               />
@@ -93,7 +93,7 @@ export function Footer() {
 
           <div>
             <h3 className="font-montserrat font-bold text-lg mb-6">
-              Categories
+              Useful Links
             </h3>
             <ul className="space-y-4">
               <li>
@@ -101,7 +101,7 @@ export function Footer() {
                   to="/category/aerial"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Aerial Fireworks
+                  Blog
                 </Link>
               </li>
               <li>
@@ -109,7 +109,7 @@ export function Footer() {
                   to="/category/ground"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Ground Spinners
+                  Sitemap
                 </Link>
               </li>
               <li>
@@ -117,7 +117,7 @@ export function Footer() {
                   to="/category/sparklers"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Sparklers
+                  Track Order
                 </Link>
               </li>
               <li>
@@ -125,7 +125,7 @@ export function Footer() {
                   to="/category/fountains"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Fountains
+                  My Orders
                 </Link>
               </li>
             </ul>
@@ -170,6 +170,18 @@ export function Footer() {
               © 2025 SoundWave Crackers. All rights reserved.
             </p>
             <div className="flex space-x-6">
+            <Link
+                to="/shipping-policy"
+                className="text-text/60 hover:text-primary-orange transition-colors"
+              >
+                Shipping Policy
+              </Link>
+            <Link
+                to="/cancellation-policy"
+                className="text-text/60 hover:text-primary-orange transition-colors"
+              >
+                Cancellation & Return Policy
+              </Link>
               <Link
                 to="/privacy"
                 className="text-text/60 hover:text-primary-orange transition-colors"
@@ -182,12 +194,7 @@ export function Footer() {
               >
                 Terms of Service
               </Link>
-              <Link
-                to="/shipping"
-                className="text-text/60 hover:text-primary-orange transition-colors"
-              >
-                Shipping Policy
-              </Link>
+              
             </div>
           </div>
         </div>

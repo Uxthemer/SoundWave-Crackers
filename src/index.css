@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -49,6 +48,30 @@
            hover:bg-card/50 focus:outline-none focus:ring-2
            focus:ring-primary-orange focus:ring-opacity-50;
   }
+}
+
+/* Swiper Customization */
+.thumbs-swiper .swiper-slide {
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.thumbs-swiper .swiper-slide-thumb-active {
+  opacity: 1;
+}
+
+/* Add hover effect for product images */
+.product-image-zoom {
+  position: relative;
+  overflow: hidden;
+}
+
+.product-image-zoom img {
+  transition: transform 0.3s ease-out;
+}
+
+.product-image-zoom:hover img {
+  transform: scale(1.5);
 }
 
 .hero-gradient {

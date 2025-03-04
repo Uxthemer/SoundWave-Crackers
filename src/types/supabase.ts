@@ -81,6 +81,13 @@ export interface Database {
           status: string
           payment_method: string | null
           created_at: string
+          customer_name: string | null
+          email: string | null
+          phone: string | null
+          address: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
         }
         Insert: {
           id?: string
@@ -89,6 +96,13 @@ export interface Database {
           status?: string
           payment_method?: string | null
           created_at?: string
+          customer_name?: string | null
+          email?: string | null
+          phone?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
         }
         Update: {
           id?: string
@@ -97,6 +111,13 @@ export interface Database {
           status?: string
           payment_method?: string | null
           created_at?: string
+          customer_name?: string | null
+          email?: string | null
+          phone?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
         }
       }
       order_items: {
@@ -125,6 +146,55 @@ export interface Database {
           quantity?: number
           price?: number
           total_price?: number
+          created_at?: string
+        }
+      }
+      roles: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          created_at?: string
+        }
+      }
+      user_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          role_id: string | null
+          full_name: string | null
+          phone: string | null
+          address: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          role_id?: string | null
+          full_name?: string | null
+          phone?: string | null
+          address?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          role_id?: string | null
+          full_name?: string | null
+          phone?: string | null
+          address?: string | null
           created_at?: string
         }
       }

@@ -1,31 +1,77 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart } from 'lucide-react';
-import { products } from '../data/products';
+import { ShoppingCart, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { Cart } from '../components/Cart';
+import { useProducts } from '../hooks/useProducts';
+import { useCategories } from '../hooks/useCategories';
 
 export function QuickPurchase() {
   const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const { products, loading } = useProducts();
+  const { categories } = useCategories();
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [groupedProducts, setGroupedProducts] = useState<Record<string, any[]>>({});
 
-  const handleQuantityChange = (productId: number, quantity: number) => {
+  useEffect(() => {
+    if (products.length > 0) {
+      // Group products by category
+      const grouped = products.reduce((acc, product) => {
+        const categoryName = product.categories?.name || 'Uncategorized';
+        
+        if (!acc[categoryName]) {
+          acc[categoryName] = [];
+        }
+        
+        acc[categoryName].push({
+          id: product.id,
+          name: product.name,
+          category: categoryName,
+          image: `${product.image_url ? `/assets/img/crackers/${product.image_url}`: '/assets/img/logo/logo_2.png'}`,
+          actualPrice: product.actual_price,
+          offerPrice: product.offer_price,
+          discount: product.discount_percentage,
+          content: product.content
+        });
+        
+        return acc;
+      }, {} as Record<string, any[]>);
+      
+      setGroupedProducts(grouped);
+      
+      // Initialize quantities
+      const newQuantities: Record<string, number> = {};
+      products.forEach(p => {
+        newQuantities[p.id] = quantities[p.id] || 0;
+      });
+      setQuantities(newQuantities);
+    }
+  }, [products]);
+
+  const handleQuantityChange = (productId: string, quantity: number) => {
     setQuantities((prev) => ({ ...prev, [productId]: quantity }));
-    addToCart(
-      products.find((p) => p.id === productId)!,
-      quantity
-    );
+    
+    const product = Object.values(groupedProducts)
+      .flat()
+      .find(p => p.id === productId);
+      
+    if (product) {
+      const diff = quantity - (quantities[productId] || 0);
+      if (diff !== 0) {
+        addToCart(product, diff);
+      }
+    }
   };
 
-  // Group products by category
-  const groupedProducts = products.reduce((acc, product) => {
-    if (!acc[product.category]) {
-      acc[product.category] = [];
-    }
-    acc[product.category].push(product);
-    return acc;
-  }, {} as Record<string, typeof products>);
+  if (loading) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -76,13 +122,17 @@ export function QuickPurchase() {
                     >
                       <div className="flex flex-col md:flex-row md:items-center gap-3">
                         <div className="flex items-center gap-3 flex-1">
-                          <img
-                            src={product.image}
-                            alt={product.name}
-                            className="w-14 h-14 object-cover rounded-lg shadow-md"
-                          />
+                          <Link to={`/product/${product.id}`}>
+                            <img
+                              src={product.image}
+                              alt={product.name}
+                              className="w-14 h-14 object-cover rounded-lg shadow-md"
+                            />
+                          </Link>
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-montserrat font-bold text-sm truncate">{product.name}</h3>
+                            <Link to={`/product/${product.id}`}>
+                              <h3 className="font-montserrat font-bold text-sm truncate">{product.name}</h3>
+                            </Link>
                             <div className="flex flex-wrap gap-2 items-center mt-1">
                               <span className="text-xs text-text/60">{product.content}</span>
                               <span className="bg-primary-orange/10 text-primary-orange px-2 py-0.5 rounded-full text-xs">

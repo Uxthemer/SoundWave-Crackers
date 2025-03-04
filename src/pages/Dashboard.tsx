@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Users,
@@ -8,7 +8,12 @@ import {
   ShoppingCart,
   Package as PackageIcon,
   Calendar,
-  Search
+  Search,
+  Upload,
+  Download,
+  Loader2,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -22,9 +27,9 @@ import {
   ArcElement,
   BarElement,
 } from 'chart.js';
-import { Line, Doughnut, Bar } from 'react-chartjs-2';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
-import { supabase } from '../lib/supabase';
+import { Line, Doughnut } from 'react-chartjs-2';
+import { useDashboard } from '../hooks/useDashboard';
+import { useProducts } from '../hooks/useProducts';
 
 ChartJS.register(
   CategoryScale,
@@ -39,128 +44,100 @@ ChartJS.register(
 );
 
 export function Dashboard() {
-  const [dateRange, setDateRange] = useState('week');
-  const [stats, setStats] = useState({
-    totalOrders: 0,
-    totalUsers: 0,
-    totalRevenue: 0,
-    totalProfit: 0
-  });
-  const [salesData, setSalesData] = useState({
-    labels: [],
-    datasets: []
-  });
-  const [categoryData, setCategoryData] = useState({
-    labels: [],
-    datasets: []
-  });
+  const [dateRange, setDateRange] = useState<'week' | 'month'>('week');
+  const { stats, salesData, categoryData, loading, fetchDashboardData } = useDashboard();
+  const { exportProductsToExcel, importProductsFromExcel } = useProducts();
+  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [importError, setImportError] = useState('');
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, [dateRange]);
+  const handleDateRangeChange = (range: 'week' | 'month') => {
+    setDateRange(range);
+    fetchDashboardData(range);
+  };
 
-  const fetchDashboardData = async () => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
     try {
-      // Get date range
-      const startDate = dateRange === 'week' 
-        ? startOfWeek(new Date()) 
-        : startOfMonth(new Date());
-      const endDate = dateRange === 'week'
-        ? endOfWeek(new Date())
-        : endOfMonth(new Date());
-
-      // Fetch orders
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', startDate.toISOString())
-        .lte('created_at', endDate.toISOString());
-
-      if (ordersError) throw ordersError;
-
-      // Fetch users
-      const { data: users, error: usersError } = await supabase
-        .from('auth.users')
-        .select('*');
-
-      if (usersError) throw usersError;
-
-      // Calculate stats
-      const revenue = orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
-      const profit = revenue * 0.2; // Assuming 20% profit margin
-
-      setStats({
-        totalOrders: orders?.length || 0,
-        totalUsers: users?.length || 0,
-        totalRevenue: revenue,
-        totalProfit: profit
-      });
-
-      // Prepare sales data
-      const salesByDate = orders?.reduce((acc, order) => {
-        const date = format(new Date(order.created_at), 'MMM dd');
-        acc[date] = (acc[date] || 0) + order.total_amount;
-        return acc;
-      }, {});
-
-      setSalesData({
-        labels: Object.keys(salesByDate || {}),
-        datasets: [
-          {
-            label: 'Sales',
-            data: Object.values(salesByDate || {}),
-            borderColor: '#FF5722',
-            tension: 0.4
-          }
-        ]
-      });
-
-      // Fetch category data
-      const { data: categories, error: categoriesError } = await supabase
-        .from('categories')
-        .select(`
-          name,
-          products (
-            id
-          )
-        `);
-
-      if (categoriesError) throw categoriesError;
-
-      setCategoryData({
-        labels: categories?.map(cat => cat.name) || [],
-        datasets: [{
-          data: categories?.map(cat => cat.products.length) || [],
-          backgroundColor: [
-            '#FF5722',
-            '#FFC107',
-            '#FF0000',
-            '#8A2BE2'
-          ]
-        }]
-      });
-
+      setImportStatus('loading');
+      const success = await importProductsFromExcel(file);
+      
+      if (success) {
+        setImportStatus('success');
+        setTimeout(() => setImportStatus('idle'), 3000);
+      } else {
+        setImportStatus('error');
+        setImportError('Failed to import products');
+      }
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      setImportStatus('error');
+      setImportError(error instanceof Error ? error.message : 'Import failed');
     }
   };
 
   return (
     <div className="min-h-screen pt-24 pb-12">
       <div className="container mx-auto px-6">
-        <div className="mb-8">
-          <h1 className="font-heading text-4xl mb-4">Dashboard</h1>
-          <div className="flex items-center space-x-4">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="font-heading text-4xl mb-2">Dashboard</h1>
+            <p className="text-text/60">Welcome to your SoundWave Crackers dashboard</p>
+          </div>
+          
+          <div className="flex flex-wrap gap-4">
             <select
               value={dateRange}
-              onChange={(e) => setDateRange(e.target.value)}
+              onChange={(e) => handleDateRangeChange(e.target.value as 'week' | 'month')}
               className="bg-card border border-card-border/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary-orange"
             >
               <option value="week">This Week</option>
               <option value="month">This Month</option>
             </select>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={exportProductsToExcel}
+                className="flex items-center gap-2 bg-card border border-card-border/10 rounded-lg px-4 py-2 hover:bg-card/70 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export Products</span>
+              </button>
+              
+              <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
+                <Upload className="w-4 h-4" />
+                <span>Import Products</span>
+                <input 
+                  type="file" 
+                  accept=".xlsx,.xls,.csv" 
+                  className="hidden" 
+                  onChange={handleFileUpload}
+                />
+              </label>
+            </div>
           </div>
         </div>
+        
+        {importStatus === 'loading' && (
+          <div className="bg-card/30 p-4 rounded-lg mb-8 flex items-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin text-primary-orange" />
+            <span>Importing products, please wait...</span>
+          </div>
+        )}
+        
+        {importStatus === 'success' && (
+          <div className="bg-green-500/10 text-green-500 p-4 rounded-lg mb-8 flex items-center gap-2">
+            <CheckCircle className="w-5 h-5" />
+            <span>Products imported successfully!</span>
+          </div>
+        )}
+        
+        {importStatus === 'error' && (
+          <div className="bg-red-500/10 text-red-500 p-4 rounded-lg mb-8 flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <span>{importError || 'Failed to import products'}</span>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -237,39 +214,51 @@ export function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <div className="card">
             <h3 className="font-montserrat font-bold text-xl mb-6">Sales Overview</h3>
-            <Line
-              data={salesData}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: {
-                    display: false
-                  }
-                },
-                scales: {
-                  y: {
-                    beginAtZero: true
-                  }
-                }
-              }}
-            />
-          </div>
-
-          <div className="card">
-            <h3 className="font-montserrat font-bold text-xl mb-6">Category Distribution</h3>
-            <div className="aspect-square max-w-[300px] mx-auto">
-              <Doughnut
-                data={categoryData}
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+              </div>
+            ) : (
+              <Line
+                data={salesData}
                 options={{
                   responsive: true,
                   plugins: {
                     legend: {
-                      position: 'bottom'
+                      display: false
+                    }
+                  },
+                  scales: {
+                    y: {
+                      beginAtZero: true
                     }
                   }
                 }}
               />
-            </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h3 className="font-montserrat font-bold text-xl mb-6">Category Distribution</h3>
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+              </div>
+            ) : (
+              <div className="aspect-square max-w-[300px] mx-auto">
+                <Doughnut
+                  data={categoryData}
+                  options={{
+                    responsive: true,
+                    plugins: {
+                      legend: {
+                        position: 'bottom'
+                      }
+                    }
+                  }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
