@@ -127,7 +127,7 @@ export function TrendingCrackers() {
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="card group"
+              className="card group p-3"
             >
               <div className="relative mb-4 overflow-hidden rounded-lg">
                 <Link to={`/product/${product.id}`}>

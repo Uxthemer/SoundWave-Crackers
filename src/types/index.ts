@@ -10,7 +10,7 @@ export interface Product extends Categories{
   id: string;
   name: string;
   image: string;
-  category: string;
+  category: Categories;
   actual_price: number;
   content: string;
   discount_percentage: number;

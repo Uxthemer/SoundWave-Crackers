@@ -5,7 +5,8 @@ import { ChevronRight, Star, Plus, Minus, ShoppingCart } from 'lucide-react';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Thumbs } from 'swiper/modules';
 import { Swiper as SwiperType } from 'swiper';
-import { products } from '../data/products';
+import { useProducts } from "../hooks/useProducts";
+import { Product } from '../types';
 import { useCartStore } from '../store/cartStore';
 import 'swiper/css';
 import 'swiper/css/navigation';
@@ -13,8 +14,9 @@ import 'swiper/css/thumbs';
 
 export function ProductDetails() {
   const { productId } = useParams();
+  const { products } = useProducts();
   const navigate = useNavigate();
-  const product = products.find(p => p.id === Number(productId));
+  const product = products.find(p => p.id === productId) as Product | undefined;
   const { addToCart } = useCartStore();
   const [quantity, setQuantity] = useState(1);
   const [thumbsSwiper, setThumbsSwiper] = useState<SwiperType | null>(null);
@@ -25,7 +27,7 @@ export function ProductDetails() {
   }
 
   const relatedProducts = products
-    .filter(p => p.category === product.category && p.id !== product.id)
+    .filter(p => p.categories.id === product.category.id && p.id !== product.id)
     .slice(0, 4);
 
   const handleQuantityChange = (value: string) => {
@@ -51,10 +53,10 @@ export function ProductDetails() {
           <Link to="/explore" className="text-text/60 hover:text-primary-orange">Explore</Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <Link 
-            to={`/explore?category=${product.category.toLowerCase()}`}
+            to={`/explore?category=${product.category.name.toLowerCase()}`}
             className="text-text/60 hover:text-primary-orange"
           >
-            {product.category}
+            {product.category.name}
           </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <span className="text-text/80">{product.name}</span>
@@ -131,11 +133,11 @@ export function ProductDetails() {
             <div className="bg-card/30 rounded-xl p-6 mb-8">
               <div className="flex items-end gap-4 mb-4">
                 <div>
-                  <p className="text-sm text-text/60 line-through">₹{product.actualPrice}</p>
-                  <p className="text-3xl font-bold text-primary-orange">₹{product.offerPrice}</p>
+                  <p className="text-sm text-text/60 line-through">₹{product.actual_price}</p>
+                  <p className="text-3xl font-bold text-primary-orange">₹{product.offer_price}</p>
                 </div>
                 <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
-                  {product.discount}% OFF
+                  {product.discount_percentage}% OFF
                 </span>
               </div>
 
@@ -174,7 +176,7 @@ export function ProductDetails() {
               </div>
 
               <p className="text-sm text-text/60">
-                Total: <span className="font-bold text-text">₹{(quantity * product.offerPrice).toFixed(2)}</span>
+                Total: <span className="font-bold text-text">₹{(quantity * product.offer_price).toFixed(2)}</span>
               </p>
             </div>
 
@@ -207,25 +209,25 @@ export function ProductDetails() {
                 >
                   <div className="relative mb-4 overflow-hidden rounded-lg">
                     <img
-                      src={relatedProduct.image}
+                      src={relatedProduct.image_url as string | undefined}
                       alt={relatedProduct.name}
                       className="w-full h-48 object-cover transform group-hover:scale-110 transition-transform duration-500"
                     />
                     <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm">
-                      {relatedProduct.discount}% OFF
+                      {relatedProduct.discount_percentage}% OFF
                     </div>
                   </div>
                   <h3 className="font-montserrat font-bold text-lg mb-2">{relatedProduct.name}</h3>
                   <p className="text-sm text-text/60 mb-4">{relatedProduct.content}</p>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-text/60 line-through">₹{relatedProduct.actualPrice}</p>
-                      <p className="font-bold text-primary-orange">₹{relatedProduct.offerPrice}</p>
+                      <p className="text-sm text-text/60 line-through">₹{relatedProduct.actual_price}</p>
+                      <p className="font-bold text-primary-orange">₹{relatedProduct.offer_price}</p>
                     </div>
-                    <div className="flex items-center text-primary-yellow">
+                    {/* <div className="flex items-center text-primary-yellow">
                       <Star className="w-4 h-4 fill-current" />
                       <span className="ml-1">{relatedProduct.rating}</span>
-                    </div>
+                    </div> */}
                   </div>
                 </Link>
               </SwiperSlide>

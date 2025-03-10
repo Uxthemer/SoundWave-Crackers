@@ -16,7 +16,6 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
-  isSuperUser: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,10 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSuperUser, setIsSuperUser] = useState(false);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -41,7 +38,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
@@ -51,7 +47,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUserProfile(null);
           setUserRole(null);
-          setIsSuperUser(false);
           setLoading(false);
         }
       }
@@ -66,10 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
-      // Fetch user profile with role
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('*, roles(*)')
+        .select('*, role_id')
         .eq('user_id', userId)
         .single();
 
@@ -79,32 +73,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profileData) {
         setUserProfile(profileData);
-        setUserRole(profileData.roles as unknown as Role);
-        setIsSuperUser(profileData.roles?.name === 'superuser');
-      } else {
-        // Create default profile for new users
+        
+        // Fetch role separately
         const { data: roleData } = await supabase
+          .from('roles')
+          .select('*')
+          .eq('id', profileData.role_id)
+          .single();
+          
+        setUserRole(roleData);
+      } else {
+        // Get customer role ID
+        const { data: customerRole } = await supabase
           .from('roles')
           .select('*')
           .eq('name', 'customer')
           .single();
 
-        if (roleData) {
+        if (customerRole) {
+          // Create default profile for new users with customer role
           const { data: newProfile, error: createError } = await supabase
             .from('user_profiles')
             .insert({
               user_id: userId,
-              role_id: roleData.id
+              role_id: customerRole.id
             })
-            .select('*, roles(*)')
+            .select('*')
             .single();
 
           if (createError) throw createError;
           
           if (newProfile) {
             setUserProfile(newProfile);
-            setUserRole(newProfile.roles as unknown as Role);
-            setIsSuperUser(false);
+            setUserRole(customerRole);
           }
         }
       }
@@ -155,8 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signUp,
     signInWithGoogle,
-    signOut,
-    isSuperUser
+    signOut
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

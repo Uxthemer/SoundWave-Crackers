@@ -12,7 +12,7 @@ import { AboutSection } from './components/AboutSection';
 import { HowItWorks } from "./components/HowItWorks";
 import { CrackerCategories } from './components/CrackerCategories';
 import { TrendingCrackers } from './components/TrendingCrackers';
-import { CompanyScroll } from './components/CompanyScroll';
+// import { CompanyScroll } from './components/CompanyScroll';
 import { CTASection } from './components/CTASection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
@@ -33,7 +33,7 @@ import ShippingPolicy from './pages/ShippingPolicy';
 
 // Protected route component
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
-  const { user, loading, isSuperUser } = useAuth();
+  const { user, loading, userRole } = useAuth();
   
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -43,7 +43,7 @@ const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode,
     return <Navigate to="/login" />;
   }
   
-  if (requiredRole === 'superuser' && !isSuperUser) {
+  if (requiredRole === 'superadmin') {
     return <Navigate to="/" />;
   }
   
@@ -145,7 +145,7 @@ function AppContent() {
             {/* <CompanyScroll /> */}
             <CrackerCategories />
             <TrendingCrackers />
-            <CompanyScroll />
+            {/* <CompanyScroll /> */}
             <CTASection />
             <HowItWorks />
             <ContactSection />

@@ -30,11 +30,8 @@ export function CrackerCategories() {
         <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
           {categories.map((category) => (
             <Link to={`/explore?category=${category.name.toLowerCase()}`} className="transform hover:scale-110 transition-transform duration-500">
-              <motion.div
+              <div
                 key={category.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
                 className="card group relative overflow-hidden rounded-xl shadow-lg p-2 flex flex-col items-center text-center"
               >
                 <div className="w-16 h-16 md:w-20 md:h-20 flex items-center justify-center">
@@ -52,7 +49,7 @@ export function CrackerCategories() {
                     {category.description}
                   </span>
                 </div>
-              </motion.div>
+              </div>
             </Link>
           ))}
         </div>
