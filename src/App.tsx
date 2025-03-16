@@ -29,6 +29,9 @@ import { Payment } from "./pages/Payment";
 import { useCartStore } from './store/cartStore';
 import CancellationPolicy from './pages/CancellationPolicy';
 import ShippingPolicy from './pages/ShippingPolicy';
+import { BlogSection } from './components/BlogSection';
+import { FAQSection } from './components/FAQSection';
+import { BlogPost } from './pages/BlogPost';
 
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
   const { user, loading, userRole } = useAuth();
@@ -157,6 +160,8 @@ function AppContent() {
             <TrendingCrackers />
             <CTASection />
             <HowItWorks />
+            <FAQSection />
+            <BlogSection />
             <ContactSection />
           </>
         } />
@@ -166,6 +171,7 @@ function AppContent() {
         <Route path="/payment" element={<Payment />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/blog/:slug" element={<BlogPost />} />
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
