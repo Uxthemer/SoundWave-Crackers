@@ -135,8 +135,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const checkExistingUser = async (email: string, phone: string) => {
+    try {
+      // Check email
+      const { data: emailUser } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (emailUser) {
+        return { exists: true, message: 'Email already exists. Please login.' };
+      }
+
+      // Check phone
+      const { data: phoneUser } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (phoneUser) {
+        return { exists: true, message: 'Phone number already exists. Please login.' };
+      }
+
+      return { exists: false };
+    } catch (error) {
+      console.error('Error checking existing user:', error);
+      throw error;
+    }
+  };
+
   const signInWithEmail = async (email: string, password: string) => {
     try {
+      // Check if user exists and is verified
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (!userProfile) {
+        return { error: new Error('User not found. Please sign up.') };
+      }
+
+      if (!userProfile.phone_verified) {
+        return { error: new Error('Phone number not verified. Please complete signup process.') };
+      }
+
+      // Proceed with Firebase authentication
       const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
       return { error: null };
     } catch (error) {
@@ -146,6 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (data: SignUpData) => {
     try {
+      // Check if user exists
+      const existingUser = await checkExistingUser(data.email, data.phone);
+      if (existingUser.exists) {
+        throw new Error(existingUser.message);
+      }
+
       // Create Firebase user
       const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, data.email, data.password);
 
@@ -166,7 +219,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           user_id: firebaseUser.uid,
           role_id: roleData.id,
           full_name: data.name,
-          phone: data.phone
+          email: data.email,
+          phone: data.phone,
+          phone_verified: true
         });
 
       if (profileError) throw profileError;
@@ -179,6 +234,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPhone = async (phone: string) => {
     try {
+      // For signup, we don't check if user exists
+      if (window.location.pathname !== '/signup') {
+        // Check if user exists for login
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (!userProfile) {
+          return { error: new Error('User not found. Please sign up.'), verificationId: null };
+        }
+      }
+
       // Clear existing verifier if any
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
