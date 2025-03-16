@@ -10,7 +10,7 @@ export interface Product extends Categories{
   id: string;
   name: string;
   image: string;
-  category: string;
+  category: Categories;
   actual_price: number;
   content: string;
   discount_percentage: number;
@@ -31,10 +31,16 @@ export interface UserDetails {
   name: string;
   email: string;
   phone: string;
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
+  address: {
+    doorNo: string;
+    floor?: string;
+    area: string;
+    city: string;
+    state: string;
+    pincode: string;
+    landmark?: string;
+    country: string;
+  };
 }
 
 export interface OtpVerification {
@@ -51,13 +57,19 @@ export interface Order {
   status: 'pending' | 'processing' | 'completed' | 'cancelled';
   paymentMethod: string;
   createdAt: string;
+  shippingAddress: {
+    doorNo: string;
+    floor?: string;
+    area: string;
+    city: string;
+    state: string;
+    pincode: string;
+    landmark?: string;
+    country: string;
+  };
   customerName: string;
-  email: string;
+  email?: string;
   phone: string;
-  address: string;
-  city: string;
-  state: string;
-  pincode: string;
   items: OrderItem[];
 }
 

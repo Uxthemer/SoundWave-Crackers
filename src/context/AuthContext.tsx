@@ -1,10 +1,29 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import { 
+  PhoneAuthProvider,
+  signInWithCredential,
+  RecaptchaVerifier,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from 'firebase/auth';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { auth } from '../lib/firebase';
 import { Database } from '../types/supabase';
+import { v4 as uuidv4 } from 'uuid';
+import toast from 'react-hot-toast';
 
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 type Role = Database['public']['Tables']['roles']['Row'];
+
+interface SignUpData {
+  email: string;
+  password: string;
+  phone: string;
+  name: string;
+}
 
 interface AuthContextType {
   session: Session | null;
@@ -12,11 +31,11 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   userRole: Role | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithPhone: (phone: string) => Promise<{ verificationId: string | null; error: any }>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  signUp: (data: SignUpData) => Promise<{ error: any }>;
+  verifyOTP: (verificationId: string, otp: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  isSuperUser: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,51 +46,80 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isSuperUser, setIsSuperUser] = useState(false);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Set up Firebase auth listener
+    const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Create or get Supabase user
+          const { data: { session: supabaseSession }, error: sessionError } = await supabase.auth.signInWithPassword({
+            email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+            password: firebaseUser.uid
+          });
+
+          if (sessionError) {
+            // If sign in fails, try to create new user
+            const { data: { session: newSession }, error: signUpError } = await supabase.auth.signUp({
+              email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+              password: firebaseUser.uid
+            });
+
+            if (signUpError) throw signUpError;
+            if (newSession) setSession(newSession);
+          } else if (supabaseSession) {
+            setSession(supabaseSession);
+          }
+
+          // Update user state
+          if (session?.user) {
+            setUser(session.user);
+            await fetchUserProfile(session.user.id);
+          }
+        } catch (error) {
+          console.error('Error syncing auth:', error);
+          toast.error('Authentication error');
+          await firebaseSignOut(auth);
+        }
+      } else {
+        setSession(null);
+        setUser(null);
+        setUserProfile(null);
+        setUserRole(null);
+      }
+      setLoading(false);
+    });
+
+    // Set up Supabase auth listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchUserProfile(session.user.id);
+        await fetchUserProfile(session.user.id);
       } else {
-        setLoading(false);
+        setUserProfile(null);
+        setUserRole(null);
       }
     });
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchUserProfile(session.user.id);
-        } else {
-          setUserProfile(null);
-          setUserRole(null);
-          setIsSuperUser(false);
-          setLoading(false);
-        }
-      }
-    );
-
     return () => {
+      unsubscribeFirebase();
       subscription.unsubscribe();
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
     };
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      setLoading(true);
-      
-      // Fetch user profile with role
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
 
       if (profileError && profileError.code !== 'PGRST116') {
         throw profileError;
@@ -79,71 +127,185 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profileData) {
         setUserProfile(profileData);
-        setUserRole(profileData.roles as unknown as Role);
-        setIsSuperUser(profileData.roles?.name === 'superuser');
-      } else {
-        // Create default profile for new users
-        const { data: roleData } = await supabase
-          .from('roles')
-          .select('*')
-          .eq('name', 'customer')
-          .single();
-
-        if (roleData) {
-          const { data: newProfile, error: createError } = await supabase
-            .from('user_profiles')
-            .insert({
-              user_id: userId,
-              role_id: roleData.id
-            })
-            .select('*, roles(*)')
-            .single();
-
-          if (createError) throw createError;
-          
-          if (newProfile) {
-            setUserProfile(newProfile);
-            setUserRole(newProfile.roles as unknown as Role);
-            setIsSuperUser(false);
-          }
-        }
+        setUserRole(profileData.roles);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
-    } finally {
-      setLoading(false);
+      toast.error('Error loading user profile');
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error };
+  const checkExistingUser = async (email: string, phone: string) => {
+    try {
+      // Check email
+      const { data: emailUser } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (emailUser) {
+        return { exists: true, message: 'Email already exists. Please login.' };
+      }
+
+      // Check phone
+      const { data: phoneUser } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+
+      if (phoneUser) {
+        return { exists: true, message: 'Phone number already exists. Please login.' };
+      }
+
+      return { exists: false };
+    } catch (error) {
+      console.error('Error checking existing user:', error);
+      throw error;
+    }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: {
-        data: {
-          full_name: fullName
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      // Check if user exists and is verified
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (!userProfile) {
+        return { error: new Error('User not found. Please sign up.') };
+      }
+
+      if (!userProfile.phone_verified) {
+        return { error: new Error('Phone number not verified. Please complete signup process.') };
+      }
+
+      // Proceed with Firebase authentication
+      const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  };
+
+  const signUp = async (data: SignUpData) => {
+    try {
+      // Check if user exists
+      const existingUser = await checkExistingUser(data.email, data.phone);
+      if (existingUser.exists) {
+        throw new Error(existingUser.message);
+      }
+
+      // Create Firebase user
+      const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, data.email, data.password);
+
+      // Get customer role
+      const { data: roleData, error: roleError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'customer')
+        .single();
+
+      if (roleError) throw roleError;
+
+      // Create user profile
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .insert({
+          id: uuidv4(),
+          user_id: firebaseUser.uid,
+          role_id: roleData.id,
+          full_name: data.name,
+          email: data.email,
+          phone: data.phone,
+          phone_verified: true
+        });
+
+      if (profileError) throw profileError;
+      
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
+  };
+
+  const signInWithPhone = async (phone: string) => {
+    try {
+      // For signup, we don't check if user exists
+      if (window.location.pathname !== '/signup') {
+        // Check if user exists for login
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('phone', phone)
+          .maybeSingle();
+
+        if (!userProfile) {
+          return { error: new Error('User not found. Please sign up.'), verificationId: null };
         }
       }
-    });
-    return { error };
+
+      // Clear existing verifier if any
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
+
+      // Create new verifier
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {},
+        'expired-callback': () => {
+          if (recaptchaVerifierRef.current) {
+            recaptchaVerifierRef.current.clear();
+            recaptchaVerifierRef.current = null;
+          }
+        }
+      });
+
+      recaptchaVerifierRef.current = verifier;
+      await verifier.render();
+
+      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      const provider = new PhoneAuthProvider(auth);
+      const verificationId = await provider.verifyPhoneNumber(
+        formattedPhone,
+        verifier
+      );
+
+      return { verificationId, error: null };
+    } catch (error) {
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
+      return { verificationId: null, error };
+    }
   };
 
-  const signInWithGoogle = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`
-      }
-    });
+  const verifyOTP = async (verificationId: string, otp: string) => {
+    try {
+      const credential = PhoneAuthProvider.credential(verificationId, otp);
+      await signInWithCredential(auth, credential);
+      return { error: null };
+    } catch (error) {
+      return { error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await Promise.all([
+        firebaseSignOut(auth),
+        supabase.auth.signOut()
+      ]);
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Error signing out');
+    }
   };
 
   const value = {
@@ -152,14 +314,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userProfile,
     userRole,
     loading,
-    signIn,
+    signInWithPhone,
+    signInWithEmail,
     signUp,
-    signInWithGoogle,
-    signOut,
-    isSuperUser
+    verifyOTP,
+    signOut
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      <div id="recaptcha-container"></div>
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

@@ -229,7 +229,7 @@ export function ExploreCrackers() {
                 key={product.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`card group ${
+                className={`card group p-3 ${
                   viewMode === "list" ? "flex space-x-6" : ""
                 }`}
               >
@@ -261,22 +261,22 @@ export function ExploreCrackers() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <Link to={`/product/${product.id}`}>
-                        <h3 className="font-montserrat font-bold text-xl">
+                        <h3 className="font-montserrat font-bold text-sm sm:text-xs md:text-sm lg:text-sm">
                           {product.name}
                         </h3>
                       </Link>
-                      <p className="text-sm text-text/60">{product.category}</p>
+                      <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60">{product.category}</p>
                     </div>
                   </div>
                   <div className="flex items-start justify-between mb-2">
-                    <p className="text-sm text-text/80 mb-4">
+                    <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
                       {product.content}
                     </p>
                     <div className="text-right">
-                      <p className="text-sm text-text/60 line-through">
+                      <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
                         ₹{product.actualPrice}
                       </p>
-                      <p className="font-bold text-primary-orange text-xl">
+                      <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
                         ₹{product.offerPrice}
                       </p>
                     </div>

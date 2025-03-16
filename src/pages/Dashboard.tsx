@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Users,
   Package,
@@ -30,6 +30,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useDashboard } from '../hooks/useDashboard';
 import { useProducts } from '../hooks/useProducts';
+import { useRoles } from '../hooks/useRoles';
 
 ChartJS.register(
   CategoryScale,
@@ -44,11 +45,28 @@ ChartJS.register(
 );
 
 export function Dashboard() {
+  const navigate = useNavigate();
+  const { userRole } = useRoles();
   const [dateRange, setDateRange] = useState<'week' | 'month'>('week');
   const { stats, salesData, categoryData, loading, fetchDashboardData } = useDashboard();
   const { exportProductsToExcel, importProductsFromExcel } = useProducts();
   const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState('');
+
+  const isAdmin = ['admin', 'superadmin'].includes(userRole || '');
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="container mx-auto px-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+            <p>You don't have permission to access this page.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleDateRangeChange = (range: 'week' | 'month') => {
     setDateRange(range);
@@ -117,31 +135,13 @@ export function Dashboard() {
             </div>
           </div>
         </div>
-        
-        {importStatus === 'loading' && (
-          <div className="bg-card/30 p-4 rounded-lg mb-8 flex items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin text-primary-orange" />
-            <span>Importing products, please wait...</span>
-          </div>
-        )}
-        
-        {importStatus === 'success' && (
-          <div className="bg-green-500/10 text-green-500 p-4 rounded-lg mb-8 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5" />
-            <span>Products imported successfully!</span>
-          </div>
-        )}
-        
-        {importStatus === 'error' && (
-          <div className="bg-red-500/10 text-red-500 p-4 rounded-lg mb-8 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5" />
-            <span>{importError || 'Failed to import products'}</span>
-          </div>
-        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="card">
+          <button 
+            onClick={() => navigate('/orders')}
+            className="card hover:border-primary-orange transition-colors"
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Orders</p>
@@ -156,9 +156,12 @@ export function Dashboard() {
               <span className="text-green-500">+12%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
             </div>
-          </div>
+          </button>
 
-          <div className="card">
+          <button 
+            onClick={() => navigate('/users')}
+            className="card hover:border-primary-orange transition-colors"
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Users</p>
@@ -173,9 +176,12 @@ export function Dashboard() {
               <span className="text-green-500">+5%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
             </div>
-          </div>
+          </button>
 
-          <div className="card">
+          <button 
+            onClick={() => navigate('/orders')}
+            className="card hover:border-primary-orange transition-colors"
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Revenue</p>
@@ -190,9 +196,12 @@ export function Dashboard() {
               <span className="text-green-500">+18%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
             </div>
-          </div>
+          </button>
 
-          <div className="card">
+          <button 
+            onClick={() => navigate('/orders')}
+            className="card hover:border-primary-orange transition-colors"
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Profit</p>
@@ -207,7 +216,7 @@ export function Dashboard() {
               <span className="text-green-500">+15%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Charts */}

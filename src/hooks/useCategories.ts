@@ -10,25 +10,48 @@ export function useCategories() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchCategories() {
-      try {
-        const { data, error } = await supabase
-          .from('categories')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        setCategories(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchCategories();
+
+    // Set up realtime subscription
+    const subscription = supabase
+      .channel('categories-changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'categories' 
+      }, () => {
+        fetchCategories();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  return { categories, loading, error };
+  const fetchCategories = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+
+      setCategories(data || []);
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { 
+    categories, 
+    loading, 
+    error,
+    fetchCategories 
+  };
 }

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 export function Profile() {
   const { user, userProfile } = useAuth();
   const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,7 +32,8 @@ export function Profile() {
         .update({
           full_name: fullName,
           phone,
-          address
+          address,
+          email: email || null // Make email optional
         })
         .eq('user_id', user?.id);
 
@@ -79,20 +81,6 @@ export function Profile() {
             <div className="card">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Email</label>
-                  <div className="relative">
-                    <input
-                      type="email"
-                      value={user.email || ''}
-                      disabled
-                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background/50 border border-card-border/10 text-text/60"
-                    />
-                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
-                  </div>
-                  <p className="text-xs text-text/60 mt-1">Email cannot be changed</p>
-                </div>
-
-                <div>
                   <label className="block text-sm font-medium mb-2">Full Name</label>
                   <div className="relative">
                     <input
@@ -103,6 +91,22 @@ export function Profile() {
                       placeholder="Enter your full name"
                     />
                     <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Email (Optional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      placeholder="Enter your email (optional)"
+                    />
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
                 </div>
 

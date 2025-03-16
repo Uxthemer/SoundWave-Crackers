@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export function CTASection() {
   return (
@@ -18,16 +19,20 @@ export function CTASection() {
             Light Up Your Celebrations!
           </h2>
           <p className="text-xl text-text/80 mb-8 max-w-2xl mx-auto">
-            Get ready for Diwali with our premium collection of crackers. 
-            Enjoy exclusive discounts and special festival offers.
+            Get ready for Diwali with our premium collection of crackers. Enjoy
+            exclusive discounts and special festival offers.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
-            <button className="btn-primary px-8 py-4 text-lg">
-              Shop Festival Collection
-            </button>
-            <button className="px-8 py-4 text-lg border-2 border-primary-orange text-primary-orange rounded-lg hover:bg-primary-orange hover:text-white transition-colors">
-              View Offers
-            </button>
+            <Link to="/explore">
+              <button className="btn-primary px-8 py-4 text-lg">
+                Explore More Crackers
+              </button>
+            </Link>
+            <Link to="/quick-purchase">
+              <button className="px-8 py-4 text-lg border-2 border-primary-orange text-primary-orange rounded-lg hover:bg-primary-orange hover:text-white transition-colors">
+                Quick Purchase
+              </button>
+            </Link>
           </div>
         </motion.div>
       </div>

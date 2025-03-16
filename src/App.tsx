@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
-import { Sparkles, ShoppingCart, Menu, Search, Sun, Moon } from 'lucide-react';
+import { Sparkles, ShoppingCart, Menu, X, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTheme } from './context/ThemeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -8,11 +8,9 @@ import { AnnouncementBar } from './components/AnnouncementBar';
 import { MarqueeText } from './components/MarqueeText';
 import { HeroSlider } from './components/HeroSlider';
 import { AboutSection } from './components/AboutSection';
-// import { BrandLogos } from './components/BrandLogos';
 import { HowItWorks } from "./components/HowItWorks";
 import { CrackerCategories } from './components/CrackerCategories';
 import { TrendingCrackers } from './components/TrendingCrackers';
-import { CompanyScroll } from './components/CompanyScroll';
 import { CTASection } from './components/CTASection';
 import { ContactSection } from './components/ContactSection';
 import { Footer } from './components/Footer';
@@ -24,16 +22,16 @@ import { ProductDetails } from './pages/ProductDetails';
 import { Dashboard } from './pages/Dashboard';
 import { Orders } from './pages/Orders';
 import { StockManagement } from './pages/StockManagement';
-import { Login } from './pages/Login'
+import { Login } from './pages/Login';
+import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
 import { Payment } from "./pages/Payment";
 import { useCartStore } from './store/cartStore';
 import CancellationPolicy from './pages/CancellationPolicy';
 import ShippingPolicy from './pages/ShippingPolicy';
 
-// Protected route component
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
-  const { user, loading, isSuperUser } = useAuth();
+  const { user, loading, userRole } = useAuth();
   
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
@@ -43,7 +41,7 @@ const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode,
     return <Navigate to="/login" />;
   }
   
-  if (requiredRole === 'superuser' && !isSuperUser) {
+  if (requiredRole === 'superadmin') {
     return <Navigate to="/" />;
   }
   
@@ -54,24 +52,11 @@ function AppContent() {
   const { theme, toggleTheme } = useTheme();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const { totalQuantity } = useCartStore();
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const isMobile = window.innerWidth < 768;
-      setIsScrolled(isMobile && window.scrollY > 0);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    window.addEventListener('resize', handleScroll);
-    handleScroll();
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleScroll);
-    };
-  }, []);
+  const handleMenuItemClick = () => {
+    setIsMobileMenuOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -79,35 +64,21 @@ function AppContent() {
       <MarqueeText />
       
       {/* Navigation */}
-        <nav
-          className={`glass-effect w-full z-50 px-4 py-1 ${
-            isScrolled ? "md:relative sticky top-[0px]" : "relative"
-          }`}
-        >
+      <nav className="glass-effect w-full z-50 px-4 py-1 sticky top-0">
         <div className="container mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
             <img src="/assets/img/logo/logo_2.png" alt='SoundWave Crackers' className="hidden dark:block h-20 w-auto dark:invert" />
             <img src="/assets/img/logo/logo_2.png" alt='SoundWave Crackers' className="block dark:hidden h-20 w-auto light:invert" />
           </Link>
-          <div className={`md:flex items-center space-x-8 ${isMobileMenuOpen ? 'flex flex-col absolute top-full left-0 w-full bg-background p-4 space-y-4 md:space-y-0 md:relative md:w-auto md:p-0 md:bg-transparent' : 'hidden md:flex'}`}>
+
+          {/* Desktop Navigation Links */}
+          <div className="hidden xl:flex items-center space-x-8">
             <Link to="/" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Home</Link>
             <Link to="/quick-purchase" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Quick Purchase</Link>
             <Link to="/explore" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Explore Crackers</Link>
-            {/* <Link
-                to="/dashboard"
-                className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Dashboard
-              </Link> */}
-            <Link
-                to="/payment"
-                className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Payment
-              </Link>
+            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Payment</Link>
           </div>
+
           <div className="flex items-center space-x-4">
             <button onClick={toggleTheme} className="theme-toggle">
               {theme === 'dark' ? (
@@ -129,10 +100,50 @@ function AppContent() {
             </div>
             <button 
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden"
+              className="xl:hidden"
             >
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
+              ) : (
                 <Menu className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
+              )}
             </button>
+          </div>
+        </div>
+
+        {/* Mobile/Tablet Menu */}
+        <div className={`xl:hidden absolute left-0 right-0 top-full bg-background border-t border-card-border/10 shadow-lg transition-all duration-300 ${isMobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible'}`}>
+          <div className="container mx-auto py-4">
+            <div className="flex flex-col space-y-4">
+              <Link 
+                to="/" 
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Home
+              </Link>
+              <Link 
+                to="/quick-purchase" 
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Quick Purchase
+              </Link>
+              <Link 
+                to="/explore" 
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Explore Crackers
+              </Link>
+              <Link 
+                to="/payment" 
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Payment
+              </Link>
+            </div>
           </div>
         </div>
       </nav>
@@ -142,10 +153,8 @@ function AppContent() {
           <>
             <HeroSlider />
             <AboutSection />
-            {/* <CompanyScroll /> */}
             <CrackerCategories />
             <TrendingCrackers />
-            <CompanyScroll />
             <CTASection />
             <HowItWorks />
             <ContactSection />
@@ -156,6 +165,7 @@ function AppContent() {
         <Route path="/product/:productId" element={<ProductDetails />} />
         <Route path="/payment" element={<Payment />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
@@ -176,8 +186,8 @@ function AppContent() {
             <StockManagement />
           </ProtectedRoute>
         } />
-        <Route path='/cancellation-policy' element={<CancellationPolicy />}></Route>
-        <Route path='/shipping-policy' element={<ShippingPolicy />}></Route>
+        <Route path="/cancellation-policy" element={<CancellationPolicy />} />
+        <Route path="/shipping-policy" element={<ShippingPolicy />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
