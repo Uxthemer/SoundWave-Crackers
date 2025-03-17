@@ -3,10 +3,10 @@ import {
   PhoneAuthProvider,
   signInWithCredential,
   RecaptchaVerifier,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword
+  //signOut as firebaseSignOut,
+  //onAuthStateChanged,
+  //createUserWithEmailAndPassword,
+  //signInWithEmailAndPassword
 } from 'firebase/auth';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
@@ -14,6 +14,8 @@ import { auth } from '../lib/firebase';
 import { Database } from '../types/supabase';
 import { v4 as uuidv4 } from 'uuid';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
+import { nav } from 'framer-motion/client';
 
 type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
 type Role = Database['public']['Tables']['roles']['Row'];
@@ -47,49 +49,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRole, setUserRole] = useState<Role | null>(null);
   const [loading, setLoading] = useState(true);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Set up Firebase auth listener
-    const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          // Create or get Supabase user
-          const { data: { session: supabaseSession }, error: sessionError } = await supabase.auth.signInWithPassword({
-            email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
-            password: firebaseUser.uid
-          });
+    // const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
+    //   if (firebaseUser) {
+    //     try {
+    //       // Create or get Supabase user
+    //       const { data: { session: supabaseSession }, error: sessionError } = await supabase.auth.signInWithPassword({
+    //         email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+    //         password: firebaseUser.uid
+    //       });
 
-          if (sessionError) {
-            // If sign in fails, try to create new user
-            const { data: { session: newSession }, error: signUpError } = await supabase.auth.signUp({
-              email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
-              password: firebaseUser.uid
-            });
+    //       if (sessionError) {
+    //         // If sign in fails, try to create new user
+    //         const { data: { session: newSession }, error: signUpError } = await supabase.auth.signUp({
+    //           email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+    //           password: firebaseUser.uid
+    //         });
 
-            if (signUpError) throw signUpError;
-            if (newSession) setSession(newSession);
-          } else if (supabaseSession) {
-            setSession(supabaseSession);
-          }
+    //         if (signUpError) throw signUpError;
+    //         if (newSession) setSession(newSession);
+    //       } else if (supabaseSession) {
+    //         setSession(supabaseSession);
+    //       }
 
-          // Update user state
-          if (session?.user) {
-            setUser(session.user);
-            await fetchUserProfile(session.user.id);
-          }
-        } catch (error) {
-          console.error('Error syncing auth:', error);
-          toast.error('Authentication error');
-          await firebaseSignOut(auth);
-        }
-      } else {
-        setSession(null);
-        setUser(null);
-        setUserProfile(null);
-        setUserRole(null);
-      }
-      setLoading(false);
-    });
+          
+    //     } catch (error) {
+    //       console.error('Error syncing auth:', error);
+    //       toast.error('Authentication error');
+    //       await firebaseSignOut(auth);
+    //     }
+    //   } else {
+    //     setSession(null);
+    //     setUser(null);
+    //     setUserProfile(null);
+    //     setUserRole(null);
+    //   }
+    //   setLoading(false);
+    // });
+
 
     // Set up Supabase auth listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -104,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => {
-      unsubscribeFirebase();
+      //unsubscribeFirebase();
       subscription.unsubscribe();
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
@@ -176,15 +176,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle();
 
       if (!userProfile) {
+        navigate('/signup');
         return { error: new Error('User not found. Please sign up.') };
       }
 
       if (!userProfile.phone_verified) {
+        navigate('/signup');
         return { error: new Error('Phone number not verified. Please complete signup process.') };
       }
 
       // Proceed with Firebase authentication
-      const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
+      //const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
       return { error: null };
     } catch (error) {
       return { error };
@@ -198,9 +200,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (existingUser.exists) {
         throw new Error(existingUser.message);
       }
-
-      // Create Firebase user
-      const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, data.email, data.password);
 
       // Get customer role
       const { data: roleData, error: roleError } = await supabase
@@ -216,7 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('user_profiles')
         .insert({
           id: uuidv4(),
-          user_id: firebaseUser.uid,
+          user_id: uuidv4(),
           role_id: roleData.id,
           full_name: data.name,
           email: data.email,
@@ -244,6 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .maybeSingle();
 
         if (!userProfile) {
+          navigate('/signup');
           return { error: new Error('User not found. Please sign up.'), verificationId: null };
         }
       }
@@ -299,9 +299,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await Promise.all([
-        firebaseSignOut(auth),
+        //firebaseSignOut(auth),
         supabase.auth.signOut()
-      ]);
+      ]).then(() => {
+        navigate('/');
+        toast.success('Signed out successfully');
+      });
     } catch (error) {
       console.error('Error signing out:', error);
       toast.error('Error signing out');
@@ -316,6 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     signInWithPhone,
     signInWithEmail,
+    checkExistingUser,
     signUp,
     verifyOTP,
     signOut

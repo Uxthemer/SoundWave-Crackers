@@ -25,7 +25,7 @@ export function Signup() {
   const [showOTPVerification, setShowOTPVerification] = useState(false);
   const [verificationId, setVerificationId] = useState('');
   const navigate = useNavigate();
-  const { signUp, signInWithPhone } = useAuth();
+  const { signUp, signInWithPhone, checkExistingUser } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -39,6 +39,12 @@ export function Signup() {
     try {
       // Validate form data
       signupSchema.parse(formData);
+
+       // Check if user exists
+       const existingUser = await checkExistingUser(formData.email, formData.phone);
+       if (existingUser.exists) {
+         throw new Error(existingUser.message);
+       }
 
       // Send OTP for verification
       const { verificationId: vId, error: verificationError } = await signInWithPhone(formData.phone);
