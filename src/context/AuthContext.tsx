@@ -35,6 +35,7 @@ interface AuthContextType {
   loading: boolean;
   signInWithPhone: (phone: string) => Promise<{ verificationId: string | null; error: any }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  checkExistingUser: (email: string, phone: string) => Promise<{ exists: boolean; message?: string }>;
   signUp: (data: SignUpData) => Promise<{ error: any }>;
   verifyOTP: (verificationId: string, otp: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
