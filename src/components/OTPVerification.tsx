@@ -59,7 +59,7 @@ export function OTPVerification({
       onVerified();
     } catch (error) {
       setStatus("error");
-      toast.error("Invalid OTP. Please try again.");
+      toast.error("Invalid OTP. Please try again."+ error);
       setStatus("idle");
     }
   };
