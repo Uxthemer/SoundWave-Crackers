@@ -253,6 +253,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from("user_profiles")
           .insert({
             id: uuidv4(),
+            user_id: authData.user.id,
             role_id: roleData.id,
             full_name: data.name,
             email: data.email,

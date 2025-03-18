@@ -24,7 +24,7 @@ export function OTPVerification({
   const [status, setStatus] = useState<
     "idle" | "verifying" | "success" | "error"
   >("idle");
-  const { verifyOTP, signInWithPhone, signInWithEmail } = useAuth();
+  const { verifyOTP, signInWithPhone } = useAuth();
 
   const handleVerifyOTP = async () => {
     if (!otp || otp.length !== 6) {
