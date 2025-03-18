@@ -77,8 +77,8 @@ export function Signup() {
 
       if (signUpError) throw signUpError;
 
-      toast.success('Account created successfully!');
-      navigate('/');
+      toast.success('Account created successfully! Please login to continue');
+      navigate('/login');
     } catch (error: any) {
       toast.error(error.message || 'Failed to create account');
     } finally {
