@@ -1,5 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { 
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
+import {
   PhoneAuthProvider,
   signInWithCredential,
   RecaptchaVerifier,
@@ -7,18 +13,18 @@ import {
   //onAuthStateChanged,
   //createUserWithEmailAndPassword,
   //signInWithEmailAndPassword
-} from 'firebase/auth';
-import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { auth } from '../lib/firebase';
-import { Database } from '../types/supabase';
-import { v4 as uuidv4 } from 'uuid';
-import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
-import { nav } from 'framer-motion/client';
+} from "firebase/auth";
+import { Session, User } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
+import { auth } from "../lib/firebase";
+import { Database } from "../types/supabase";
+import { v4 as uuidv4 } from "uuid";
+import toast from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
+import { nav } from "framer-motion/client";
 
-type UserProfile = Database['public']['Tables']['user_profiles']['Row'];
-type Role = Database['public']['Tables']['roles']['Row'];
+type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
+type Role = Database["public"]["Tables"]["roles"]["Row"];
 
 interface SignUpData {
   email: string;
@@ -33,9 +39,14 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   userRole: Role | null;
   loading: boolean;
-  signInWithPhone: (phone: string) => Promise<{ verificationId: string | null; error: any }>;
+  signInWithPhone: (
+    phone: string
+  ) => Promise<{ verificationId: string | null; error: any }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
-  checkExistingUser: (email: string, phone: string) => Promise<{ exists: boolean; message?: string }>;
+  checkExistingUser: (
+    email: string,
+    phone: string
+  ) => Promise<{ exists: boolean; message?: string }>;
   signUp: (data: SignUpData) => Promise<{ error: any }>;
   verifyOTP: (verificationId: string, otp: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -76,7 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     //         setSession(supabaseSession);
     //       }
 
-          
     //     } catch (error) {
     //       console.error('Error syncing auth:', error);
     //       toast.error('Authentication error');
@@ -91,9 +101,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     //   setLoading(false);
     // });
 
-
     // Set up Supabase auth listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -117,12 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchUserProfile = async (userId: string) => {
     try {
       const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*, roles(*)')
-        .eq('id', userId)
+        .from("user_profiles")
+        .select("*, roles(*)")
+        .eq("id", userId)
         .maybeSingle();
 
-      if (profileError && profileError.code !== 'PGRST116') {
+      if (profileError && profileError.code !== "PGRST116") {
         throw profileError;
       }
 
@@ -131,8 +142,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserRole(profileData.roles);
       }
     } catch (error) {
-      console.error('Error fetching user profile:', error);
-      toast.error('Error loading user profile');
+      console.error("Error fetching user profile:", error);
+      toast.error("Error loading user profile");
     }
   };
 
@@ -140,29 +151,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Check email
       const { data: emailUser } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('email', email)
+        .from("user_profiles")
+        .select("id")
+        .eq("email", email)
         .maybeSingle();
 
       if (emailUser) {
-        return { exists: true, message: 'Email already exists. Please login.' };
+        return { exists: true, message: "Email already exists. Please login." };
       }
 
       // Check phone
       const { data: phoneUser } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('phone', phone)
+        .from("user_profiles")
+        .select("id")
+        .eq("phone", phone)
         .maybeSingle();
 
       if (phoneUser) {
-        return { exists: true, message: 'Phone number already exists. Please login.' };
+        return {
+          exists: true,
+          message: "Phone number already exists. Please login.",
+        };
       }
 
       return { exists: false };
     } catch (error) {
-      console.error('Error checking existing user:', error);
+      console.error("Error checking existing user:", error);
       throw error;
     }
   };
@@ -171,29 +185,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Check if user exists and is verified
       const { data: userProfile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('email', email)
+        .from("user_profiles")
+        .select("*")
+        .eq("email", email)
         .maybeSingle();
 
       if (!userProfile) {
-        navigate('/signup');
-        return { error: new Error('User not found. Please sign up.') };
+        navigate("/signup");
+        return { error: new Error("User not found. Please sign up.") };
       }
 
       if (!userProfile.phone_verified) {
-        navigate('/signup');
-        return { error: new Error('Phone number not verified. Please complete signup process.') };
+        navigate("/signup");
+        return {
+          error: new Error(
+            "Phone number not verified. Please complete signup process."
+          ),
+        };
       }
 
       // Proceed with supabase authentication
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
       if (error) throw error;
 
-      if(data.user) {
+      if (data.user) {
         setUser(data.user);
         await fetchUserProfile(data.user.id);
       }
@@ -212,29 +230,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(existingUser.message);
       }
 
-      // Get customer role
-      const { data: roleData, error: roleError } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', 'customer')
-        .single();
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        phone: data.phone,
+      });
 
-      if (roleError) throw roleError;
+      if (authError) throw authError;
 
-      // Create user profile
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: uuidv4(),
-          role_id: roleData.id,
-          full_name: data.name,
-          email: data.email,
-          phone: data.phone,
-          phone_verified: true
-        });
+      if (authData.user) {
+        // Get customer role
+        const { data: roleData, error: roleError } = await supabase
+          .from("roles")
+          .select("id")
+          .eq("name", "customer")
+          .single();
 
-      if (profileError) throw profileError;
-      
+        if (roleError) throw roleError;
+
+        // Create user profile
+        const { error: profileError } = await supabase
+          .from("user_profiles")
+          .insert({
+            id: uuidv4(),
+            role_id: roleData.id,
+            full_name: data.name,
+            email: data.email,
+            phone: data.phone,
+            pwd: data.password,
+            phone_verified: true,
+          });
+
+        if (profileError) throw profileError;
+      }
+
       return { error: null };
     } catch (error) {
       if (recaptchaVerifierRef.current) {
@@ -248,17 +277,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithPhone = async (phone: string) => {
     try {
       // For signup, we don't check if user exists
-      if (window.location.pathname !== '/signup') {
+      if (window.location.pathname !== "/signup") {
         // Check if user exists for login
         const { data: userProfile } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('phone', phone)
+          .from("user_profiles")
+          .select("*")
+          .eq("phone", phone)
           .maybeSingle();
 
         if (!userProfile) {
-          navigate('/signup');
-          return { error: new Error('User not found. Please sign up.'), verificationId: null };
+          navigate("/signup");
+          return {
+            error: new Error("User not found. Please sign up."),
+            verificationId: null,
+          };
         }
       }
 
@@ -269,21 +301,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Create new verifier
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
+      const verifier = new RecaptchaVerifier(auth, "recaptcha-container", {
+        size: "invisible",
         callback: () => {},
-        'expired-callback': () => {
+        "expired-callback": () => {
           if (recaptchaVerifierRef.current) {
             recaptchaVerifierRef.current.clear();
             recaptchaVerifierRef.current = null;
           }
-        }
+        },
       });
 
       recaptchaVerifierRef.current = verifier;
       await verifier.render();
 
-      const formattedPhone = phone.startsWith('+') ? phone : `+91${phone}`;
+      const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
       const provider = new PhoneAuthProvider(auth);
       const verificationId = await provider.verifyPhoneNumber(
         formattedPhone,
@@ -314,14 +346,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await Promise.all([
         //firebaseSignOut(auth),
-        supabase.auth.signOut()
+        supabase.auth.signOut(),
       ]).then(() => {
-        navigate('/');
-        toast.success('Signed out successfully');
+        navigate("/");
+        toast.success("Signed out successfully");
       });
     } catch (error) {
-      console.error('Error signing out:', error);
-      toast.error('Error signing out');
+      console.error("Error signing out:", error);
+      toast.error("Error signing out");
     }
   };
 
@@ -336,7 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkExistingUser,
     signUp,
     verifyOTP,
-    signOut
+    signOut,
   };
 
   return (
@@ -350,7 +382,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }
