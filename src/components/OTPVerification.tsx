@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { X, Loader2, Phone } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
-import toast from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { X, Loader2, Phone } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
+import toast from "react-hot-toast";
 
 interface OTPVerificationProps {
   phone: string;
@@ -12,66 +12,92 @@ interface OTPVerificationProps {
   onCancel: () => void;
 }
 
-export function OTPVerification({ phone, verificationId, onVerified, onCancel }: OTPVerificationProps) {
-  const [otp, setOtp] = useState('');
+export function OTPVerification({
+  phone,
+  verificationId,
+  onVerified,
+  onCancel,
+}: OTPVerificationProps) {
+  const [otp, setOtp] = useState("");
   const [newPhone, setNewPhone] = useState(phone);
   const [isChangingPhone, setIsChangingPhone] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'verifying' | 'success' | 'error'>('idle');
-  const { verifyOTP, signInWithPhone } = useAuth();
+  const [status, setStatus] = useState<
+    "idle" | "verifying" | "success" | "error"
+  >("idle");
+  const { verifyOTP, signInWithPhone, signInWithEmail } = useAuth();
 
   const handleVerifyOTP = async () => {
     if (!otp || otp.length !== 6) {
-      toast.error('Please enter a valid 6-digit OTP');
+      toast.error("Please enter a valid 6-digit OTP");
       return;
     }
 
     try {
-      setStatus('verifying');
+      setStatus("verifying");
       const { error } = await verifyOTP(verificationId, otp);
-      
+
       if (error) throw error;
-      
-      setStatus('success');
+
+      const { data: userProfile } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (!userProfile) {
+        throw new Error("User not found");
+      }
+
+      // Proceed with supabase authentication
+      const { error: authError } = await signInWithEmail(
+        userProfile.email,
+        userProfile.pwd
+      );
+      if (authError) throw authError;
+
+      setStatus("success");
       onVerified();
     } catch (error) {
-      setStatus('error');
-      toast.error('Invalid OTP. Please try again.');
-      setStatus('idle');
+      setStatus("error");
+      toast.error("Invalid OTP. Please try again.");
+      setStatus("idle");
     }
   };
 
   const handleChangePhone = async () => {
     if (!newPhone || !/^[6-9]\d{9}$/.test(newPhone)) {
-      toast.error('Please enter a valid 10-digit mobile number');
+      toast.error("Please enter a valid 10-digit mobile number");
       return;
     }
 
     try {
-      setStatus('verifying');
-      
+      setStatus("verifying");
+
       // Check if phone number already exists
       const { data: existingPhone } = await supabase
-        .from('user_profiles')
-        .select('phone')
-        .eq('phone', newPhone)
+        .from("user_profiles")
+        .select("phone")
+        .eq("phone", newPhone)
         .single();
 
       if (existingPhone) {
-        throw new Error('Phone number already exists');
+        throw new Error("Phone number already exists");
       }
 
-      const { verificationId: newVerificationId, error } = await signInWithPhone(newPhone);
-      
-      if (error) throw error;
-      if (!newVerificationId) throw new Error('Failed to send verification code');
+      const { verificationId: newVerificationId, error } =
+        await signInWithPhone(newPhone);
 
-      toast.success('Verification code sent to new number');
+      if (error) throw error;
+      if (!newVerificationId)
+        throw new Error("Failed to send verification code");
+
+      toast.success("Verification code sent to new number");
       setIsChangingPhone(false);
-      setOtp('');
+      setOtp("");
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send verification code');
+      toast.error(error.message || "Failed to send verification code");
     } finally {
-      setStatus('idle');
+      setStatus("idle");
     }
   };
 
@@ -103,7 +129,7 @@ export function OTPVerification({ phone, verificationId, onVerified, onCancel }:
                 onClick={() => setIsChangingPhone(!isChangingPhone)}
                 className="text-sm text-primary-orange hover:text-primary-orange/80"
               >
-                {isChangingPhone ? 'Cancel' : 'Change'}
+                {isChangingPhone ? "Cancel" : "Change"}
               </button>
             </div>
 
@@ -122,13 +148,13 @@ export function OTPVerification({ phone, verificationId, onVerified, onCancel }:
                 </div>
                 <button
                   onClick={handleChangePhone}
-                  disabled={status === 'verifying'}
+                  disabled={status === "verifying"}
                   className="btn-primary w-full"
                 >
-                  {status === 'verifying' ? (
+                  {status === "verifying" ? (
                     <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                   ) : (
-                    'Send OTP'
+                    "Send OTP"
                   )}
                 </button>
               </div>
@@ -142,12 +168,14 @@ export function OTPVerification({ phone, verificationId, onVerified, onCancel }:
           {!isChangingPhone && (
             <>
               <div>
-                <label className="block text-sm font-medium mb-2">Enter OTP</label>
+                <label className="block text-sm font-medium mb-2">
+                  Enter OTP
+                </label>
                 <input
                   type="text"
                   maxLength={6}
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                   className="w-full px-4 py-2 text-center font-mono text-2xl tracking-widest rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                   placeholder="------"
                 />
@@ -158,10 +186,10 @@ export function OTPVerification({ phone, verificationId, onVerified, onCancel }:
 
               <button
                 onClick={handleVerifyOTP}
-                disabled={status === 'verifying'}
+                disabled={status === "verifying"}
                 className="btn-primary w-full flex items-center justify-center space-x-2"
               >
-                {status === 'verifying' ? (
+                {status === "verifying" ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span>Verifying...</span>
