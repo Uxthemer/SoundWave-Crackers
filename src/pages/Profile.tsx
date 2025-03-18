@@ -35,7 +35,7 @@ export function Profile() {
           address,
           email: email || null // Make email optional
         })
-        .eq('user_id', user?.id);
+        .eq('id', user?.id);
 
       if (error) throw error;
 
