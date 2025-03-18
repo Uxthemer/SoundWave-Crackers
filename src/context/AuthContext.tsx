@@ -186,7 +186,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error('Phone number not verified. Please complete signup process.') };
       }
 
-      // Proceed with Firebase authentication
+      // Proceed with supabase authentication
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      if (error) throw error;
+
+      if(data.user) {
+        setUser(data.user);
+        await fetchUserProfile(data.user.id);
+      }
       //const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
       return { error: null };
     } catch (error) {

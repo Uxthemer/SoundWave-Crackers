@@ -7,13 +7,11 @@ import { useRoles } from '../hooks/useRoles';
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { user, userProfile, signOut } = useAuth();
-  const { userRole } = useRoles();
+  const { user, userProfile, userRole, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
   };
 
   useEffect(() => {
@@ -49,7 +47,9 @@ export function UserMenu() {
           <span className="block text-primary-orange">
             {userProfile?.full_name || user.email?.split('@')[0]}
           </span>
-          <span className="text-sm text-primary-orange/80">{userRole}</span>
+          {userRole?.name === 'superadmin' && (
+            <span className="text-sm text-primary-orange/80">{userRole.name}</span>
+          )}
         </div>
       </button>
 
@@ -58,7 +58,9 @@ export function UserMenu() {
           <div className="px-4 py-2 border-b border-card-border/10">
             <p className="font-montserrat font-bold truncate">{userProfile?.full_name || 'User'}</p>
             <p className="text-sm text-text/60 truncate">{user.email}</p>
-            <p className="text-sm text-primary-orange mt-1">{userRole}</p>
+            {userRole?.name === 'superadmin' && (
+              <p className="text-sm text-primary-orange mt-1">{userRole.name}</p>
+            )}
           </div>
 
           <div className="py-1">
@@ -80,7 +82,7 @@ export function UserMenu() {
               <span>My Orders</span>
             </Link>
 
-            {(userRole === 'admin' || userRole === 'superadmin') && (
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
               <Link
                 to="/stock"
                 className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
@@ -91,7 +93,7 @@ export function UserMenu() {
               </Link>
             )}
 
-            {userRole === 'superadmin' && (
+            {userRole?.name === 'superadmin' && (
               <Link
                 to="/dashboard"
                 className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
