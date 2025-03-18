@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('*, roles(*)')
-        .eq('user_id', userId)
+        .eq('id', userId)
         .maybeSingle();
 
       if (profileError && profileError.code !== 'PGRST116') {
@@ -216,7 +216,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('user_profiles')
         .insert({
           id: uuidv4(),
-          user_id: uuidv4(),
           role_id: roleData.id,
           full_name: data.name,
           email: data.email,
@@ -228,6 +227,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       return { error: null };
     } catch (error) {
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
       return { error };
     }
   };
