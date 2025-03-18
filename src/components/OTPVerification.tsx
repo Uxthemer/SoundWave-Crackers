@@ -48,13 +48,6 @@ export function OTPVerification({
         throw new Error("User not found");
       }
 
-      // Proceed with supabase authentication
-      const { error: authError } = await signInWithEmail(
-        userProfile.email,
-        userProfile.pwd
-      );
-      if (authError) throw authError;
-
       setStatus("success");
       onVerified();
     } catch (error) {
