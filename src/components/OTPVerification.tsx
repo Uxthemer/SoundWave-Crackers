@@ -35,18 +35,7 @@ export function OTPVerification({
     try {
       setStatus("verifying");
       const { error } = await verifyOTP(verificationId, otp);
-
       if (error) throw error;
-
-      const { data: userProfile } = await supabase
-        .from("user_profiles")
-        .select("*")
-        .eq("phone", phone)
-        .maybeSingle();
-
-      if (!userProfile) {
-        throw new Error("User not found");
-      }
 
       setStatus("success");
       onVerified();

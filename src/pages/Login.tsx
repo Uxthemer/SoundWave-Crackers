@@ -1,29 +1,32 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Phone, Mail, LogIn, AlertCircle, Lock } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { OTPVerification } from '../components/OTPVerification';
-import toast from 'react-hot-toast';
-import { z } from 'zod';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Phone, Mail, LogIn, AlertCircle, Lock } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { OTPVerification } from "../components/OTPVerification";
+import { supabase } from "../lib/supabase";
+import toast from "react-hot-toast";
+import { z } from "zod";
 
-const emailSchema = z.string().email('Invalid email format');
-const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, 'Invalid phone number');
-const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
+const emailSchema = z.string().email("Invalid email format");
+const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number");
+const passwordSchema = z
+  .string()
+  .min(6, "Password must be at least 6 characters");
 
-type LoginMethod = 'email' | 'phone';
+type LoginMethod = "email" | "phone";
 
 export function Login() {
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>('email');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [verificationId, setVerificationId] = useState('');
+  const [verificationId, setVerificationId] = useState("");
   const [retryDelay, setRetryDelay] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
-  
+
   const { signInWithEmail, signInWithPhone } = useAuth();
   const navigate = useNavigate();
 
@@ -39,10 +42,10 @@ export function Login() {
       const { error } = await signInWithEmail(email, password);
       if (error) throw error;
 
-      toast.success('Successfully signed in!');
-      navigate('/');
+      toast.success("Successfully signed in!");
+      navigate("/");
     } catch (error: any) {
-      toast.error(error.message || 'Failed to sign in');
+      toast.error(error.message || "Failed to sign in");
     } finally {
       setIsLoading(false);
     }
@@ -50,7 +53,7 @@ export function Login() {
 
   const handlePhoneLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (retryDelay > 0) {
       toast.error(`Please wait ${retryDelay} seconds before trying again`);
       return;
@@ -63,15 +66,15 @@ export function Login() {
       phoneSchema.parse(phone);
 
       const { verificationId, error } = await signInWithPhone(phone);
-      
+
       if (error) {
-        if (error.code === 'auth/too-many-requests') {
+        if (error.code === "auth/too-many-requests") {
           const delay = Math.min(Math.pow(2, retryCount) * 30, 300);
           setRetryDelay(delay);
-          setRetryCount(prev => prev + 1);
-          
+          setRetryCount((prev) => prev + 1);
+
           const timer = setInterval(() => {
-            setRetryDelay(prev => {
+            setRetryDelay((prev) => {
               if (prev <= 1) {
                 clearInterval(timer);
                 return 0;
@@ -80,30 +83,45 @@ export function Login() {
             });
           }, 1000);
 
-          throw new Error(`Too many attempts. Please try again in ${delay} seconds`);
+          throw new Error(
+            `Too many attempts. Please try again in ${delay} seconds`
+          );
         }
         throw error;
       }
-      
+
       if (!verificationId) {
-        throw new Error('Failed to send verification code');
+        throw new Error("Failed to send verification code");
       }
 
       setVerificationId(verificationId);
       setShowOTPVerification(true);
-      toast.success('Verification code sent successfully!');
-      
+      toast.success("Verification code sent successfully!");
+
       setRetryCount(0);
     } catch (error: any) {
-      toast.error(error.message || 'An error occurred');
+      toast.error(error.message || "An error occurred");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleVerified = () => {
-    toast.success('Successfully signed in!');
-    navigate('/');
+  const handleVerified = async () => {
+    // handle email based login based on mobile number verification
+    const { data: phoneUser, error: phoneUserError } = await supabase
+      .from("user_profiles")
+      .select("email, pwd")
+      .eq("phone", phone)
+      .single();
+    if (phoneUserError) throw phoneUserError;
+
+    if (phoneUser) {
+      const { error } = await signInWithEmail(phoneUser.email, phoneUser.pwd);
+      if (error) throw error;
+    }
+
+    toast.success("Successfully signed in!");
+    navigate("/");
   };
 
   return (
@@ -123,22 +141,22 @@ export function Login() {
 
             <div className="flex gap-4 mb-6">
               <button
-                onClick={() => setLoginMethod('email')}
+                onClick={() => setLoginMethod("email")}
                 className={`flex-1 py-2 rounded-lg transition-colors ${
-                  loginMethod === 'email'
-                    ? 'bg-primary-orange text-white'
-                    : 'bg-card hover:bg-card/70'
+                  loginMethod === "email"
+                    ? "bg-primary-orange text-white"
+                    : "bg-card hover:bg-card/70"
                 }`}
               >
                 <Mail className="w-5 h-5 mx-auto" />
                 <span className="text-sm mt-1">Email</span>
               </button>
               <button
-                onClick={() => setLoginMethod('phone')}
+                onClick={() => setLoginMethod("phone")}
                 className={`flex-1 py-2 rounded-lg transition-colors ${
-                  loginMethod === 'phone'
-                    ? 'bg-primary-orange text-white'
-                    : 'bg-card hover:bg-card/70'
+                  loginMethod === "phone"
+                    ? "bg-primary-orange text-white"
+                    : "bg-card hover:bg-card/70"
                 }`}
               >
                 <Phone className="w-5 h-5 mx-auto" />
@@ -146,10 +164,12 @@ export function Login() {
               </button>
             </div>
 
-            {loginMethod === 'email' ? (
+            {loginMethod === "email" ? (
               <form onSubmit={handleEmailLogin} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Email</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Email
+                  </label>
                   <div className="relative">
                     <input
                       type="email"
@@ -164,7 +184,9 @@ export function Login() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Password</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Password
+                  </label>
                   <div className="relative">
                     <input
                       type="password"
@@ -196,7 +218,9 @@ export function Login() {
             ) : (
               <form onSubmit={handlePhoneLogin} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Mobile Number</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Mobile Number
+                  </label>
                   <div className="relative">
                     <input
                       type="tel"
@@ -240,8 +264,11 @@ export function Login() {
 
             <div className="mt-6 text-center">
               <p className="text-text/60">
-                Don't have an account?{' '}
-                <Link to="/signup" className="text-primary-orange hover:text-primary-red">
+                Don't have an account?{" "}
+                <Link
+                  to="/signup"
+                  className="text-primary-orange hover:text-primary-red"
+                >
                   Sign Up
                 </Link>
               </p>
