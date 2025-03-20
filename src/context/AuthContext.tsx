@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  // useEffect(() => {
     // Set up Firebase auth listener
     // const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
     //   if (firebaseUser) {
@@ -102,21 +102,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // });
 
     // Set up Supabase auth listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+  //   const {
+  //     data: { subscription },
+  //   } = supabase.auth.onAuthStateChange(async (_event, session) => {
+  //     setSession(session);
+  //     setUser(session?.user ?? null);
+  //     if (session?.user) {
+  //       await fetchUserProfile(session.user.id);
+  //     } else {
+  //       setUserProfile(null);
+  //       setUserRole(null);
+  //     }
+  //   });
+
+  //   return () => {
+  //     //unsubscribeFirebase();
+  //     subscription.unsubscribe();
+  //     if (recaptchaVerifierRef.current) {
+  //       recaptchaVerifierRef.current.clear();
+  //       recaptchaVerifierRef.current = null;
+  //     }
+  //   };
+  // }, []);
+
+  useEffect(() => {
+    // Set up Supabase auth listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
         await fetchUserProfile(session.user.id);
       } else {
         setUserProfile(null);
         setUserRole(null);
       }
+      
+      setLoading(false);
     });
 
     return () => {
-      //unsubscribeFirebase();
       subscription.unsubscribe();
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
@@ -130,7 +155,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data: profileData, error: profileError } = await supabase
         .from("user_profiles")
         .select("*, roles(*)")
-        .eq("id", userId)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (profileError && profileError.code !== "PGRST116") {
@@ -345,13 +370,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      await Promise.all([
-        //firebaseSignOut(auth),
-        supabase.auth.signOut(),
-      ]).then(() => {
-        navigate("/");
-        toast.success("Signed out successfully");
-      });
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      navigate("/");
+      toast.success("Signed out successfully");
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Error signing out");
