@@ -1,28 +1,35 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { User, Mail, Phone, MapPin, Save, Loader2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { User, Mail, Phone, MapPin, Save, Loader2 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 
 export function Profile() {
   const { user, userProfile } = useAuth();
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [pincode, setPincode] = useState('');
-  const [country, setCountry] = useState('India');
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [country, setCountry] = useState("India");
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [message, setMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   useEffect(() => {
     if (userProfile) {
-      setFullName(userProfile.full_name || '');
-      setPhone(userProfile.phone || '');
-      setAddress(userProfile.address || '');
-      setEmail(userProfile.email || '');
+      setFullName(userProfile.full_name || "");
+      setPhone(userProfile.phone || "");
+      setAddress(userProfile.address || "");
+      setEmail(userProfile.email || "");
+      setCity(userProfile.city || "");
+      setState(userProfile.state || "");
+      setPincode(userProfile.pincode || "");
+      setCountry(userProfile.country || "India");
     }
   }, [userProfile]);
 
@@ -33,20 +40,27 @@ export function Profile() {
 
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from("user_profiles")
         .update({
           full_name: fullName,
           phone,
           address,
-          email: email || null // Make email optional
+          city: city,
+          state,
+          pincode,
+          country,
+          email: email,
         })
-        .eq('id', user?.id);
+        .eq("user_id", user?.id);
 
       if (error) throw error;
 
-      setMessage({ type: 'success', text: 'Profile updated successfully!' });
+      setMessage({ type: "success", text: "Profile updated successfully!" });
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Failed to update profile' });
+      setMessage({
+        type: "error",
+        text: error.message || "Failed to update profile",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -74,11 +88,13 @@ export function Profile() {
             <h1 className="font-heading text-4xl mb-8">Profile Settings</h1>
 
             {message && (
-              <div className={`p-4 rounded-lg mb-6 ${
-                message.type === 'success' 
-                  ? 'bg-green-500/10 text-green-500' 
-                  : 'bg-primary-red/10 text-primary-red'
-              }`}>
+              <div
+                className={`p-4 rounded-lg mb-6 ${
+                  message.type === "success"
+                    ? "bg-green-500/10 text-green-500"
+                    : "bg-primary-red/10 text-primary-red"
+                }`}
+              >
                 {message.text}
               </div>
             )}
@@ -86,7 +102,9 @@ export function Profile() {
             <div className="card">
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Full Name</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Full Name
+                  </label>
                   <div className="relative">
                     <input
                       type="text"
@@ -117,7 +135,9 @@ export function Profile() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Phone Number</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Phone Number
+                  </label>
                   <div className="relative">
                     <input
                       type="tel"
@@ -132,12 +152,14 @@ export function Profile() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-2">Address</label>
+                  <label className="block text-sm font-medium mb-2">
+                    Address
+                  </label>
                   <div className="relative">
                     <textarea
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      rows={3}
+                      rows={2}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                       placeholder="Enter your address"
                     />
@@ -145,8 +167,8 @@ export function Profile() {
                   </div>
                 </div>
 
-                <div className='flex flex-wrap justify-between gap-2'>
-                  <div className="w-1/1 relative">
+                <div className="flex flex-wrap justify-space">
+                  <div className="w-2/4 relative pr-2">
                     <input
                       type="text"
                       value={city}
@@ -156,7 +178,7 @@ export function Profile() {
                     />
                     <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
-                  <div className="w-1/2 relative">
+                  <div className="w-2/4 relative">
                     <input
                       type="text"
                       value={state}
@@ -168,24 +190,25 @@ export function Profile() {
                   </div>
                 </div>
 
-                <div className='flex flex-wrap justify-between gap-2'>
-                  <div className="w-1/1 relative">
+                <div className="flex flex-wrap justify-space">
+                  <div className="w-2/4 relative pr-2">
                     <input
                       type="text"
                       value={pincode}
                       onChange={(e) => setPincode(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      placeholder="Enter your city"
+                      placeholder="Enter your pincode"
                     />
                     <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
-                  <div className="w-1/2 relative">
+                  <div className="w-2/4 relative">
                     <input
                       type="text"
+                      disabled
                       value={country}
                       onChange={(e) => setCountry(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      placeholder="Enter your state"
+                      placeholder="Enter your country"
                     />
                     <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
