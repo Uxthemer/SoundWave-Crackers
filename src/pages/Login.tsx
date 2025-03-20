@@ -116,7 +116,7 @@ export function Login() {
     if (phoneUserError) throw phoneUserError;
 
     if (phoneUser) {
-      const { error } = await signInWithEmail(phoneUser.email, phoneUser.pwd);
+      const { error } = await signInWithEmail(phoneUser.email, atob(phoneUser.pwd));
       if (error) throw error;
     }
 

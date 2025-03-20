@@ -283,7 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: data.name,
             email: data.email,
             phone: data.phone,
-            pwd: data.password,
+            pwd: btoa(data.password),
             phone_verified: true,
           });
 
