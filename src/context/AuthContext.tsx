@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
         setTimeout(() => {
           fetchUserProfile(session.user.id);
@@ -293,14 +293,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (profileError) throw profileError;
       }
-
+      window.location.reload();
       return { error: null };
     } catch (error) {
+      return { error };
+    } finally {
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
         recaptchaVerifierRef.current = null;
       }
-      return { error };
     }
   };
 
