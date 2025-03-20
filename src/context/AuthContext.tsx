@@ -64,44 +64,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   // useEffect(() => {
-    // Set up Firebase auth listener
-    // const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
-    //   if (firebaseUser) {
-    //     try {
-    //       // Create or get Supabase user
-    //       const { data: { session: supabaseSession }, error: sessionError } = await supabase.auth.signInWithPassword({
-    //         email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
-    //         password: firebaseUser.uid
-    //       });
+  // Set up Firebase auth listener
+  // const unsubscribeFirebase = onAuthStateChanged(auth, async (firebaseUser) => {
+  //   if (firebaseUser) {
+  //     try {
+  //       // Create or get Supabase user
+  //       const { data: { session: supabaseSession }, error: sessionError } = await supabase.auth.signInWithPassword({
+  //         email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+  //         password: firebaseUser.uid
+  //       });
 
-    //       if (sessionError) {
-    //         // If sign in fails, try to create new user
-    //         const { data: { session: newSession }, error: signUpError } = await supabase.auth.signUp({
-    //           email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
-    //           password: firebaseUser.uid
-    //         });
+  //       if (sessionError) {
+  //         // If sign in fails, try to create new user
+  //         const { data: { session: newSession }, error: signUpError } = await supabase.auth.signUp({
+  //           email: firebaseUser.email || `${firebaseUser.uid}@virtual.soundwavecrackers.com`,
+  //           password: firebaseUser.uid
+  //         });
 
-    //         if (signUpError) throw signUpError;
-    //         if (newSession) setSession(newSession);
-    //       } else if (supabaseSession) {
-    //         setSession(supabaseSession);
-    //       }
+  //         if (signUpError) throw signUpError;
+  //         if (newSession) setSession(newSession);
+  //       } else if (supabaseSession) {
+  //         setSession(supabaseSession);
+  //       }
 
-    //     } catch (error) {
-    //       console.error('Error syncing auth:', error);
-    //       toast.error('Authentication error');
-    //       await firebaseSignOut(auth);
-    //     }
-    //   } else {
-    //     setSession(null);
-    //     setUser(null);
-    //     setUserProfile(null);
-    //     setUserRole(null);
-    //   }
-    //   setLoading(false);
-    // });
+  //     } catch (error) {
+  //       console.error('Error syncing auth:', error);
+  //       toast.error('Authentication error');
+  //       await firebaseSignOut(auth);
+  //     }
+  //   } else {
+  //     setSession(null);
+  //     setUser(null);
+  //     setUserProfile(null);
+  //     setUserRole(null);
+  //   }
+  //   setLoading(false);
+  // });
 
-    // Set up Supabase auth listener
+  // Set up Supabase auth listener
   //   const {
   //     data: { subscription },
   //   } = supabase.auth.onAuthStateChange(async (_event, session) => {
@@ -127,17 +127,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Set up Supabase auth listener
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       
       if (session?.user) {
-        await fetchUserProfile(session.user.id);
+        setTimeout(() => {
+          fetchUserProfile(session.user.id);
+        }, 0);
       } else {
         setUserProfile(null);
         setUserRole(null);
       }
-      
+
       setLoading(false);
     });
 
@@ -156,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("user_profiles")
         .select("*, roles(*)")
         .eq("user_id", userId)
-        .maybeSingle();
+        .single();
 
       if (profileError && profileError.code !== "PGRST116") {
         throw profileError;

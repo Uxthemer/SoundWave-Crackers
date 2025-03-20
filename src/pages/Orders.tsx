@@ -3,7 +3,7 @@ import { Search, Filter, ChevronDown, ChevronUp, X, Download, Eye, Loader2 } fro
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
-import { useRoles } from '../hooks/useRoles';
+import { useAuth } from '../context/AuthContext';
 
 interface OrderItem {
   id: string;
@@ -45,7 +45,7 @@ const ORDER_STATUSES = [
 ];
 
 export function Orders() {
-  const { userRole } = useRoles();
+  const { userRole } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,7 +55,7 @@ export function Orders() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  const isAdmin = ['admin', 'superadmin'].includes(userRole || '');
+  const isAdmin = ['admin', 'superadmin'].includes(userRole?.name || '');
 
   useEffect(() => {
     fetchOrders();
@@ -225,7 +225,7 @@ export function Orders() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <h1 className="font-heading text-4xl">Orders</h1>

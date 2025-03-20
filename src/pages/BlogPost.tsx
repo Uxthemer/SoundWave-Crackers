@@ -64,7 +64,7 @@ export function BlogPost() {
 
   if (loading) {
     return (
-      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+      <div className="min-h-screen pt-8 pb-12 flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
       </div>
     );

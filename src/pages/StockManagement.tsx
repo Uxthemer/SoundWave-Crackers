@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Edit2, Trash2, Save, X, Loader2, Download, Upload } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { useRoles } from '../hooks/useRoles';
+import { useAuth } from '../context/AuthContext';
 import { BulkImportModal } from '../components/BulkImportModal';
 import * as XLSX from 'xlsx';
 
@@ -29,7 +29,7 @@ export function StockManagement() {
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [showImportModal, setShowImportModal] = useState(false);
-  const { userRole } = useRoles();
+  const { userRole } = useAuth();
 
   useEffect(() => {
     fetchProducts();
@@ -142,9 +142,9 @@ export function StockManagement() {
     );
   }
 
-  if (!['admin', 'superadmin'].includes(userRole || '')) {
+  if (!['admin', 'superadmin'].includes(userRole?.name || '')) {
     return (
-      <div className="min-h-screen pt-24 pb-12">
+      <div className="min-h-screen pt-8 pb-12">
         <div className="container mx-auto px-6">
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
