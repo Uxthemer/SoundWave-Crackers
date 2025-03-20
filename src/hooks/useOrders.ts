@@ -10,10 +10,12 @@ interface DeliveryDetails {
   customerName: string;
   email: string;
   phone: string;
+  alternatePhone: string;
   address: string;
   city: string;
   state: string;
   pincode: string;
+  country: string;
 }
 
 export interface OrderWithItems extends OrderDB {

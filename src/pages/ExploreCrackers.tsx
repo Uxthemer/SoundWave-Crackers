@@ -51,8 +51,8 @@ export function ExploreCrackers() {
         image: p.image_url
           ? `/assets/img/crackers/${p.image_url}`
           : `/assets/img/logo/logo_2.png`,
-        actualPrice: p.actual_price,
-        offerPrice: p.offer_price,
+        actual_price: p.actual_price,
+        offer_price: p.offer_price,
         discount: p.discount_percentage,
         content: p.content,
       }));
@@ -274,10 +274,10 @@ export function ExploreCrackers() {
                     </p>
                     <div className="text-right">
                       <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
-                        ₹{product.actualPrice}
+                        ₹{product.actual_price}
                       </p>
                       <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
-                        ₹{product.offerPrice}
+                        ₹{product.offer_price}
                       </p>
                     </div>
                   </div>

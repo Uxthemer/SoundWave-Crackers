@@ -30,8 +30,8 @@ export function QuickPurchase() {
           name: product.name,
           category: categoryName,
           image: `${product.image_url ? `/assets/img/crackers/${product.image_url}`: '/assets/img/logo/logo_2.png'}`,
-          actualPrice: product.actual_price,
-          offerPrice: product.offer_price,
+          actual_price: product.actual_price,
+          offer_price: product.offer_price,
           discount: product.discount_percentage,
           content: product.content
         });
@@ -144,8 +144,8 @@ export function QuickPurchase() {
                         
                         <div className="flex flex-wrap items-center gap-3 md:gap-6">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm text-text/60 line-through">₹{product.actualPrice}</span>
-                            <span className="font-bold text-primary-orange">₹{product.offerPrice}</span>
+                            <span className="text-sm text-text/60 line-through">₹{product.actual_price}</span>
+                            <span className="font-bold text-primary-orange">₹{product.offer_price}</span>
                           </div>
                           
                           <div className="flex items-center gap-3">
@@ -163,7 +163,7 @@ export function QuickPurchase() {
                             <div className="text-right min-w-[80px]">
                               <p className="text-xs text-text/60">Total</p>
                               <p className="font-bold text-sm">
-                                ₹{((quantities[product.id] || 0) * product.offerPrice).toFixed(2)}
+                                ₹{((quantities[product.id] || 0) * product.offer_price).toFixed(2)}
                               </p>
                             </div>
                           </div>

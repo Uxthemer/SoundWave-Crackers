@@ -74,13 +74,24 @@ export function UserMenu() {
             </Link>
 
             <Link
-              to="/orders"
+              to="/myorders"
               className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
               onClick={() => setIsOpen(false)}
             >
               <ShoppingBag className="w-4 h-4 mr-3 text-primary-orange" />
               <span>My Orders</span>
             </Link>
+
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
+            <Link
+              to="/orders"
+              className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <ShoppingBag className="w-4 h-4 mr-3 text-primary-orange" />
+              <span>All Orders</span>
+            </Link>
+            )}
 
             {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
               <Link

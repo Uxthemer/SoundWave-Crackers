@@ -1,9 +1,11 @@
 import { motion } from 'framer-motion';
 import { X, QrCode, Wallet, CreditCard, Loader2 } from 'lucide-react';
 import { useCartStore } from '../store/cartStore';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createOrder } from '../hooks/useOrders';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
+import { use } from 'framer-motion/client';
 
 interface CartProps {
   isOpen: boolean;
@@ -14,13 +16,11 @@ interface DeliveryDetails {
   customerName: string;
   email: string;
   phone: string;
-  doorNo: string;
-  floor?: string;
-  area: string;
+  alternatePhone: string;
+  address: string;
   city: string;
   state: string;
   pincode: string;
-  landmark?: string;
   country: string;
 }
 
@@ -29,19 +29,32 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const [showPayment, setShowPayment] = useState(false);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const { userProfile } = useAuth();
   const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails>({
     customerName: '',
     email: '',
     phone: '',
-    doorNo: '',
-    floor: '',
-    area: '',
+    alternatePhone: '',
+    address: '',
     city: '',
     state: '',
     pincode: '',
-    landmark: '',
     country: 'India'
   });
+
+  useEffect(() => {
+    setDeliveryDetails(prev => ({
+      ...prev,
+      customerName: userProfile?.full_name || '',
+      email: userProfile?.email || '',
+      phone: userProfile?.phone || '',
+      address: userProfile?.address || '',
+      city: userProfile?.city || '',
+      state: userProfile?.state || '',
+      pincode: userProfile?.pincode || ''
+    }));
+  }
+  , [userProfile]);
 
   const handleDeliveryDetailsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -65,7 +78,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       const orderItems = items.map(item => ({
         product_id: item.id,
         quantity: item.quantity,
-        price: item.offerPrice,
+        price: item.offer_price,
         total_price: item.totalPrice
       }));
 
@@ -73,19 +86,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         total_amount: totalAmount,
         payment_method: paymentMethod,
         items: orderItems,
-        shippingAddress: {
-          doorNo: deliveryDetails.doorNo,
-          floor: deliveryDetails.floor,
-          area: deliveryDetails.area,
-          city: deliveryDetails.city,
-          state: deliveryDetails.state,
-          pincode: deliveryDetails.pincode,
-          landmark: deliveryDetails.landmark,
-          country: deliveryDetails.country
-        },
-        customerName: deliveryDetails.customerName,
-        email: deliveryDetails.email,
-        phone: deliveryDetails.phone
+        delivery_details:deliveryDetails,
       });
 
       // Clear cart and reset states
@@ -170,7 +171,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                             />
                           </div>
                         </td>
-                        <td className="py-4 px-6 text-right">₹{item.offerPrice}</td>
+                        <td className="py-4 px-6 text-right">₹{item.offer_price}</td>
                         <td className="py-4 px-6 text-right font-bold">
                           ₹{item.totalPrice.toFixed(2)}
                         </td>
@@ -197,8 +198,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <span>₹{totalAmount.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-text/60">Delivery</span>
-                      <span>Free</span>
+                      <span className="text-text/60">Discount</span>
+                      <span>80%</span>
                     </div>
                   </div>
                   <div className="border-t border-card-border/10 pt-4">
@@ -224,6 +225,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   <h3 className="font-montserrat font-bold text-xl mb-6">Delivery Details</h3>
                   <form className="grid grid-cols-1 md:grid-cols-2 gap-6" onSubmit={(e) => {
                     e.preventDefault();
+                    handlePlaceOrder('offline');
                     setShowPayment(true);
                   }}>
                     <div>
@@ -231,63 +233,58 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="text"
                         name="customerName"
+                       
                         value={deliveryDetails.customerName}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-2">Email (Optional)</label>
+                      <label className="block text-sm font-medium mb-2">Email</label>
                       <input
+                        disabled
                         type="email"
                         name="email"
-                        value={deliveryDetails.email}
+                        defaultValue={deliveryDetails.email}
+                        // value={deliveryDetails.email}
                         onChange={handleDeliveryDetailsChange}
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">Phone *</label>
                       <input
+                        disabled
+                        readOnly
                         type="tel"
                         name="phone"
-                        value={deliveryDetails.phone}
+                        defaultValue={deliveryDetails.phone}
+                        // value={deliveryDetails.phone}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-2">Door No/Flat No *</label>
+                      <label className="block text-sm font-medium mb-2">Address *</label>
                       <input
                         type="text"
-                        name="doorNo"
-                        value={deliveryDetails.doorNo}
+                        name="address"
+                        value={deliveryDetails.address}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-2">Floor</label>
+                      <label className="block text-sm font-medium mb-2">Alternate Phone No.</label>
                       <input
-                        type="text"
-                        name="floor"
-                        value={deliveryDetails.floor}
+                        type="tel"
+                        name="alternatePhone"
+                        value={deliveryDetails.alternatePhone}
                         onChange={handleDeliveryDetailsChange}
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Area *</label>
-                      <input
-                        type="text"
-                        name="area"
-                        value={deliveryDetails.area}
-                        onChange={handleDeliveryDetailsChange}
-                        required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
@@ -298,7 +295,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         value={deliveryDetails.city}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
@@ -309,7 +306,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         value={deliveryDetails.state}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
@@ -320,32 +317,33 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         value={deliveryDetails.pincode}
                         onChange={handleDeliveryDetailsChange}
                         required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Landmark</label>
-                      <input
-                        type="text"
-                        name="landmark"
-                        value={deliveryDetails.landmark}
-                        onChange={handleDeliveryDetailsChange}
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">Country</label>
                       <input
+                        readOnly
                         type="text"
                         name="country"
                         value={deliveryDetails.country}
                         disabled
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Referred By – Contact Number</label>
+                      <input
+                        type="tel"
+                        name="referred_by"
+                        defaultValue=""
+                        onChange={handleDeliveryDetailsChange}
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
                     <div className="md:col-span-2">
                       <button type="submit" className="btn-primary w-full">
-                        Proceed to Payment
+                      Order Now & Get a Quote
                       </button>
                     </div>
                   </form>
@@ -391,7 +389,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       </p>
                       <div className="bg-background p-4 rounded-lg">
                         <p className="font-mono text-center select-all">
-                          elitecrackers@upi
+                          soundwavecrackers@upi
                         </p>
                       </div>
                     </button>
