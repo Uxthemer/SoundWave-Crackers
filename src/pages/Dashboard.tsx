@@ -30,7 +30,7 @@ import {
 import { Line, Doughnut } from 'react-chartjs-2';
 import { useDashboard } from '../hooks/useDashboard';
 import { useProducts } from '../hooks/useProducts';
-import { useRoles } from '../hooks/useRoles';
+import { useAuth } from '../context/AuthContext';
 
 ChartJS.register(
   CategoryScale,
@@ -46,14 +46,14 @@ ChartJS.register(
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { userRole } = useRoles();
+  const { userRole } = useAuth();
   const [dateRange, setDateRange] = useState<'week' | 'month'>('week');
   const { stats, salesData, categoryData, loading, fetchDashboardData } = useDashboard();
   const { exportProductsToExcel, importProductsFromExcel } = useProducts();
   const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [importError, setImportError] = useState('');
 
-  const isAdmin = ['admin', 'superadmin'].includes(userRole || '');
+  const isAdmin = ['admin', 'superadmin'].includes(userRole?.name || '');
 
   if (!isAdmin) {
     return (
@@ -95,7 +95,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>

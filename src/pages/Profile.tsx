@@ -10,6 +10,10 @@ export function Profile() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [country, setCountry] = useState('India');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
@@ -18,6 +22,7 @@ export function Profile() {
       setFullName(userProfile.full_name || '');
       setPhone(userProfile.phone || '');
       setAddress(userProfile.address || '');
+      setEmail(userProfile.email || '');
     }
   }, [userProfile]);
 
@@ -58,7 +63,7 @@ export function Profile() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-4">
         <div className="max-w-2xl mx-auto">
           <motion.div
@@ -96,15 +101,16 @@ export function Profile() {
 
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    Email (Optional)
+                    Email
                   </label>
                   <div className="relative">
                     <input
                       type="email"
+                      disabled
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      placeholder="Enter your email (optional)"
+                      placeholder="Enter your email"
                     />
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
@@ -115,6 +121,7 @@ export function Profile() {
                   <div className="relative">
                     <input
                       type="tel"
+                      disabled
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
@@ -135,6 +142,52 @@ export function Profile() {
                       placeholder="Enter your address"
                     />
                     <MapPin className="absolute left-3 top-4 w-5 h-5 text-text/40" />
+                  </div>
+                </div>
+
+                <div className='flex flex-wrap justify-between gap-2'>
+                  <div className="w-1/1 relative">
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      placeholder="Enter your city"
+                    />
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                  </div>
+                  <div className="w-1/2 relative">
+                    <input
+                      type="text"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      placeholder="Enter your state"
+                    />
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                  </div>
+                </div>
+
+                <div className='flex flex-wrap justify-between gap-2'>
+                  <div className="w-1/1 relative">
+                    <input
+                      type="text"
+                      value={pincode}
+                      onChange={(e) => setPincode(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      placeholder="Enter your city"
+                    />
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                  </div>
+                  <div className="w-1/2 relative">
+                    <input
+                      type="text"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      placeholder="Enter your state"
+                    />
+                    <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                   </div>
                 </div>
 

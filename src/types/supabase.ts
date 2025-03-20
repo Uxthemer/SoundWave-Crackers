@@ -175,8 +175,13 @@ export interface Database {
           user_id: string
           role_id: string | null
           full_name: string | null
+          email:string | null
           phone: string | null
           address: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
+          country: string | null
           created_at: string
         }
         Insert: {
@@ -184,8 +189,13 @@ export interface Database {
           user_id: string
           role_id?: string | null
           full_name?: string | null
+          email:string | null
           phone?: string | null
           address?: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
+          country: string | null
           created_at?: string
         }
         Update: {
@@ -193,8 +203,13 @@ export interface Database {
           user_id?: string
           role_id?: string | null
           full_name?: string | null
+          email:string | null
           phone?: string | null
           address?: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
+          country: string | null
           created_at?: string
         }
       }

@@ -44,7 +44,7 @@ export function ProductDetails() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-4">
         {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm mb-8">
