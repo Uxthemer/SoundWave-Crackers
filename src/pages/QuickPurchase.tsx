@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, Loader2, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { ShoppingCart, Loader2, Search, ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { Cart } from '../components/Cart';
@@ -16,6 +16,7 @@ export function QuickPurchase() {
   const [groupedProducts, setGroupedProducts] = useState<Record<string, any[]>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  const [filteredProductCount, setFilteredProductCount] = useState(0);
 
   useEffect(() => {
     if (products.length > 0) {
@@ -32,6 +33,8 @@ export function QuickPurchase() {
         product.categories?.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
+      setFilteredProductCount(filtered.length);
+
       const grouped = filtered.reduce((acc, product) => {
         const categoryName = product.categories?.name || 'Uncategorized';
         
@@ -47,7 +50,8 @@ export function QuickPurchase() {
           actualPrice: product.actual_price,
           offerPrice: product.offer_price,
           discount: product.discount_percentage,
-          content: product.content
+          content: product.content,
+          stock: product.stock
         });
         
         return acc;
@@ -64,18 +68,18 @@ export function QuickPurchase() {
     }
   }, [products, searchTerm]);
 
-  const handleQuantityChange = (productId: string, quantity: number) => {
-    setQuantities((prev) => ({ ...prev, [productId]: quantity }));
+  const handleQuantityChange = (productId: string, change: number) => {
+    const currentQty = quantities[productId] || 0;
+    const newQty = Math.max(0, currentQty + change);
+    
+    setQuantities((prev) => ({ ...prev, [productId]: newQty }));
     
     const product = Object.values(groupedProducts)
       .flat()
       .find(p => p.id === productId);
       
     if (product) {
-      const diff = quantity - (quantities[productId] || 0);
-      if (diff !== 0) {
-        addToCart(product, diff);
-      }
+      addToCart(product, change);
     }
   };
 
@@ -98,22 +102,27 @@ export function QuickPurchase() {
     <>
       <div className="min-h-screen pt-6 pb-12">
         <div className="container mx-auto px-4">
+          {/* Search Bar */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="search"
+                placeholder="Search products or categories..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-10 py-3 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange"
+              />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+              <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-text/60">
+                {filteredProductCount} products found
+              </span>
+            </div>
+          </div>
+
           <div className="sticky top-[0px] z-40 bg-background/95 backdrop-blur-sm py-4 border-b border-card-border/10 shadow-sm">
             <div className="max-w-6xl mx-auto">
               <div className="flex flex-col md:flex-row gap-4 items-center mb-4">
                 <h1 className="font-heading text-3xl md:text-4xl">Quick Purchase</h1>
-                <div className="flex-1 w-full md:w-auto">
-                  <div className="relative">
-                    <input
-                      type="search"
-                      placeholder="Search products or categories..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full px-10 py-2 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange"
-                    />
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
-                  </div>
-                </div>
               </div>
               <div className="flex flex-wrap items-center gap-4 bg-card/50 p-4 rounded-xl">
                 <div className="flex-1 min-w-[120px] text-center">
@@ -148,7 +157,10 @@ export function QuickPurchase() {
                   onClick={() => toggleCategory(category)}
                   className="w-full flex items-center justify-between font-montserrat font-bold text-xl mb-0 pl-4 border-l-4 border-primary-orange bg-primary-orange/10 hover:bg-card/80 p-2 rounded-t-lg transition-colors"
                 >
-                  <span>{category}</span>
+                  <div className="flex items-center gap-2">
+                    <span>{category}</span>
+                    <span className="text-sm text-text/60">({categoryProducts.length} items)</span>
+                  </div>
                   {expandedCategories[category] ? (
                     <ChevronUp className="w-5 h-5 text-primary-orange" />
                   ) : (
@@ -199,16 +211,24 @@ export function QuickPurchase() {
                             </div>
                             
                             <div className="flex items-center gap-3">
-                              <div className="flex-1">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  value={quantities[product.id] || 0}
-                                  onChange={(e) =>
-                                    handleQuantityChange(product.id, parseInt(e.target.value) || 0)
-                                  }
-                                  className="quantity-input"
-                                />
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => handleQuantityChange(product.id, -1)}
+                                  className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                                  disabled={!quantities[product.id]}
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </button>
+                                <span className="w-8 text-center font-medium">
+                                  {quantities[product.id] || 0}
+                                </span>
+                                <button
+                                  onClick={() => handleQuantityChange(product.id, 1)}
+                                  className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                                  disabled={product.stock !== undefined && product.stock <= 0}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
                               </div>
                               <div className="text-right min-w-[80px]">
                                 <p className="text-xs text-text/60">Total</p>

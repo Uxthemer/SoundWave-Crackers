@@ -4,7 +4,6 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { BulkImportModal } from '../components/BulkImportModal';
 import * as XLSX from 'xlsx';
-import { ca } from 'date-fns/locale';
 
 interface Product {
   id: string;
@@ -148,6 +147,13 @@ export function StockManagement() {
     return matchesSearch && matchesCategory;
   });
 
+  const getStockStyle = (stock: number) => {
+    if (stock <= 20) {
+      return 'text-primary-red font-bold';
+    }
+    return '';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
@@ -170,10 +176,15 @@ export function StockManagement() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="font-heading text-4xl">Stock Management</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="font-heading text-4xl">Stock Management</h1>
+            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+              {filteredProducts.length} products
+            </span>
+          </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
               <input
@@ -232,7 +243,6 @@ export function StockManagement() {
                   <th className="py-4 px-6 text-left">Product Name</th>
                   <th className="py-4 px-6 text-left">Category</th>
                   <th className="py-4 px-6 text-left">Content</th>
-                  {/* <th className="py-4 px-6 text-left">Description</th> */}
                   <th className="py-4 px-6 text-left">Image URL</th>
                   <th className="py-4 px-6 text-left">Discount %</th>
                   <th className="py-4 px-6 text-left">Stock</th>
@@ -285,18 +295,6 @@ export function StockManagement() {
                         product.content
                       )}
                     </td>
-                    {/* <td className="py-4 px-6">
-                      {editingProduct === product.id ? (
-                        <input
-                          type="text"
-                          value={editForm.description || ''}
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
-                        />
-                      ) : (
-                        product.description
-                      )}
-                    </td> */}
                     <td className="py-4 px-6">
                       {editingProduct === product.id ? (
                         <input
@@ -330,7 +328,9 @@ export function StockManagement() {
                           className="w-24 px-2 py-1 rounded bg-background border border-card-border/10 text-right"
                         />
                       ) : (
-                        product.stock
+                        <span className={getStockStyle(product.stock)}>
+                          {product.stock}
+                        </span>
                       )}
                     </td>
                     <td className="py-4 px-6 text-right">

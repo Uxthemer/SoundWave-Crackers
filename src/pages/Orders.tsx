@@ -45,8 +45,12 @@ const ORDER_STATUSES = [
   'Cancelled'
 ];
 
+interface OrderStats {
+  [key: string]: number;
+}
+
 export function Orders() {
-  const { userRole, userProfile } = useAuth();
+  const { userRole } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,12 +59,20 @@ export function Orders() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-
-  const isAdmin = ['admin', 'superadmin'].includes(userRole?.name || '');
+  const [orderStats, setOrderStats] = useState<OrderStats>({});
 
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  useEffect(() => {
+    // Calculate order stats whenever orders change
+    const stats = orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {} as OrderStats);
+    setOrderStats(stats);
+  }, [orders]);
 
   const fetchOrders = async () => {
     try {
@@ -99,7 +111,7 @@ export function Orders() {
   };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
-    if (!isAdmin) return;
+    if (!['admin', 'superadmin'].includes(userRole?.name || '')) return;
     
     try {
       setUpdatingStatus(true);
@@ -213,7 +225,11 @@ export function Orders() {
     }
   };
 
-  if (!isAdmin) {
+  const handleStatusFilterClick = (status: string) => {
+    setStatusFilter(statusFilter === status ? 'all' : status);
+  };
+
+  if (!['admin', 'superadmin'].includes(userRole?.name || '')) {
     return (
       <div className="min-h-screen pt-24 pb-12">
         <div className="container mx-auto px-6">
@@ -230,7 +246,12 @@ export function Orders() {
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="font-heading text-4xl">All Orders</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="font-heading text-4xl">All Orders</h1>
+            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+              {orders.length} orders
+            </span>
+          </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
               <input
@@ -242,24 +263,32 @@ export function Orders() {
               />
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
             </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-4 py-2 bg-card border border-card-border/10 rounded-lg focus:outline-none focus:border-primary-orange"
-            >
-              <option value="all">All Status</option>
-              {ORDER_STATUSES.map(status => (
-                <option key={status} value={status}>{status}</option>
-              ))}
-            </select>
             <button
-              onClick={exportAllOrders}
+              onClick={() => exportAllOrders()}
               className="flex items-center gap-2 px-4 py-2 bg-primary-orange text-white rounded-lg hover:bg-primary-orange/80 transition-colors"
             >
               <Download className="w-4 h-4" />
               <span>Export All</span>
             </button>
           </div>
+        </div>
+
+        {/* Order Status Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+          {ORDER_STATUSES.map((status) => (
+            <button
+              key={status}
+              onClick={() => handleStatusFilterClick(status)}
+              className={`p-4 rounded-lg transition-all ${
+                statusFilter === status 
+                  ? 'bg-primary-orange text-white scale-105'
+                  : 'bg-card hover:bg-card/70'
+              }`}
+            >
+              <h3 className="font-montserrat font-bold text-lg">{orderStats[status] || 0}</h3>
+              <p className="text-sm opacity-80">{status}</p>
+            </button>
+          ))}
         </div>
 
         <div className="bg-card/30 rounded-xl overflow-hidden">

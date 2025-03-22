@@ -235,7 +235,12 @@ export function MyOrders() {
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="font-heading text-4xl">Orders</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="font-heading text-4xl">My Orders</h1>
+            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+              {filteredOrders.length} orders
+            </span>
+          </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
               <input
@@ -259,13 +264,6 @@ export function MyOrders() {
                 </option>
               ))}
             </select>
-            {/* <button
-              onClick={exportAllOrders}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-orange text-white rounded-lg hover:bg-primary-orange/80 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export All</span>
-            </button> */}
           </div>
         </div>
 
@@ -352,26 +350,10 @@ export function MyOrders() {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        {/* <select
-                          value={order.status}
-                          onChange={(e) =>
-                            handleStatusChange(order.id, e.target.value)
-                          }
-                          disabled={updatingStatus}
-                          className={`px-3 py-1 rounded-full text-sm ${getStatusColor(
-                            order.status
-                          )} bg-opacity-10 border-0 focus:outline-none focus:ring-2 focus:ring-primary-orange`}
-                        >
-                          {ORDER_STATUSES.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select> */}
                         <span
                           className={`px-3 py-1 rounded-full text-sm ${getStatusColor(
                             order.status
-                          )}`}>{order.status }</span>
+                          )}`}>{order.status}</span>
                       </td>
                       <td className="py-4 px-6 text-right">
                         ₹{order.total_amount.toFixed(2)}

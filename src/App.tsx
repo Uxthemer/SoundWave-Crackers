@@ -33,6 +33,8 @@ import ShippingPolicy from './pages/ShippingPolicy';
 import { BlogSection } from './components/BlogSection';
 import { FAQSection } from './components/FAQSection';
 import { BlogPost } from './pages/BlogPost';
+import { Users } from './pages/Users';
+import { Analytics } from './pages/Analytics';
 
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
   const { user, loading, userRole } = useAuth();
@@ -196,6 +198,16 @@ function AppContent() {
         <Route path="/stock" element={
           <ProtectedRoute>
             <StockManagement />
+          </ProtectedRoute>
+        } />
+        <Route path="/users" element={
+          <ProtectedRoute requiredRole="admin">
+            <Users />
+          </ProtectedRoute>
+        } />
+        <Route path="/analytics" element={
+          <ProtectedRoute requiredRole="admin">
+            <Analytics />
           </ProtectedRoute>
         } />
         <Route path="/cancellation-policy" element={<CancellationPolicy />} />

@@ -2,9 +2,15 @@ import { motion } from "framer-motion";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCategories } from '../hooks/useCategories';
+import { useProducts } from '../hooks/useProducts';
 
 export function CrackerCategories() {
   const { categories, loading: categoriesLoading } = useCategories();
+  const { products } = useProducts();
+
+  const getCategoryProductCount = (categoryId: string) => {
+    return products.filter(p => p.category_id === categoryId).length;
+  };
 
   if (categoriesLoading) {
     return (
@@ -45,11 +51,9 @@ export function CrackerCategories() {
                 <h3 className="text-black/90 font-semibold text-xs md:text-sm truncate w-full">
                   {category.name}
                 </h3>
-                {category.description && (
-                  <p className="text-black/60 text-xs truncate w-full mt-1">
-                    {category.description}
-                  </p>
-                )}
+                <span className="text-xs text-primary-orange mt-1">
+                  {getCategoryProductCount(category.id)} items
+                </span>
               </div>
             </Link>
           ))}
