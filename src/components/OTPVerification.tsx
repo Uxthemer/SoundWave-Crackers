@@ -38,6 +38,7 @@ export function OTPVerification({
       if (error) throw error;
 
       setStatus("success");
+      onCancel();
       onVerified();
     } catch (error) {
       setStatus("error");

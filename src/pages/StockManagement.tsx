@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { BulkImportModal } from '../components/BulkImportModal';
 import * as XLSX from 'xlsx';
+import { ca } from 'date-fns/locale';
 
 interface Product {
   id: string;
@@ -13,6 +14,9 @@ interface Product {
   actual_price: number;
   offer_price: number;
   content: string;
+  discount_percentage: string;
+  image_url: string;
+  description: string;
 }
 
 interface Category {
@@ -80,7 +84,17 @@ export function StockManagement() {
     try {
       const { error } = await supabase
         .from('products')
-        .update(editForm)
+        .update({
+          category_id: editForm.category_id,
+          name: editForm.name,
+          stock: editForm.stock,
+          actual_price: editForm.actual_price,
+          offer_price: editForm.offer_price,
+          content: editForm.content,
+          discount_percentage: editForm.discount_percentage,
+          image_url: editForm.image_url,
+          description: editForm.description
+        })
         .eq('id', id);
 
       if (error) throw error;
@@ -217,9 +231,13 @@ export function StockManagement() {
                 <tr className="bg-card/50">
                   <th className="py-4 px-6 text-left">Product Name</th>
                   <th className="py-4 px-6 text-left">Category</th>
-                  <th className="py-4 px-6 text-right">Stock</th>
-                  <th className="py-4 px-6 text-right">Actual Price</th>
-                  <th className="py-4 px-6 text-right">Offer Price</th>
+                  <th className="py-4 px-6 text-left">Content</th>
+                  {/* <th className="py-4 px-6 text-left">Description</th> */}
+                  <th className="py-4 px-6 text-left">Image URL</th>
+                  <th className="py-4 px-6 text-left">Discount %</th>
+                  <th className="py-4 px-6 text-left">Stock</th>
+                  <th className="py-4 px-6 text-left">Actual Price</th>
+                  <th className="py-4 px-6 text-left">Offer Price</th>
                   <th className="py-4 px-6 text-center">Actions</th>
                 </tr>
               </thead>
@@ -253,6 +271,54 @@ export function StockManagement() {
                         </select>
                       ) : (
                         (product as any).categories?.name
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      {editingProduct === product.id ? (
+                        <input
+                          type="text"
+                          value={editForm.content || ''}
+                          onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
+                        />
+                      ) : (
+                        product.content
+                      )}
+                    </td>
+                    {/* <td className="py-4 px-6">
+                      {editingProduct === product.id ? (
+                        <input
+                          type="text"
+                          value={editForm.description || ''}
+                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
+                        />
+                      ) : (
+                        product.description
+                      )}
+                    </td> */}
+                    <td className="py-4 px-6">
+                      {editingProduct === product.id ? (
+                        <input
+                          type="text"
+                          value={editForm.image_url || ''}
+                          onChange={(e) => setEditForm({ ...editForm, image_url: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
+                        />
+                      ) : (
+                        product.image_url
+                      )}
+                    </td>
+                    <td className="py-4 px-6">
+                      {editingProduct === product.id ? (
+                        <input
+                          type="text"
+                          value={editForm.discount_percentage || ''}
+                          onChange={(e) => setEditForm({ ...editForm, discount_percentage: e.target.value })}
+                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
+                        />
+                      ) : (
+                        product.discount_percentage
                       )}
                     </td>
                     <td className="py-4 px-6 text-right">

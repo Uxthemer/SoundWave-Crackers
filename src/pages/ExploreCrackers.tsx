@@ -13,6 +13,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
 import { useProducts } from "../hooks/useProducts";
 import { useCategories } from "../hooks/useCategories";
+import { Cart } from '../components/Cart';
 
 export function ExploreCrackers() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -23,6 +24,7 @@ export function ExploreCrackers() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [displayProducts, setDisplayProducts] = useState<any[]>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
 
   // Get category from URL params
   useEffect(() => {
@@ -51,8 +53,8 @@ export function ExploreCrackers() {
         image: p.image_url
           ? `/assets/img/crackers/${p.image_url}`
           : `/assets/img/logo/logo_2.png`,
-        actualPrice: p.actual_price,
-        offerPrice: p.offer_price,
+        actual_price: p.actual_price,
+        offer_price: p.offer_price,
         discount: p.discount_percentage,
         content: p.content,
       }));
@@ -126,6 +128,7 @@ export function ExploreCrackers() {
   }
 
   return (
+    <>
     <div className="pt-6 min-h-screen">
       <div className="sticky top-[0px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
         <div className="container mx-auto px-6">
@@ -151,7 +154,7 @@ export function ExploreCrackers() {
               </div>
               <button
                 className="btn-primary flex items-center gap-2 w-full md:w-auto"
-                onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+                onClick={() => setIsCartOpen(true)}
               >
                 <ShoppingCart className="w-5 h-5" />
                 <span>View Cart</span>
@@ -274,10 +277,10 @@ export function ExploreCrackers() {
                     </p>
                     <div className="text-right">
                       <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
-                        ₹{product.actualPrice}
+                        ₹{product.actual_price}
                       </p>
                       <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
-                        ₹{product.offerPrice}
+                        ₹{product.offer_price}
                       </p>
                     </div>
                   </div>
@@ -328,5 +331,7 @@ export function ExploreCrackers() {
         )}
       </div>
     </div>
+     <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+     </>
   );
 }

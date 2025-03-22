@@ -21,6 +21,7 @@ import { ExploreCrackers } from './pages/ExploreCrackers';
 import { ProductDetails } from './pages/ProductDetails';
 import { Dashboard } from './pages/Dashboard';
 import { Orders } from './pages/Orders';
+import { MyOrders } from './pages/MyOrders';
 import { StockManagement } from './pages/StockManagement';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
@@ -55,7 +56,7 @@ function AppContent() {
   const { theme, toggleTheme } = useTheme();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { totalQuantity } = useCartStore();
+  const { totalQuantity, items } = useCartStore();
 
   const handleMenuItemClick = () => {
     setIsMobileMenuOpen(false);
@@ -79,7 +80,7 @@ function AppContent() {
             <Link to="/" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Home</Link>
             <Link to="/quick-purchase" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Quick Purchase</Link>
             <Link to="/explore" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Explore Crackers</Link>
-            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Payment</Link>
+            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Monthly Installment(Chit)</Link>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -94,9 +95,9 @@ function AppContent() {
             <div className="relative">
               <button onClick={() => setIsCartOpen(true)} className="relative">
                 <ShoppingCart className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
-                {totalQuantity > 0 && (
+                {items.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-primary-red text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {totalQuantity}
+                    {items.length}
                   </span>
                 )}
               </button>
@@ -144,7 +145,7 @@ function AppContent() {
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
-                Payment
+                Monthly Installment(Chit)
               </Link>
             </div>
           </div>
@@ -175,6 +176,11 @@ function AppContent() {
         <Route path="/profile" element={
           <ProtectedRoute>
             <Profile />
+          </ProtectedRoute>
+        } />
+         <Route path="/myorders" element={
+          <ProtectedRoute>
+            <MyOrders />
           </ProtectedRoute>
         } />
         <Route path="/orders" element={
