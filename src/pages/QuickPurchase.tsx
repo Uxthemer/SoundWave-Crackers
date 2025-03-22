@@ -100,7 +100,7 @@ export function QuickPurchase() {
                   onClick={() => setIsCartOpen(true)}
                 >
                   <ShoppingCart className="w-5 h-5" />
-                  <span>Checkout</span>
+                  <span>View Cart</span>
                 </button>
               </div>
             </div>

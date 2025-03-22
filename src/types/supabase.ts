@@ -80,6 +80,9 @@ export interface Database {
           total_amount: number
           status: string
           payment_method: string | null
+          discount_amt: number
+          discount_percentage: string
+          referred_by: string | null
           created_at: string
           customer_name: string | null
           email: string | null
@@ -95,6 +98,9 @@ export interface Database {
           total_amount: number
           status?: string
           payment_method?: string | null
+          discount_amt: number
+          discount_percentage: string
+          referred_by: string | null
           created_at?: string
           customer_name?: string | null
           email?: string | null
@@ -110,6 +116,9 @@ export interface Database {
           total_amount?: number
           status?: string
           payment_method?: string | null
+          discount_amt: number
+          discount_percentage: string
+          referred_by: string | null
           created_at?: string
           customer_name?: string | null
           email?: string | null

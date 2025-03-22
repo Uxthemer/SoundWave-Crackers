@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { User, Mail, Phone, MapPin, Save, Loader2 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import toast from "react-hot-toast";
 
 export function Profile() {
   const { user, userProfile } = useAuth();
@@ -56,6 +57,7 @@ export function Profile() {
       if (error) throw error;
 
       setMessage({ type: "success", text: "Profile updated successfully!" });
+      toast.success("Profile updated successfully!");
     } catch (error: any) {
       setMessage({
         type: "error",

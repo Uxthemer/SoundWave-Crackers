@@ -22,9 +22,10 @@ interface OrderItem {
 interface Order {
   id: string;
   created_at: string;
-  customer_name: string;
+  full_name: string;
   email: string;
   phone: string;
+  alternate_phone: string;
   address: string;
   city: string;
   state: string;
@@ -45,7 +46,7 @@ const ORDER_STATUSES = [
 ];
 
 export function Orders() {
-  const { userRole } = useAuth();
+  const { userRole, userProfile } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -128,7 +129,7 @@ export function Orders() {
   const exportOrder = (order: Order) => {
     const orderData = {
       'Order ID': order.id,
-      'Customer Name': order.customer_name,
+      'Customer Name': order.full_name,
       'Email': order.email,
       'Phone': order.phone,
       'Address': order.address,
@@ -157,7 +158,7 @@ export function Orders() {
   const exportAllOrders = () => {
     const orderData = orders.map(order => ({
       'Order ID': order.id,
-      'Customer Name': order.customer_name,
+      'Customer Name': order.full_name,
       'Phone': order.phone,
       'City': order.city,
       'Total Amount': order.total_amount,
@@ -175,9 +176,10 @@ export function Orders() {
 
   const filteredOrders = orders
     .filter(order => 
-      (order.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
        order.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+       order.alternate_phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
        order.city?.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (statusFilter === 'all' || order.status === statusFilter)
     )
@@ -228,7 +230,7 @@ export function Orders() {
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="font-heading text-4xl">Orders</h1>
+          <h1 className="font-heading text-4xl">All Orders</h1>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
               <input
@@ -279,10 +281,10 @@ export function Orders() {
                   <th className="py-4 px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
-                      onClick={() => handleSort('customer_name')}
+                      onClick={() => handleSort('full_name')}
                     >
                       <span>Customer</span>
-                      {sortField === 'customer_name' && (
+                      {sortField === 'full_name' && (
                         sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
                       )}
                     </button>
@@ -321,7 +323,7 @@ export function Orders() {
                   filteredOrders.map((order) => (
                     <tr key={order.id} className="border-t border-card-border/10">
                       <td className="py-4 px-6 font-mono text-sm">{order.id}</td>
-                      <td className="py-4 px-6">{order.customer_name}</td>
+                      <td className="py-4 px-6">{order.full_name}</td>
                       <td className="py-4 px-6">
                         <div>
                           <p className="text-sm">{order.phone}</p>
@@ -421,7 +423,7 @@ export function Orders() {
                 <div>
                   <h3 className="font-montserrat font-bold text-lg mb-4">Customer Details</h3>
                   <div className="space-y-2">
-                    <p><span className="text-text/60">Name:</span> {selectedOrder.customer_name}</p>
+                    <p><span className="text-text/60">Name:</span> {selectedOrder.full_name}</p>
                     <p><span className="text-text/60">Email:</span> {selectedOrder.email}</p>
                     <p><span className="text-text/60">Phone:</span> {selectedOrder.phone}</p>
                   </div>

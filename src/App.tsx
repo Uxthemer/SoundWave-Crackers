@@ -80,7 +80,7 @@ function AppContent() {
             <Link to="/" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Home</Link>
             <Link to="/quick-purchase" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Quick Purchase</Link>
             <Link to="/explore" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Explore Crackers</Link>
-            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Payment</Link>
+            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Monthly Installment(Chit)</Link>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -145,7 +145,7 @@ function AppContent() {
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
-                Payment
+                Monthly Installment(Chit)
               </Link>
             </div>
           </div>
