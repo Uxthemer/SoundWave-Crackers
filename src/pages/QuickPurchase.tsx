@@ -68,18 +68,46 @@ export function QuickPurchase() {
     }
   }, [products, searchTerm]);
 
-  const handleQuantityChange = (productId: string, change: number) => {
-    const currentQty = quantities[productId] || 0;
-    const newQty = Math.max(0, currentQty + change);
-    
-    setQuantities((prev) => ({ ...prev, [productId]: newQty }));
+  const handleQuantityChange = (productId: string, value: string) => {
+    const newQuantity = Math.max(0, parseInt(value) || 0);
+    setQuantities((prev) => ({ ...prev, [productId]: newQuantity }));
     
     const product = Object.values(groupedProducts)
       .flat()
       .find(p => p.id === productId);
       
     if (product) {
-      addToCart(product, change);
+      const currentQty = quantities[productId] || 0;
+      const diff = newQuantity - currentQty;
+      if (diff !== 0) {
+        addToCart(product, diff);
+      }
+    }
+  };
+
+  const handleIncrement = (productId: string) => {
+    const product = Object.values(groupedProducts)
+      .flat()
+      .find(p => p.id === productId);
+      
+    if (product && (product.stock === undefined || product.stock > 0)) {
+      const currentQty = quantities[productId] || 0;
+      setQuantities((prev) => ({ ...prev, [productId]: currentQty + 1 }));
+      addToCart(product, 1);
+    }
+  };
+
+  const handleDecrement = (productId: string) => {
+    const currentQty = quantities[productId] || 0;
+    if (currentQty > 0) {
+      const product = Object.values(groupedProducts)
+        .flat()
+        .find(p => p.id === productId);
+        
+      if (product) {
+        setQuantities((prev) => ({ ...prev, [productId]: currentQty - 1 }));
+        addToCart(product, -1);
+      }
     }
   };
 
@@ -152,7 +180,7 @@ export function QuickPurchase() {
 
           <div className="mt-8 max-w-6xl mx-auto">
             {Object.entries(groupedProducts).map(([category, categoryProducts]) => (
-              <div key={category} className="mb-0 rounded-lg p-1">
+              <div key={category} className="mb-2">
                 <button
                   onClick={() => toggleCategory(category)}
                   className="w-full flex items-center justify-between font-montserrat font-bold text-xl mb-0 pl-4 border-l-4 border-primary-orange bg-primary-orange/10 hover:bg-card/80 p-2 rounded-t-lg transition-colors"
@@ -173,14 +201,14 @@ export function QuickPurchase() {
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="space-y-1 bg-primary-orange/10 rounded-b-lg p-1 shadow-sm"
+                    className="space-y-1 bg-primary-orange/5 rounded-b-lg p-1"
                   >
                     {categoryProducts.map((product) => (
                       <motion.div
                         key={product.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="bg-card/30 rounded-lg p-3 shadow-sm hover:bg-card/50 transition-colors"
+                        className="bg-card/30 rounded-lg p-3 hover:bg-card/50 transition-colors"
                       >
                         <div className="flex flex-col md:flex-row md:items-center gap-3">
                           <div className="flex items-center gap-3 flex-1">
@@ -211,20 +239,24 @@ export function QuickPurchase() {
                             </div>
                             
                             <div className="flex items-center gap-3">
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center">
                                 <button
-                                  onClick={() => handleQuantityChange(product.id, -1)}
-                                  className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                                  onClick={() => handleDecrement(product.id)}
+                                  className="p-2 rounded-l-lg bg-card hover:bg-card/70 transition-colors"
                                   disabled={!quantities[product.id]}
                                 >
                                   <Minus className="w-4 h-4" />
                                 </button>
-                                <span className="w-8 text-center font-medium">
-                                  {quantities[product.id] || 0}
-                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={quantities[product.id] || 0}
+                                  onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                                  className="w-16 px-2 py-2 text-center border-x border-card-border/10 bg-card"
+                                />
                                 <button
-                                  onClick={() => handleQuantityChange(product.id, 1)}
-                                  className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                                  onClick={() => handleIncrement(product.id)}
+                                  className="p-2 rounded-r-lg bg-card hover:bg-card/70 transition-colors"
                                   disabled={product.stock !== undefined && product.stock <= 0}
                                 >
                                   <Plus className="w-4 h-4" />

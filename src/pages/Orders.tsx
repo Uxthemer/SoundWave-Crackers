@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, ChevronUp, X, Download, Eye, Loader2 } from 'lucide-react';
+import { Search, Filter, ChevronDown, ChevronUp, X, Download, Eye, Loader2, Printer, ReceiptText  } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
+import { InvoiceTemplate } from '../components/InvoiceTemplate';
 
 interface OrderItem {
   id: string;
@@ -45,10 +46,6 @@ const ORDER_STATUSES = [
   'Cancelled'
 ];
 
-interface OrderStats {
-  [key: string]: number;
-}
-
 export function Orders() {
   const { userRole } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -59,7 +56,7 @@ export function Orders() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [orderStats, setOrderStats] = useState<OrderStats>({});
+  const [orderStats, setOrderStats] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchOrders();
@@ -70,7 +67,7 @@ export function Orders() {
     const stats = orders.reduce((acc, order) => {
       acc[order.status] = (acc[order.status] || 0) + 1;
       return acc;
-    }, {} as OrderStats);
+    }, {} as Record<string, number>);
     setOrderStats(stats);
   }, [orders]);
 
@@ -139,11 +136,16 @@ export function Orders() {
   };
 
   const exportOrder = (order: Order) => {
-    const orderData = {
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+
+    // Order details sheet
+    const orderDetails = {
       'Order ID': order.id,
       'Customer Name': order.full_name,
       'Email': order.email,
       'Phone': order.phone,
+      'Alternate Phone': order.alternate_phone || '-',
       'Address': order.address,
       'City': order.city,
       'State': order.state,
@@ -151,23 +153,31 @@ export function Orders() {
       'Total Amount': order.total_amount,
       'Status': order.status,
       'Payment Method': order.payment_method,
-      'Order Date': format(new Date(order.created_at), 'PPpp'),
-      'Items': order.items?.map(item => ({
-        'Product': item.product.name,
-        'Category': item.product.categories.name,
-        'Quantity': item.quantity,
-        'Price': item.price,
-        'Total': item.total_price
-      }))
+      'Order Date': format(new Date(order.created_at), 'PPpp')
     };
+    const wsOrder = XLSX.utils.json_to_sheet([orderDetails]);
+    XLSX.utils.book_append_sheet(wb, wsOrder, 'Order Details');
 
-    const ws = XLSX.utils.json_to_sheet([orderData]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Order Details');
+    // Order items sheet
+    const orderItems = order.items?.map(item => ({
+      'Product': item.product.name,
+      'Category': item.product.categories.name,
+      'Quantity': item.quantity,
+      'Price': item.price,
+      'Total': item.total_price
+    })) || [];
+    const wsItems = XLSX.utils.json_to_sheet(orderItems);
+    XLSX.utils.book_append_sheet(wb, wsItems, 'Order Items');
+
+    // Write file
     XLSX.writeFile(wb, `order-${order.id}.xlsx`);
   };
 
   const exportAllOrders = () => {
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+
+    // Orders summary sheet
     const orderData = orders.map(order => ({
       'Order ID': order.id,
       'Customer Name': order.full_name,
@@ -179,11 +189,116 @@ export function Orders() {
       'Order Date': format(new Date(order.created_at), 'PPpp'),
       'Items Count': order.items?.length || 0
     }));
+    const wsOrders = XLSX.utils.json_to_sheet(orderData);
+    XLSX.utils.book_append_sheet(wb, wsOrders, 'Orders');
 
-    const ws = XLSX.utils.json_to_sheet(orderData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Orders');
+    // All order items sheet
+    const allItems = orders.flatMap(order => 
+      order.items?.map(item => ({
+        'Order ID': order.id,
+        'Product': item.product.name,
+        'Category': item.product.categories.name,
+        'Quantity': item.quantity,
+        'Price': item.price,
+        'Total': item.total_price
+      })) || []
+    );
+    const wsItems = XLSX.utils.json_to_sheet(allItems);
+    XLSX.utils.book_append_sheet(wb, wsItems, 'All Items');
+
+    // Write file
     XLSX.writeFile(wb, 'all-orders.xlsx');
+  };
+
+  const handleInvoicePrint = (order: Order) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const invoiceContent = InvoiceTemplate({ order });
+    printWindow.document.write(invoiceContent);
+    printWindow.document.close();
+  };
+
+  const handlePrint = (order: Order) => {
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Generate print content
+    const content = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Order ${order.id}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          h1 { color: #FF5722; }
+          .section { margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+          .total { font-weight: bold; margin-top: 10px; }
+        </style>
+      </head>
+      <body>
+        <h1>Order Details</h1>
+        <div class="section">
+          <h2>Customer Information</h2>
+          <p><strong>Name:</strong> ${order.full_name}</p>
+          <p><strong>Email:</strong> ${order.email}</p>
+          <p><strong>Phone:</strong> ${order.phone}</p>
+          <p><strong>Alternate Phone:</strong> ${order.alternate_phone || '-'}</p>
+        </div>
+        <div class="section">
+          <h2>Shipping Address</h2>
+          <p>${order.address}</p>
+          <p>${order.city}, ${order.state}</p>
+          <p>PIN: ${order.pincode}</p>
+        </div>
+        <div class="section">
+          <h2>Order Summary</h2>
+          <p><strong>Order ID:</strong> ${order.id}</p>
+          <p><strong>Date:</strong> ${format(new Date(order.created_at), 'PPpp')}</p>
+          <p><strong>Status:</strong> ${order.status}</p>
+          <p><strong>Payment Method:</strong> ${order.payment_method}</p>
+        </div>
+        <div class="section">
+          <h2>Order Items</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${order.items?.map(item => `
+                <tr>
+                  <td>${item.product.name}</td>
+                  <td>${item.product.categories.name}</td>
+                  <td>${item.quantity}</td>
+                  <td>₹${item.price}</td>
+                  <td>₹${item.total_price}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <p class="total">Total Amount: ₹${order.total_amount}</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const handleStatusFilterClick = (status: string) => {
+    setStatusFilter(statusFilter === status ? 'all' : status);
   };
 
   const filteredOrders = orders
@@ -225,10 +340,6 @@ export function Orders() {
     }
   };
 
-  const handleStatusFilterClick = (status: string) => {
-    setStatusFilter(statusFilter === status ? 'all' : status);
-  };
-
   if (!['admin', 'superadmin'].includes(userRole?.name || '')) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -249,7 +360,7 @@ export function Orders() {
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-4xl">All Orders</h1>
             <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
-              {orders.length} orders
+              {filteredOrders.length} orders
             </span>
           </div>
           <div className="flex flex-col md:flex-row gap-4">
@@ -259,7 +370,7 @@ export function Orders() {
                 placeholder="Search orders..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-card border border-card-border/10 rounded-lg focus:outline-none focus:border-primary-orange"
+                className="w-full pl-10 pr-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
               />
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
             </div>
@@ -391,6 +502,20 @@ export function Orders() {
                           >
                             <Download className="w-4 h-4" />
                           </button>
+                          <button
+                            onClick={() => handlePrint(order)}
+                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            title="Print Order"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleInvoicePrint(order)}
+                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            title="Print Invoice"
+                          >
+                            <ReceiptText  className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -408,12 +533,21 @@ export function Orders() {
           <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
               <h2 className="font-heading text-2xl">Order Details</h2>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="p-2 hover:bg-card/50 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => handlePrint(selectedOrder)}
+                  className="p-2 hover:bg-card/50 rounded-lg transition-colors"
+                  title="Print Order"
+                >
+                  <Printer className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-2 hover:bg-card/50 rounded-full transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6">

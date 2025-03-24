@@ -4,7 +4,7 @@ import { Line, Pie, Bar } from 'react-chartjs-2';
 import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, TrendingUp, Users, Package, DollarSign } from 'lucide-react';
+import { Loader2, TrendingUp, Users, Package, DollarSign, Info } from 'lucide-react';
 
 interface AnalyticsData {
   citySales: {
@@ -31,11 +31,15 @@ interface AnalyticsData {
   };
   stats: {
     totalRevenue: number;
+    expectedRevenue: number;
     totalOrders: number;
     totalProducts: number;
     averageOrderValue: number;
   };
 }
+
+const COMPLETED_STATUSES = ['shipped', 'dispatched', 'delivered'];
+const PENDING_STATUSES = ['pending', 'processing'];
 
 export function Analytics() {
   const [loading, setLoading] = useState(true);
@@ -69,6 +73,7 @@ export function Analytics() {
 
       // Process city-wise sales
       const cityData = orders.reduce((acc: { [key: string]: number }, order) => {
+        if (!COMPLETED_STATUSES.includes(order.status.toLowerCase())) return acc;
         const city = order.city || 'Unknown';
         acc[city] = (acc[city] || 0) + order.total_amount;
         return acc;
@@ -76,6 +81,7 @@ export function Analytics() {
 
       // Process state-wise sales
       const stateData = orders.reduce((acc: { [key: string]: number }, order) => {
+        if (!COMPLETED_STATUSES.includes(order.status.toLowerCase())) return acc;
         const state = order.state || 'Unknown';
         acc[state] = (acc[state] || 0) + order.total_amount;
         return acc;
@@ -83,7 +89,8 @@ export function Analytics() {
 
       // Process product sales
       const productData = orders.reduce((acc: { [key: string]: { qty: number; revenue: number } }, order) => {
-        order.items?.forEach(item => {
+        if (!COMPLETED_STATUSES.includes(order.status.toLowerCase())) return acc;
+        order.items?.forEach((item : any) => {
           const productName = item.product.name;
           if (!acc[productName]) {
             acc[productName] = { qty: 0, revenue: 0 };
@@ -96,7 +103,8 @@ export function Analytics() {
 
       // Process category sales
       const categoryData = orders.reduce((acc: { [key: string]: { qty: number; revenue: number } }, order) => {
-        order.items?.forEach(item => {
+        if (!COMPLETED_STATUSES.includes(order.status.toLowerCase())) return acc;
+        order.items?.forEach((item : any) => {
           const categoryName = item.product.categories.name;
           if (!acc[categoryName]) {
             acc[categoryName] = { qty: 0, revenue: 0 };
@@ -109,14 +117,25 @@ export function Analytics() {
 
       // Process monthly revenue
       const monthlyData = orders.reduce((acc: { [key: string]: number }, order) => {
+        if (!COMPLETED_STATUSES.includes(order.status.toLowerCase())) return acc;
         const month = format(new Date(order.created_at), 'MMM yyyy');
         acc[month] = (acc[month] || 0) + order.total_amount;
         return acc;
       }, {});
 
       // Calculate stats
-      const totalRevenue = orders.reduce((sum, order) => sum + order.total_amount, 0);
-      const averageOrderValue = totalRevenue / orders.length || 0;
+      const totalRevenue = orders.reduce((sum, order) => 
+        COMPLETED_STATUSES.includes(order.status.toLowerCase()) ? sum + order.total_amount : sum, 0);
+      
+      const expectedRevenue = orders.reduce((sum, order) => 
+        PENDING_STATUSES.includes(order.status.toLowerCase()) ? sum + order.total_amount : sum, 0);
+
+      const completedOrders = orders.filter(order => 
+        COMPLETED_STATUSES.includes(order.status.toLowerCase()));
+      
+      const averageOrderValue = completedOrders.length > 0 
+        ? totalRevenue / completedOrders.length 
+        : 0;
 
       setData({
         citySales: {
@@ -143,8 +162,9 @@ export function Analytics() {
         },
         stats: {
           totalRevenue,
+          expectedRevenue,
           totalOrders: orders.length,
-          totalProducts: new Set(orders.flatMap(o => o.items?.map(i => i.product_id) || [])).size,
+          totalProducts: new Set(orders.flatMap(o => o.items?.map((i:any) => i.product_id) || [])).size,
           averageOrderValue,
         },
       });
@@ -153,6 +173,12 @@ export function Analytics() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getGrowthColor = (growth: number) => {
+    if (growth > 0) return 'bg-green-500/10 text-green-500';
+    if (growth < 0) return 'bg-red-500/10 text-red-500';
+    return 'bg-yellow-500/10 text-yellow-500';
   };
 
   if (!['admin', 'superadmin'].includes(userRole?.name || '')) {
@@ -193,73 +219,129 @@ export function Analytics() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-xl p-6"
+            className="bg-card rounded-xl p-4"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-montserrat font-bold">Total Revenue</h3>
-              <div className="bg-primary-orange/10 p-3 rounded-full">
-                <DollarSign className="w-6 h-6 text-primary-orange" />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-montserrat font-bold">Total Revenue</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-text/40 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Based on shipped, dispatched, and delivered orders only
+                  </div>
+                </div>
+              </div>
+              <div className="bg-primary-orange/10 p-2 rounded-full">
+                <DollarSign className="w-4 h-4 text-primary-orange" />
               </div>
             </div>
-            <p className="text-3xl font-bold mb-2">₹{data.stats.totalRevenue.toFixed(2)}</p>
-            <p className="text-sm text-text/60">Average order: ₹{data.stats.averageOrderValue.toFixed(2)}</p>
+            <p className="text-xl font-bold mb-1">₹{data.stats.totalRevenue.toFixed(2)}</p>
+            <p className="text-xs text-text/60">Avg order: ₹{data.stats.averageOrderValue.toFixed(2)}</p>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-card rounded-xl p-6"
+            className="bg-card rounded-xl p-4"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-montserrat font-bold">Total Orders</h3>
-              <div className="bg-primary-orange/10 p-3 rounded-full">
-                <Package className="w-6 h-6 text-primary-orange" />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-montserrat font-bold">Expected Revenue</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-text/40 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Based on pending and processing orders
+                  </div>
+                </div>
+              </div>
+              <div className="bg-primary-orange/10 p-2 rounded-full">
+                <DollarSign className="w-4 h-4 text-primary-orange" />
               </div>
             </div>
-            <p className="text-3xl font-bold mb-2">{data.stats.totalOrders}</p>
-            <p className="text-sm text-text/60">Across all categories</p>
+            <p className="text-xl font-bold mb-1">₹{data.stats.expectedRevenue.toFixed(2)}</p>
+            <p className="text-xs text-text/60">From pending orders</p>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="bg-card rounded-xl p-6"
+            className="bg-card rounded-xl p-4"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-montserrat font-bold">Products Sold</h3>
-              <div className="bg-primary-orange/10 p-3 rounded-full">
-                <Package className="w-6 h-6 text-primary-orange" />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-montserrat font-bold">Total Orders</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-text/40 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Total number of orders across all statuses
+                  </div>
+                </div>
+              </div>
+              <div className="bg-primary-orange/10 p-2 rounded-full">
+                <Package className="w-4 h-4 text-primary-orange" />
               </div>
             </div>
-            <p className="text-3xl font-bold mb-2">{data.stats.totalProducts}</p>
-            <p className="text-sm text-text/60">Unique products sold</p>
+            <p className="text-xl font-bold mb-1">{data.stats.totalOrders}</p>
+            <p className="text-xs text-text/60">All orders</p>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="bg-card rounded-xl p-6"
+            className="bg-card rounded-xl p-4"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-montserrat font-bold">Growth</h3>
-              <div className="bg-primary-orange/10 p-3 rounded-full">
-                <TrendingUp className="w-6 h-6 text-primary-orange" />
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-montserrat font-bold">Products Sold</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-text/40 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Number of unique products sold
+                  </div>
+                </div>
+              </div>
+              <div className="bg-primary-orange/10 p-2 rounded-full">
+                <Package className="w-4 h-4 text-primary-orange" />
               </div>
             </div>
-            <p className="text-3xl font-bold mb-2">+15%</p>
-            <p className="text-sm text-text/60">From last month</p>
+            <p className="text-xl font-bold mb-1">{data.stats.totalProducts}</p>
+            <p className="text-xs text-text/60">Unique products</p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="bg-card rounded-xl p-4"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-montserrat font-bold">Growth</h3>
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-text/40 cursor-help" />
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Revenue growth compared to previous period
+                  </div>
+                </div>
+              </div>
+              <div className="bg-primary-orange/10 p-2 rounded-full">
+                <TrendingUp className="w-4 h-4 text-primary-orange" />
+              </div>
+            </div>
+            <p className="text-xl font-bold mb-1">+15%</p>
+            <p className="text-xs text-text/60">vs last period</p>
           </motion.div>
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Monthly Revenue Trend */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
@@ -302,30 +384,32 @@ export function Analytics() {
             className="bg-card rounded-xl p-6"
           >
             <h3 className="font-montserrat font-bold text-xl mb-6">Category Distribution</h3>
-            <Pie
-              data={{
-                labels: data.categorySales.labels,
-                datasets: [{
-                  data: data.categorySales.revenue,
-                  backgroundColor: [
-                    '#FF5722',
-                    '#FFC107',
-                    '#FF0000',
-                    '#8A2BE2',
-                    '#4CAF50',
-                    '#2196F3'
-                  ]
-                }]
-              }}
-              options={{
-                responsive: true,
-                plugins: {
-                  legend: {
-                    position: 'bottom'
+            <div className="max-w-[300px] mx-auto">
+              <Pie
+                data={{
+                  labels: data.categorySales.labels,
+                  datasets: [{
+                    data: data.categorySales.revenue,
+                    backgroundColor: [
+                      '#FF5722',
+                      '#FFC107',
+                      '#FF0000',
+                      '#8A2BE2',
+                      '#4CAF50',
+                      '#2196F3'
+                    ]
+                  }]
+                }}
+                options={{
+                  responsive: true,
+                  plugins: {
+                    legend: {
+                      position: 'bottom'
+                    }
                   }
-                }
-              }}
-            />
+                }}
+              />
+            </div>
           </motion.div>
 
           {/* State-wise Sales */}
