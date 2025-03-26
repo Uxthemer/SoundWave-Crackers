@@ -67,7 +67,7 @@ export function BlogSection() {
                 >
                   <div className="relative h-48 overflow-hidden rounded-lg">
                     <img
-                      src={blog.image_url}
+                      src={blog.image_url ? `/assets/img/blogs/${blog.image_url}` : `/assets/img/blogs/online-sale-firecrackers.jpg`}
                       alt={blog.title}
                       className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
                     />

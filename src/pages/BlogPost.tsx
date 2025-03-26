@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ChevronLeft, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import DOMPurify from 'dompurify';
 
 interface Blog {
   id: string;
@@ -90,7 +91,7 @@ export function BlogPost() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-12 pb-12">
       <div className="container mx-auto px-4">
         <Link
           to="/"
@@ -104,20 +105,20 @@ export function BlogPost() {
           {/* Main Content */}
           <article className="lg:col-span-2">
             <div className="bg-card rounded-2xl overflow-hidden shadow-lg">
-              <div className="aspect-video">
+              {/* <div className="aspect-video">
                 <img
-                  src={blog.image_url}
+                  src={`/assets/img/blogs/${blog.image_url}` || '/assets/img/blogs/online-sale-firecrackers.jpg'}
                   alt={blog.title}
                   className="w-full h-full object-cover"
                 />
-              </div>
+              </div> */}
 
               <div className="p-8">
-                <h1 className="text-4xl font-heading text-primary-orange mb-4">
+                {/* <h1 className="text-4xl font-heading text-primary-orange mb-4">
                   {blog.title}
-                </h1>
+                </h1> */}
 
-                <div className="flex items-center text-text/60 mb-8">
+                {/* <div className="flex items-center text-text/60 mb-8">
                   <time dateTime={blog.published_at}>
                     {format(new Date(blog.published_at), 'MMMM dd, yyyy')}
                   </time>
@@ -127,14 +128,21 @@ export function BlogPost() {
                       <span>{blog.author.full_name}</span>
                     </>
                   )}
-                </div>
+                </div> */}
 
-                <div className="prose prose-lg max-w-none">
+                {/* <div className="prose prose-lg max-w-none">
                   {blog.content.split('\n\n').map((paragraph, index) => (
                     <p key={index} className="mb-4 text-text/80">
                       {paragraph}
                     </p>
                   ))}
+                </div> */}
+                <div className="prose prose-lg max-w-none">
+                  <div
+                    dangerouslySetInnerHTML={{
+                      __html: DOMPurify.sanitize(blog.content || ''),
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -154,7 +162,7 @@ export function BlogPost() {
                     <div className="flex items-start space-x-4">
                       <div className="w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg">
                         <img
-                          src={relatedBlog.image_url}
+                          src={relatedBlog.image_url ? `/assets/img/blogs/${relatedBlog.image_url}` : '/assets/img/blogs/online-sale-firecrackers.jpg'}
                           alt={relatedBlog.title}
                           className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
                         />
