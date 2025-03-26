@@ -151,7 +151,7 @@ export function TrendingCrackers() {
               <div className="relative mb-4 overflow-hidden rounded-lg">
                 <Link to={`/product/${product.id}`}>
                   <img
-                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo_2.png`}
+                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo-product.png`}
                     alt={product.name}
                     className="w-full h-50 object-cover transform group-hover:scale-110 transition-transform duration-500"
                   />
