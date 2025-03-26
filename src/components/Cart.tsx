@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { X, QrCode, Wallet, CreditCard, Loader2 } from "lucide-react";
+import { X, QrCode, Wallet, CreditCard, Loader2, Trash2  } from "lucide-react";
 import { useCartStore } from "../store/cartStore";
 import { useEffect, useState } from "react";
 import { createOrder } from "../hooks/useOrders";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-import { use } from "framer-motion/client";
 import toast from "react-hot-toast";
 
 interface CartProps {
@@ -27,7 +26,7 @@ interface DeliveryDetails {
 }
 
 export function Cart({ isOpen, onClose }: CartProps) {
-  const { items, totalAmount, removeFromCart, updateQuantity, clearCart } =
+  const { items, totalAmount, totalActualAmount, removeFromCart, updateQuantity, clearCart } =
     useCartStore();
   const [showPayment, setShowPayment] = useState(false);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
@@ -199,12 +198,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         <td className="py-4 px-6 text-right font-bold">
                           ₹{item.totalPrice.toFixed(2)}
                         </td>
-                        <td className="py-4 px-6 text-right">
+                        <td className="py-4 px-2 pr-4 text-right">
                           <button
                             onClick={() => removeFromCart(item.id)}
                             className="text-primary-red hover:text-primary-red/80 transition-colors"
                           >
-                            Remove
+                            <Trash2/> 
                           </button>
                         </td>
                       </tr>
@@ -220,12 +219,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   </h3>
                   <div className="space-y-2 mb-4">
                     <div className="flex justify-between">
-                      <span className="text-text/60">Subtotal</span>
-                      <span>₹{totalAmount.toFixed(2)}</span>
+                      <span className="text-text/60">Actual Price</span>
+                      <span><s>₹{totalActualAmount.toFixed(2)} </s></span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-text/60">Discount</span>
-                      <span>80%</span>
+                      <span className="text-text/60">You Saved (Discount)</span>
+                      <span>{(totalActualAmount - totalAmount).toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="border-t border-card-border/10 pt-4">
@@ -244,7 +243,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   onClick={() => setShowDeliveryForm(true)}
                   className="btn-primary w-full mb-8"
                 >
-                  Place Order
+                  Proceed to Checkout
                 </button>
               )}
 
@@ -404,7 +403,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         </button>
                       ) : (
                         <button type="submit" className="btn-primary w-full">
-                          Order Now & Get a Quote
+                          Place Order
                         </button>
                       )}
                     </div>

@@ -82,7 +82,11 @@ export function ProductDetails() {
         id: product.id,
         name: product.name,
         description: product.description || '',
-        image: product.image_url || '',
+        image: `${
+            product.image_url
+              ? `/assets/img/crackers/${product.image_url}`
+              : "/assets/img/logo/logo-product.png"
+          }`,
         offer_price: product.offer_price,
         actual_price: product.actual_price,
         content: product.content || '',
@@ -103,7 +107,7 @@ export function ProductDetails() {
   };
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-12 pb-12">
       <div className="container mx-auto px-4">
         {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm mb-8">
@@ -133,7 +137,7 @@ export function ProductDetails() {
               >
                 <SwiperSlide>
                   <img
-                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo_2.png`}
+                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo-product.png`}
                     alt={product.name}
                     className="w-full h-full object-cover"
                   />
@@ -239,7 +243,7 @@ export function ProductDetails() {
                 >
                   <div className="relative mb-4 overflow-hidden rounded-lg">
                     <img
-                      src={relatedProduct.image_url ? `/assets/img/crackers/${relatedProduct.image_url}` : `/assets/img/logo/logo_2.png`}
+                      src={relatedProduct.image_url ? `/assets/img/crackers/${relatedProduct.image_url}` : `/assets/img/logo/logo-product.png`}
                       alt={relatedProduct.name}
                       className="w-full h-48 object-cover transform group-hover:scale-110 transition-transform duration-500"
                     />

@@ -1,10 +1,9 @@
 import { useEffect, useRef } from "react";
 import Typed from "typed.js";
-import { motion } from 'framer-motion';
-import { Award, Shield, Truck, Clock } from 'lucide-react';
+import { motion } from "framer-motion";
+import { Award, Shield, Truck, Clock } from "lucide-react";
 
 export function AboutSection() {
-
   const typedRef = useRef(null);
 
   useEffect(() => {
@@ -27,15 +26,32 @@ export function AboutSection() {
             whileInView={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <h1 className='text-4xl md:text-5xl font-bold italic bg-gradient-to-r from-red-500 to-yellow-400 text-transparent bg-clip-text mb-6'>SoundWave Crackers</h1>
+            <h1 className="text-4xl md:text-5xl font-bold italic bg-gradient-to-r from-red-500 to-yellow-400 text-transparent bg-clip-text mb-6">
+              SoundWave Crackers
+            </h1>
             <p className="font-dancing text-1xl md:text-2xl font-bold mb-3">
-            <span ref={typedRef}></span>
+              <span ref={typedRef}></span>
+            </p>
+            <p className="text-text/80 mb-4 leading-relaxed ">
+              At <b>SoundWave Crackers</b>, we bring you the finest selection of
+              high-quality fireworks to make your celebrations truly
+              spectacular. As a trusted fireworks retailer, we curate a wide
+              range of <b>safe, vibrant, and exciting</b> crackers to suit every
+              occasion—from festivals and weddings to grand festivities.
+            </p>
+            <p className="text-text/80 mb-4 leading-relaxed">
+              We take pride in offering{" "}
+              <b>top-tier products from reputed manufacturers</b>, ensuring
+              safety, reliability, and dazzling displays. Customer satisfaction
+              is at the heart of what we do, and we strive to provide an
+              effortless shopping experience with the best deals and a wide
+              variety of choices
             </p>
             <p className="text-text/80 mb-8 leading-relaxed">
-              SoundWave Crackers has been a trusted name in the fireworks industry for over three decades. 
-              We take pride in delivering premium quality crackers that add sparkle to your special moments. 
-              Our commitment to safety, quality, and customer satisfaction has made us the preferred choice 
-              for celebrations across the country.
+              <i>
+                Light up your moments with <b>SoundWave Crackers</b> — where
+                every celebration shines brighter!
+              </i>
             </p>
             <div className="grid grid-cols-2 gap-6">
               <div className="flex items-start space-x-3">
@@ -43,8 +59,12 @@ export function AboutSection() {
                   <Award className="w-5 h-5 text-primary-orange" />
                 </div>
                 <div>
-                  <h3 className="font-montserrat font-bold mb-1">Premium Quality</h3>
-                  <p className="text-sm text-text/60">Highest grade materials</p>
+                  <h3 className="font-montserrat font-bold mb-1">
+                    Premium Quality
+                  </h3>
+                  <p className="text-sm text-text/60">
+                    Highest grade materials
+                  </p>
                 </div>
               </div>
               <div className="flex items-start space-x-3">
@@ -52,7 +72,9 @@ export function AboutSection() {
                   <Shield className="w-5 h-5 text-primary-orange" />
                 </div>
                 <div>
-                  <h3 className="font-montserrat font-bold mb-1">Safety First</h3>
+                  <h3 className="font-montserrat font-bold mb-1">
+                    Safety First
+                  </h3>
                   <p className="text-sm text-text/60">Rigorous testing</p>
                 </div>
               </div>
@@ -61,7 +83,9 @@ export function AboutSection() {
                   <Truck className="w-5 h-5 text-primary-orange" />
                 </div>
                 <div>
-                  <h3 className="font-montserrat font-bold mb-1">Fast Delivery</h3>
+                  <h3 className="font-montserrat font-bold mb-1">
+                    Fast Delivery
+                  </h3>
                   <p className="text-sm text-text/60">Nationwide shipping</p>
                 </div>
               </div>
@@ -70,7 +94,9 @@ export function AboutSection() {
                   <Clock className="w-5 h-5 text-primary-orange" />
                 </div>
                 <div>
-                  <h3 className="font-montserrat font-bold mb-1">24/7 Support</h3>
+                  <h3 className="font-montserrat font-bold mb-1">
+                    24/7 Support
+                  </h3>
                   <p className="text-sm text-text/60">Always here to help</p>
                 </div>
               </div>

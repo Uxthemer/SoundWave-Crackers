@@ -48,7 +48,7 @@ export function CrackerCategories() {
                     className="w-full h-full object-contain transition-transform duration-500"
                   />
                 </div>
-                <h3 className="text-black/90 font-semibold text-xs md:text-sm truncate w-full">
+                <h3 className="font-semibold text-xs md:text-sm truncate w-full">
                   {category.name}
                 </h3>
                 <span className="text-xs text-primary-orange mt-1">

@@ -64,7 +64,7 @@ export function ExploreCrackers() {
         category: p.categories?.name,
         image: p.image_url
           ? `/assets/img/crackers/${p.image_url}`
-          : `/assets/img/logo/logo_2.png`,
+          : `/assets/img/logo/logo-product.png`,
         actual_price: p.actual_price,
         offer_price: p.offer_price,
         discount: p.discount_percentage,
@@ -139,7 +139,7 @@ export function ExploreCrackers() {
   return (
     <>
     <div className="pt-6 min-h-screen">
-      <div className="sticky top-[0px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
+      <div className="sticky top-[70px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
         <div className="container mx-auto px-6">
           <div className="py-4">
             <div className="flex flex-wrap items-center gap-4 bg-card/50 p-4 rounded-xl">

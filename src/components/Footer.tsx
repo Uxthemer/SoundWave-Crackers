@@ -20,8 +20,8 @@ export function Footer() {
               />
             </Link>
             <p className="text-text/60 mb-6">
-              Your premier destination for premium quality crackers and
-              fireworks. Making your celebrations brighter since 2020.
+              Your premier destination for premium-quality crackers and
+              fireworks, making your celebrations brighter and more memorable.
             </p>
             <div className="flex space-x-4">
               <a
@@ -149,8 +149,8 @@ export function Footer() {
               </button>
             </form>
           </div> */}
-           {/* Right Section - Important Notice */}
-          <div className="" >
+          {/* Right Section - Important Notice */}
+          <div className="">
             <h3 className="text-lg font-semibold text-primary-orange">
               Important Notice
             </h3>
@@ -170,13 +170,13 @@ export function Footer() {
               © 2025 SoundWave Crackers. All rights reserved.
             </p>
             <div className="flex space-x-6">
-            <Link
+              <Link
                 to="/shipping-policy"
                 className="text-text/60 hover:text-primary-orange transition-colors"
               >
                 Shipping Policy
               </Link>
-            <Link
+              <Link
                 to="/cancellation-policy"
                 className="text-text/60 hover:text-primary-orange transition-colors"
               >
@@ -194,7 +194,6 @@ export function Footer() {
               >
                 Terms of Service
               </Link>
-              
             </div>
           </div>
         </div>

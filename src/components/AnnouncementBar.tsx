@@ -8,11 +8,11 @@ export function AnnouncementBar() {
         <div className="md:hidden flex justify-between items-center">
           <div className="flex items-center space-x-2">
             <Phone className="w-4 h-4" />
-            <a href="tel:+918668029052" className="text-sm">8668029052</a>
+            <a href="tel:+919994827099" className="text-sm">9994827099</a>
           </div>
           <div className="flex items-center space-x-2">
             <Phone className="w-4 h-4" />
-            <a href="tel:+919789785488" className="text-sm">9789785488</a>
+            <a href="tel:+918668029052" className="text-sm">8668029052</a>
           </div>
         </div>
 
@@ -22,11 +22,11 @@ export function AnnouncementBar() {
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-2">
               <Phone className="w-4 h-4" />
-              <a href="tel:+918668029052" className="text-sm">8668029052</a>
+              <a href="tel:+919994827099" className="text-sm">9994827099</a>
             </div>
             <div className="flex items-center space-x-2">
               <Phone className="w-4 h-4" />
-              <a href="tel:+919789785488" className="text-sm">9789785488</a>
+              <a href="tel:+918668029052" className="text-sm">8668029052</a>
             </div>
             <div className="flex items-center space-x-2">
               <Mail className="w-4 h-4" />
