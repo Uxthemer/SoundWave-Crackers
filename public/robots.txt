@@ -1,3 +1,11 @@
 User-agent: *
 Allow: /
+
+# Sitemap
 Sitemap: https://soundwavecrackers.com/sitemap.xml
+
+# Disallow admin and private routes
+Disallow: /admin/
+Disallow: /profile/
+Disallow: /myorders/
+Disallow: /api/

@@ -222,6 +222,123 @@ export interface Database {
           created_at?: string
         }
       }
+      schemes: {
+        Row: {
+          id: string
+          installment: string
+          duration: string
+          total_amount: string
+          bonus_amount: string
+          total_value: string
+          features: string[]
+          is_active: boolean
+          max_participants: number | null
+          current_participants: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          installment: string
+          duration: string
+          total_amount: string
+          bonus_amount: string
+          total_value: string
+          features: string[]
+          is_active?: boolean
+          max_participants?: number | null
+          current_participants?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          installment?: string
+          duration?: string
+          total_amount?: string
+          bonus_amount?: string
+          total_value?: string
+          features?: string[]
+          is_active?: boolean
+          max_participants?: number | null
+          current_participants?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      scheme_selections: {
+        Row: {
+          id: string
+          user_id: string
+          scheme_id: string
+          start_date: string
+          end_date: string
+          status: 'active' | 'completed' | 'cancelled'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          scheme_id: string
+          start_date: string
+          end_date: string
+          status: 'active' | 'completed' | 'cancelled'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          scheme_id?: string
+          start_date?: string
+          end_date?: string
+          status?: 'active' | 'completed' | 'cancelled'
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      payments: {
+        Row: {
+          id: string
+          scheme_selection_id: string
+          amount: number
+          payment_date: string
+          status: 'pending' | 'completed' | 'failed'
+          transaction_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          scheme_selection_id: string
+          amount: number
+          payment_date: string
+          status: 'pending' | 'completed' | 'failed'
+          transaction_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          scheme_selection_id?: string
+          amount?: number
+          payment_date?: string
+          status?: 'pending' | 'completed' | 'failed'
+          transaction_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
     }
   }
 }

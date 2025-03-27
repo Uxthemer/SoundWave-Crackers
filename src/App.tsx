@@ -36,6 +36,7 @@ import { BlogPost } from './pages/BlogPost';
 import { Users } from './pages/Users';
 import { Analytics } from './pages/Analytics';
 import { Sitemap } from './pages/Sitemap';
+import { NotFound } from './pages/NotFound';
 
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
   const { user, loading, userRole } = useAuth();
@@ -214,6 +215,7 @@ function AppContent() {
         <Route path="/cancellation-policy" element={<CancellationPolicy />} />
         <Route path="/shipping-policy" element={<ShippingPolicy />} />
         <Route path="/sitemap" element={<Sitemap />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
