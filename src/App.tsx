@@ -26,7 +26,7 @@ import { StockManagement } from './pages/StockManagement';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { Profile } from './pages/Profile';
-import { Payment } from "./pages/Payment";
+import { MonthlyInstallment } from './pages/MonthlyInstallment';
 import { useCartStore } from './store/cartStore';
 import CancellationPolicy from './pages/CancellationPolicy';
 import ShippingPolicy from './pages/ShippingPolicy';
@@ -35,6 +35,8 @@ import { FAQSection } from './components/FAQSection';
 import { BlogPost } from './pages/BlogPost';
 import { Users } from './pages/Users';
 import { Analytics } from './pages/Analytics';
+import { Sitemap } from './pages/Sitemap';
+import { NotFound } from './pages/NotFound';
 
 const ProtectedRoute = ({ children, requiredRole }: { children: React.ReactNode, requiredRole?: string }) => {
   const { user, loading, userRole } = useAuth();
@@ -82,7 +84,7 @@ function AppContent() {
             <Link to="/" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Home</Link>
             <Link to="/quick-purchase" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Quick Purchase</Link>
             <Link to="/explore" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Explore Crackers</Link>
-            <Link to="/payment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Monthly Installment(Chit)</Link>
+            <Link to="/monthly-installment" className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors">Monthly Installment(Chit)</Link>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -143,7 +145,7 @@ function AppContent() {
                 Explore Crackers
               </Link>
               <Link 
-                to="/payment" 
+                to="/monthly-installment" 
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
@@ -171,7 +173,7 @@ function AppContent() {
         <Route path="/quick-purchase" element={<QuickPurchase />} />
         <Route path="/explore" element={<ExploreCrackers />} />
         <Route path="/product/:productId" element={<ProductDetails />} />
-        <Route path="/payment" element={<Payment />} />
+        <Route path="/monthly-installment" element={<MonthlyInstallment />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/blog/:slug" element={<BlogPost />} />
@@ -212,6 +214,8 @@ function AppContent() {
         } />
         <Route path="/cancellation-policy" element={<CancellationPolicy />} />
         <Route path="/shipping-policy" element={<ShippingPolicy />} />
+        <Route path="/sitemap" element={<Sitemap />} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
