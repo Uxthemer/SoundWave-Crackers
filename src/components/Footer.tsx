@@ -98,15 +98,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li>
                 <Link
-                  to="/category/aerial"
-                  className="text-text/60 hover:text-primary-orange transition-colors"
-                >
-                  Blog
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/category/ground"
+                  to="/sitemap"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   Sitemap
@@ -114,18 +106,26 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  to="/category/sparklers"
+                  to="/blog"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Track Order
+                  Blog
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/category/fountains"
+                  to="/faq"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  My Orders
+                  FAQ
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/contact"
+                  className="text-text/60 hover:text-primary-orange transition-colors"
+                >
+                  Contact Us
                 </Link>
               </li>
             </ul>
