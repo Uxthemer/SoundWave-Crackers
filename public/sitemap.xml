@@ -1,69 +1,136 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://soundwave-crackers.com/</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/quick-purchase</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/explore</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/monthly-installment</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/about</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/contact</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/blog</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/faq</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/privacy-policy</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/terms</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://soundwave-crackers.com/cancellation-policy</loc>
-    <lastmod>2024-03-20</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
+   <!-- Homepage -->
+   <url>
+      <loc>https://soundwavecrackers.com/</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>1.0</priority>
+   </url>
+
+   <!-- Main Navigation Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/quick-purchase</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.9</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/explore</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.9</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/monthly-installment</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.8</priority>
+   </url>
+
+   <!-- Authentication Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/login</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/signup</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <!-- User Account Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/profile</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.6</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/myorders</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.6</priority>
+   </url>
+
+   <!-- Admin Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/dashboard</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.8</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/orders</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/stock</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/users</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/analytics</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.7</priority>
+   </url>
+
+   <!-- Policy Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/cancellation-policy</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.4</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/shipping-policy</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.4</priority>
+   </url>
+
+   <!-- Utility Pages -->
+   <url>
+      <loc>https://soundwavecrackers.com/sitemap</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.3</priority>
+   </url>
+
+   <!-- Dynamic Routes -->
+   <url>
+      <loc>https://soundwavecrackers.com/product</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.8</priority>
+   </url>
+
+   <url>
+      <loc>https://soundwavecrackers.com/blog</loc>
+      <lastmod>2025-03-30T10:30:00+05:30</lastmod>
+      <changefreq>daily</changefreq>
+      <priority>0.6</priority>
+   </url>
 </urlset>
