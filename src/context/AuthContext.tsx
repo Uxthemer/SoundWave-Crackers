@@ -254,10 +254,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = async (data: SignUpData) => {
     try {
       // Check if user exists
-      const existingUser = await checkExistingUser(data.email, data.phone);
-      if (existingUser.exists) {
-        throw new Error(existingUser.message);
-      }
+      // const existingUser = await checkExistingUser(data.email, data.phone);
+      // if (existingUser.exists) {
+      //   throw new Error(existingUser.message);
+      // }
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
