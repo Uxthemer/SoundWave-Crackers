@@ -20,6 +20,16 @@
   body {
     @apply bg-background text-text font-body transition-colors duration-300;
   }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  textarea {
+    @apply border-2 border-card-border/50 focus:border-primary-orange;
+  }
 }
 
 @layer components {
@@ -47,6 +57,11 @@
     @apply p-2 rounded-full transition-colors duration-300
            hover:bg-card/50 focus:outline-none focus:ring-2
            focus:ring-primary-orange focus:ring-opacity-50;
+  }
+
+  .quantity-input {
+    @apply w-20 px-3 py-2 text-center rounded-lg bg-background 
+           border-2 border-card-border/50 focus:outline-none focus:border-primary-orange;
   }
 }
 
@@ -145,7 +160,35 @@
 .typing-effect {
   overflow: hidden;
   white-space: nowrap;
-  border-right: 3px solid #6B46C1; /* Purple-600 */
+  border-right: 3px solid #6B46C1;
   width: 100%;
   animation: typing 3s steps(30, end) forwards, blink 0.7s infinite;
+}
+
+.shiny-text {
+  color: #ff6200a4; /* Adjust this color to change intensity/style */
+  background: linear-gradient(
+    120deg,
+    rgba(246, 255, 0, 0) 40%,
+    rgba(253, 148, 1, 0.8) 50%,
+    rgba(255, 0, 0, 0) 60%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  display: inline-block;
+  animation: shine 5s linear infinite;
+}
+
+@keyframes shine {
+  0% {
+    background-position: 100%;
+  }
+  100% {
+    background-position: -100%;
+  }
+}
+
+.shiny-text.disabled {
+  animation: none;
 }

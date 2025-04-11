@@ -49,6 +49,25 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
+CREATE FUNCTION is_superadmin(user_uuid uuid) RETURNS BOOLEAN
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_profiles up
+    JOIN roles r ON up.role_id = r.id
+    WHERE up.user_id = user_uuid AND r.name = 'superadmin'
+  );
+$$;
+
+CREATE FUNCTION is_admin(user_uuid uuid) RETURNS BOOLEAN
+LANGUAGE sql STABLE AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM user_profiles up
+    JOIN roles r ON up.role_id = r.id
+    WHERE up.user_id = user_uuid AND r.name = 'admin'
+  );
+$$;
+
+
 CREATE POLICY "Users can view their own profile"
   ON user_profiles
   FOR SELECT
@@ -61,19 +80,45 @@ CREATE POLICY "Users can update their own profile"
   TO authenticated
   USING (auth.uid() = user_id);
 
-CREATE POLICY "Superusers can view all profiles"
+CREATE POLICY "Superadmin can view all profiles"
   ON user_profiles
   FOR SELECT
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM user_profiles up
-      JOIN roles r ON up.role_id = r.id
-      WHERE up.user_id = auth.uid() AND r.name = 'superuser'
-    )
-  );
+  USING (is_superadmin(auth.uid()));
+
+CREATE POLICY "Admin can view all profiles"
+  ON user_profiles
+  FOR SELECT
+  TO authenticated
+  USING (is_admin(auth.uid()));
 
 -- Insert default roles
 INSERT INTO roles (name, description) VALUES
-  ('superuser', 'Administrator with full access to all features'),
+  ('superadmin', 'Administrator with full access to all features'),
+  ('admin', 'Administrator with full access to certain features'),
   ('customer', 'Regular customer with standard access');
+
+
+CREATE POLICY "Superadmin can view all Orders"
+  ON orders
+  FOR SELECT
+  TO authenticated
+  USING (is_superadmin(auth.uid()));
+
+CREATE POLICY "Admin can view all Orders"
+  ON orders
+  FOR SELECT
+  TO authenticated
+  USING (is_admin(auth.uid()));
+
+  CREATE POLICY "Superadmin can update all Orders"
+  ON orders
+  FOR UPDATE
+  TO authenticated
+  USING (is_superadmin(auth.uid()));
+
+CREATE POLICY "Admin can view update Orders"
+  ON orders
+  FOR UPDATE
+  TO authenticated
+  USING (is_admin(auth.uid()));

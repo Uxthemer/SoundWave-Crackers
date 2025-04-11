@@ -20,8 +20,8 @@ export function Footer() {
               />
             </Link>
             <p className="text-text/60 mb-6">
-              Your premier destination for premium quality crackers and
-              fireworks. Making your celebrations brighter since 2020.
+              Your premier destination for premium-quality crackers and
+              fireworks, making your celebrations brighter and more memorable.
             </p>
             <div className="flex space-x-4">
               <a
@@ -98,15 +98,7 @@ export function Footer() {
             <ul className="space-y-4">
               <li>
                 <Link
-                  to="/category/aerial"
-                  className="text-text/60 hover:text-primary-orange transition-colors"
-                >
-                  Blog
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/category/ground"
+                  to="/sitemap"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   Sitemap
@@ -114,18 +106,26 @@ export function Footer() {
               </li>
               <li>
                 <Link
-                  to="/category/sparklers"
+                  to="/blog"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Track Order
+                  Blog
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/category/fountains"
+                  to="/faq"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  My Orders
+                  FAQ
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/contact"
+                  className="text-text/60 hover:text-primary-orange transition-colors"
+                >
+                  Contact Us
                 </Link>
               </li>
             </ul>
@@ -149,8 +149,8 @@ export function Footer() {
               </button>
             </form>
           </div> */}
-           {/* Right Section - Important Notice */}
-          <div className="" >
+          {/* Right Section - Important Notice */}
+          <div className="">
             <h3 className="text-lg font-semibold text-primary-orange">
               Important Notice
             </h3>
@@ -170,13 +170,13 @@ export function Footer() {
               © 2025 SoundWave Crackers. All rights reserved.
             </p>
             <div className="flex space-x-6">
-            <Link
+              <Link
                 to="/shipping-policy"
                 className="text-text/60 hover:text-primary-orange transition-colors"
               >
                 Shipping Policy
               </Link>
-            <Link
+              <Link
                 to="/cancellation-policy"
                 className="text-text/60 hover:text-primary-orange transition-colors"
               >
@@ -194,7 +194,6 @@ export function Footer() {
               >
                 Terms of Service
               </Link>
-              
             </div>
           </div>
         </div>

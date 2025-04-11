@@ -1,19 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package } from 'lucide-react';
+import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../hooks/useRoles';
 
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const { user, userProfile, signOut } = useAuth();
-  const { userRole } = useRoles();
+  const { user, userProfile, userRole, signOut } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
   };
 
   useEffect(() => {
@@ -31,8 +29,8 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <Link to="/login" className="flex items-center space-x-2 text-primary hover:text-primary-orange transition-colors">
-        <User className="w-5 h-5" />
+      <Link to="/login" className="flex items-center space-x-2 text-primary-orange hover:text-primary-orange/50 transition-colors">
+        <UserCircle className="w-5 h-5" />
         <span className="hidden md:inline">Sign In</span>
       </Link>
     );
@@ -42,14 +40,16 @@ export function UserMenu() {
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 text-primary hover:text-primary-orange transition-colors"
+        className="flex items-center space-x-2 text-primary-orange hover:text-primary-orange/50 transition-colors"
       >
         <UserCircle className="w-6 h-6" />
         <div className="hidden md:block text-left">
-          <span className="block">
+          <span className="block text-primary-orange">
             {userProfile?.full_name || user.email?.split('@')[0]}
           </span>
-          <span className="text-sm text-primary-orange">{userRole}</span>
+          {userRole?.name === 'superadmin' && (
+            <span className="text-sm text-primary-orange/80">{userRole.name}</span>
+          )}
         </div>
       </button>
 
@@ -58,7 +58,9 @@ export function UserMenu() {
           <div className="px-4 py-2 border-b border-card-border/10">
             <p className="font-montserrat font-bold truncate">{userProfile?.full_name || 'User'}</p>
             <p className="text-sm text-text/60 truncate">{user.email}</p>
-            <p className="text-sm text-primary-orange mt-1">{userRole}</p>
+            {userRole?.name === 'superadmin' && (
+              <p className="text-sm text-primary-orange mt-1">{userRole.name}</p>
+            )}
           </div>
 
           <div className="py-1">
@@ -67,37 +69,48 @@ export function UserMenu() {
               className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
               onClick={() => setIsOpen(false)}
             >
-              <Settings className="w-4 h-4 mr-3" />
+              <Settings className="w-4 h-4 mr-3 text-primary-orange" />
               <span>Profile Settings</span>
             </Link>
 
+            <Link
+              to="/myorders"
+              className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <ShoppingBag className="w-4 h-4 mr-3 text-primary-orange" />
+              <span>My Orders</span>
+            </Link>
+
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
             <Link
               to="/orders"
               className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
               onClick={() => setIsOpen(false)}
             >
-              <ShoppingBag className="w-4 h-4 mr-3" />
-              <span>My Orders</span>
+              <ShoppingBag className="w-4 h-4 mr-3 text-primary-orange" />
+              <span>All Orders</span>
             </Link>
+            )}
 
-            {(userRole === 'admin' || userRole === 'superadmin') && (
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
               <Link
                 to="/stock"
                 className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
                 onClick={() => setIsOpen(false)}
               >
-                <Package className="w-4 h-4 mr-3" />
+                <Package className="w-4 h-4 mr-3 text-primary-orange" />
                 <span>Stock Management</span>
               </Link>
             )}
 
-            {userRole === 'superadmin' && (
+            {userRole?.name === 'superadmin' && (
               <Link
                 to="/dashboard"
                 className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
                 onClick={() => setIsOpen(false)}
               >
-                <BarChart2 className="w-4 h-4 mr-3" />
+                <BarChart2 className="w-4 h-4 mr-3 text-primary-orange" />
                 <span>Dashboard</span>
               </Link>
             )}

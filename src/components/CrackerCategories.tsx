@@ -1,10 +1,16 @@
 import { motion } from "framer-motion";
-import { ArrowRight,Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCategories } from '../hooks/useCategories';
+import { useProducts } from '../hooks/useProducts';
 
 export function CrackerCategories() {
   const { categories, loading: categoriesLoading } = useCategories();
+  const { products } = useProducts();
+
+  const getCategoryProductCount = (categoryId: string) => {
+    return products.filter(p => p.category_id === categoryId).length;
+  };
 
   if (categoriesLoading) {
     return (
@@ -29,26 +35,25 @@ export function CrackerCategories() {
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 md:gap-6">
           {categories.map((category) => (
-            <Link to={`/explore?category=${category.name.toLowerCase()}`} className="transform hover:scale-110 transition-transform duration-500">
-              <div
-                key={category.id}
-                className="card group relative overflow-hidden rounded-xl shadow-lg p-2 flex flex-col items-center text-center"
-              >
-                <div className="w-16 h-16 md:w-20 md:h-20 flex items-center justify-center">
+            <Link 
+              key={category.id} 
+              to={`/explore?category=${category.name.toLowerCase()}`} 
+              className="transform hover:scale-110 transition-transform duration-500"
+            >
+              <div className="card group relative overflow-hidden aspect-square flex flex-col items-center justify-center text-center p-2">
+                <div className="w-12 h-12 md:w-16 md:h-16 flex items-center justify-center mb-2">
                   <img
-                    src={category.image_url ? `/assets/img/crackers/${category.image_url}` : `/assets/img/logo/logo_2.png`}
+                    src={category.image_url ? `/assets/img/categories/${category.image_url}` : `/assets/img/logo/logo_2.png`}
                     alt={category.name}
                     className="w-full h-full object-contain transition-transform duration-500"
                   />
                 </div>
-                <h3 className="text-black/90 font-semibold text-sm md:text-base mt-2">
+                <h3 className="font-semibold text-xs md:text-sm truncate w-full">
                   {category.name}
                 </h3>
-                <div className="flex items-center justify-between">
-                  <span className="text-black/60 text-xs md:text-sm">
-                    {category.description}
-                  </span>
-                </div>
+                <span className="text-xs text-primary-orange mt-1">
+                  {getCategoryProductCount(category.id)} items
+                </span>
               </div>
             </Link>
           ))}

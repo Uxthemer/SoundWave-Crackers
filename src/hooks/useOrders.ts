@@ -10,10 +10,13 @@ interface DeliveryDetails {
   customerName: string;
   email: string;
   phone: string;
+  alternatePhone: string;
+  referralPhone: string;
   address: string;
   city: string;
   state: string;
   pincode: string;
+  country: string;
 }
 
 export interface OrderWithItems extends OrderDB {
@@ -42,13 +45,17 @@ export async function createOrder(order: {
       total_amount: order.total_amount,
       payment_method: order.payment_method,
       status: 'pending',
-      customer_name: order.delivery_details.customerName,
-      email: order.delivery_details.email,
+      discount_amt: 0,
+      discount_percentage:'',
+      referred_by:order.delivery_details.referralPhone,
+      full_name: order.delivery_details.customerName,
       phone: order.delivery_details.phone,
       address: order.delivery_details.address,
+      alternate_phone: order.delivery_details.alternatePhone,
       city: order.delivery_details.city,
       state: order.delivery_details.state,
-      pincode: order.delivery_details.pincode
+      pincode: order.delivery_details.pincode,
+      country: order.delivery_details.country
     })
     .select()
     .single();

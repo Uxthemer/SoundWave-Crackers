@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Save, X, Loader2, Download, Upload } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Save, X, Loader2, Download, Upload, Printer } from 'lucide-react';
+import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
-import { useRoles } from '../hooks/useRoles';
+import { useAuth } from '../context/AuthContext';
 import { BulkImportModal } from '../components/BulkImportModal';
 import * as XLSX from 'xlsx';
 
@@ -13,6 +14,12 @@ interface Product {
   actual_price: number;
   offer_price: number;
   content: string;
+  discount_percentage: string;
+  image_url: string;
+  description: string;
+  categories?: {
+    name: string;
+  };
 }
 
 interface Category {
@@ -29,7 +36,7 @@ export function StockManagement() {
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [showImportModal, setShowImportModal] = useState(false);
-  const { userRole } = useRoles();
+  const { userRole } = useAuth();
 
   useEffect(() => {
     fetchProducts();
@@ -80,7 +87,17 @@ export function StockManagement() {
     try {
       const { error } = await supabase
         .from('products')
-        .update(editForm)
+        .update({
+          category_id: editForm.category_id,
+          name: editForm.name,
+          stock: editForm.stock,
+          actual_price: editForm.actual_price,
+          offer_price: editForm.offer_price,
+          content: editForm.content,
+          discount_percentage: editForm.discount_percentage,
+          image_url: editForm.image_url,
+          description: editForm.description
+        })
         .eq('id', id);
 
       if (error) throw error;
@@ -92,40 +109,58 @@ export function StockManagement() {
     }
   };
 
-  const handleExport = () => {
-    const exportData = products.map(product => ({
-      name: product.name,
-      category: (product as any).categories?.name,
-      stock: product.stock,
-      actual_price: product.actual_price,
-      offer_price: product.offer_price,
-      content: product.content
-    }));
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
 
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Products');
-    XLSX.writeFile(wb, 'products_export.xlsx');
-  };
+    const content = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Stock Management Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          h1 { color: #FF5722; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f5f5f5; }
+          .low-stock { color: #FF0000; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <h1>Stock Management Report</h1>
+        <p>Generated on: ${format(new Date(), 'PPpp')}</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Category</th>
+              <th>Content</th>
+              <th>Stock</th>
+              <th>Actual Price</th>
+              <th>Offer Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredProducts.map(product => `
+              <tr>
+                <td>${product.name}</td>
+                <td>${product.categories?.name || '-'}</td>
+                <td>${product.content || '-'}</td>
+                <td class="${product.stock <= 20 ? 'low-stock' : ''}">${product.stock}</td>
+                <td>₹${product.actual_price}</td>
+                <td>₹${product.offer_price}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
 
-  const handleAddProduct = async () => {
-    try {
-      const { error } = await supabase
-        .from('products')
-        .insert({
-          name: 'New Product',
-          category_id: categories[0]?.id,
-          actual_price: 0,
-          offer_price: 0,
-          stock: 0,
-          content: '1 Box'
-        });
-
-      if (error) throw error;
-      fetchProducts();
-    } catch (error) {
-      console.error('Error adding product:', error);
-    }
+    printWindow.document.write(content);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const filteredProducts = products.filter(product => {
@@ -134,15 +169,7 @@ export function StockManagement() {
     return matchesSearch && matchesCategory;
   });
 
-  if (loading) {
-    return (
-      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
-      </div>
-    );
-  }
-
-  if (!['admin', 'superadmin'].includes(userRole || '')) {
+  if (!['admin', 'superadmin'].includes(userRole?.name || '')) {
     return (
       <div className="min-h-screen pt-24 pb-12">
         <div className="container mx-auto px-6">
@@ -156,11 +183,16 @@ export function StockManagement() {
   }
 
   return (
-    <div className="min-h-screen pt-24 pb-12">
+    <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <h1 className="font-heading text-4xl">Stock Management</h1>
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="font-heading text-4xl">Stock Management</h1>
+            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+              {filteredProducts.length} products
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-4">
             <div className="relative">
               <input
                 type="text"
@@ -188,13 +220,6 @@ export function StockManagement() {
 
         <div className="flex gap-4 mb-6">
           <button
-            onClick={handleAddProduct}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Product</span>
-          </button>
-          <button
             onClick={() => setShowImportModal(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
           >
@@ -202,11 +227,11 @@ export function StockManagement() {
             <span>Bulk Import</span>
           </button>
           <button
-            onClick={handleExport}
+            onClick={handlePrint}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
           >
-            <Download className="w-5 h-5" />
-            <span>Export</span>
+            <Printer className="w-5 h-5" />
+            <span>Print Report</span>
           </button>
         </div>
 
@@ -217,107 +242,50 @@ export function StockManagement() {
                 <tr className="bg-card/50">
                   <th className="py-4 px-6 text-left">Product Name</th>
                   <th className="py-4 px-6 text-left">Category</th>
-                  <th className="py-4 px-6 text-right">Stock</th>
-                  <th className="py-4 px-6 text-right">Actual Price</th>
-                  <th className="py-4 px-6 text-right">Offer Price</th>
+                  <th className="py-4 px-6 text-left">Content</th>
+                  <th className="py-4 px-6 text-left">Stock</th>
+                  <th className="py-4 px-6 text-left">Actual Price</th>
+                  <th className="py-4 px-6 text-left">Offer Price</th>
                   <th className="py-4 px-6 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product) => (
-                  <tr key={product.id} className="border-t border-card-border/10">
-                    <td className="py-4 px-6">
-                      {editingProduct === product.id ? (
-                        <input
-                          type="text"
-                          value={editForm.name || ''}
-                          onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
-                        />
-                      ) : (
-                        product.name
-                      )}
-                    </td>
-                    <td className="py-4 px-6">
-                      {editingProduct === product.id ? (
-                        <select
-                          value={editForm.category_id || ''}
-                          onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
-                          className="w-full px-2 py-1 rounded bg-background border border-card-border/10"
-                        >
-                          {categories.map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        (product as any).categories?.name
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      {editingProduct === product.id ? (
-                        <input
-                          type="number"
-                          value={editForm.stock || 0}
-                          onChange={(e) => setEditForm({ ...editForm, stock: parseInt(e.target.value) })}
-                          className="w-24 px-2 py-1 rounded bg-background border border-card-border/10 text-right"
-                        />
-                      ) : (
-                        product.stock
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      {editingProduct === product.id ? (
-                        <input
-                          type="number"
-                          value={editForm.actual_price || 0}
-                          onChange={(e) => setEditForm({ ...editForm, actual_price: parseFloat(e.target.value) })}
-                          className="w-24 px-2 py-1 rounded bg-background border border-card-border/10 text-right"
-                        />
-                      ) : (
-                        `₹${product.actual_price}`
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      {editingProduct === product.id ? (
-                        <input
-                          type="number"
-                          value={editForm.offer_price || 0}
-                          onChange={(e) => setEditForm({ ...editForm, offer_price: parseFloat(e.target.value) })}
-                          className="w-24 px-2 py-1 rounded bg-background border border-card-border/10 text-right"
-                        />
-                      ) : (
-                        `₹${product.offer_price}`
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-center">
-                      {editingProduct === product.id ? (
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleSave(product.id)}
-                            className="p-1 text-green-500 hover:text-green-600"
-                          >
-                            <Save className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => setEditingProduct(null)}
-                            className="p-1 text-primary-red hover:text-primary-red/80"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleEdit(product)}
-                          className="p-1 text-primary-orange hover:text-primary-orange/80"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                      )}
+                {loading ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text/60">
+                      <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
-                ))}
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-text/60">
+                      No products found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <tr key={product.id} className="border-t border-card-border/10">
+                      <td className="py-4 px-6">{product.name}</td>
+                      <td className="py-4 px-6">{product.categories?.name}</td>
+                      <td className="py-4 px-6">{product.content}</td>
+                      <td className={`py-4 px-6 ${product.stock <= 20 ? 'text-red-500 font-bold' : ''}`}>
+                        {product.stock}
+                      </td>
+                      <td className="py-4 px-6">₹{product.actual_price}</td>
+                      <td className="py-4 px-6">₹{product.offer_price}</td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => handleEdit(product)}
+                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

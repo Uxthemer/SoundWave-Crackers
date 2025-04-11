@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { DashboardStats } from '../types';
 
 export function useDashboard() {
@@ -49,7 +49,7 @@ export function useDashboard() {
         ? endOfWeek(new Date())
         : endOfMonth(new Date());
 
-      // Fetch orders with realtime subscription
+      // Fetch all orders
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select('*')
@@ -58,9 +58,9 @@ export function useDashboard() {
 
       if (ordersError) throw ordersError;
 
-      // Fetch users
+      // Fetch total user count
       const { count: userCount, error: usersError } = await supabase
-        .from('auth.users')
+        .from('user_profiles')
         .select('*', { count: 'exact', head: true });
 
       if (usersError) throw usersError;
@@ -95,30 +95,30 @@ export function useDashboard() {
         ]
       });
 
-      // Fetch category data
+      // Fetch category data with product counts
       const { data: categories, error: categoriesError } = await supabase
         .from('categories')
         .select(`
           name,
-          products (
-            id
-          )
+          products (count)
         `);
 
       if (categoriesError) throw categoriesError;
 
-      setCategoryData({
-        labels: categories?.map(cat => cat.name) || [],
-        datasets: [{
-          data: categories?.map(cat => cat.products.length) || [],
-          backgroundColor: [
-            '#FF5722',
-            '#FFC107',
-            '#FF0000',
-            '#8A2BE2'
-          ]
-        }]
-      });
+      if (categories) {
+        setCategoryData({
+          labels: categories.map(cat => cat.name),
+          datasets: [{
+            data: categories.map(cat => cat.products.length),
+            backgroundColor: [
+              '#FF5722',
+              '#FFC107',
+              '#FF0000',
+              '#8A2BE2'
+            ]
+          }]
+        });
+      }
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -130,7 +130,7 @@ export function useDashboard() {
   // Set up realtime subscription for orders
   useEffect(() => {
     const subscription = supabase
-      .channel('orders-changes')
+      .channel('dashboard-changes')
       .on('postgres_changes', { 
         event: '*', 
         schema: 'public', 

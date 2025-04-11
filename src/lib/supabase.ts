@@ -1,83 +1,103 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
+import toast from 'react-hot-toast';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce'
+  }
+});
 
-// Helper function to generate a random 6-digit OTP
-export const generateOTP = (): string => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+const formatPhoneNumber = (phone: string) => {
+  // Remove any non-digit characters
+  const digits = phone.replace(/\D/g, '');
+  
+  // Add India country code (+91) if not present
+  return digits.startsWith('91') ? `+${digits}` : `+91${digits}`;
 };
 
-// Helper function to send OTP via Supabase function
-export const sendOTP = async (phone: string, otp: string): Promise<boolean> => {
+// Helper function to generate a random 6-digit OTP
+export const generateOTP = async (phone: string): Promise<string | null> => {
   try {
-    // In a real application, you would call a Supabase Edge Function to send SMS
-    // For demo purposes, we'll simulate a successful OTP send
-    console.log(`OTP ${otp} sent to ${phone}`);
+    const formattedPhone = formatPhoneNumber(phone);
     
-    // Store OTP in the database with expiration
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 10); // OTP valid for 10 minutes
-    
-    const { error } = await supabase
-      .from('otp_verifications')
-      .upsert({
-        phone,
-        otp,
-        verified: false,
-        expires_at: expiresAt.toISOString()
+    const { data, error } = await supabase
+      .rpc('create_phone_verification', { 
+        phone_number: formattedPhone
       });
-    
-    if (error) throw error;
-    return true;
+
+    if (error) {
+      console.error('RPC Error:', error);
+      throw error;
+    }
+
+    // In development, log the OTP
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Generated OTP:', data?.otp);
+    }
+
+    return data?.otp || null;
   } catch (error) {
-    console.error('Error sending OTP:', error);
-    return false;
+    console.error('Error generating OTP:', error);
+    throw error;
   }
 };
 
 // Helper function to verify OTP
 export const verifyOTP = async (phone: string, otp: string): Promise<boolean> => {
   try {
+    const formattedPhone = formatPhoneNumber(phone);
+    
     const { data, error } = await supabase
-      .from('otp_verifications')
-      .select('*')
-      .eq('phone', phone)
-      .eq('otp', otp)
-      .gt('expires_at', new Date().toISOString())
-      .single();
-    
-    if (error || !data) return false;
-    
-    // Mark OTP as verified
-    await supabase
-      .from('otp_verifications')
-      .update({ verified: true })
-      .eq('phone', phone);
-    
-    return true;
+      .rpc('verify_phone_otp', { 
+        phone_number: formattedPhone,
+        otp_code: otp 
+      });
+
+    if (error) {
+      console.error('RPC Error:', error);
+      throw error;
+    }
+
+    return data || false;
   } catch (error) {
     console.error('Error verifying OTP:', error);
-    return false;
+    throw error;
   }
 };
 
-// Helper function to check if a phone is verified
-export const isPhoneVerified = async (phone: string): Promise<boolean> => {
+// Helper function to create user profile
+export const createUserProfile = async (userId: string, phone: string) => {
   try {
-    const { data, error } = await supabase
-      .from('otp_verifications')
-      .select('verified')
-      .eq('phone', phone)
+    // Get customer role
+    const { data: customerRole, error: roleError } = await supabase
+      .from('roles')
+      .select('id')
+      .eq('name', 'customer')
       .single();
-    
-    if (error || !data) return false;
-    return data.verified;
+
+    if (roleError) throw roleError;
+
+    // Create user profile
+    const { error: profileError } = await supabase
+      .from('user_profiles')
+      .insert({
+        user_id: userId,
+        role_id: customerRole.id,
+        phone: phone
+      });
+
+    if (profileError) throw profileError;
+    return true;
   } catch (error) {
-    console.error('Error checking phone verification:', error);
+    console.error('Error creating user profile:', error);
+    toast.error('Failed to create user profile');
     return false;
   }
 };

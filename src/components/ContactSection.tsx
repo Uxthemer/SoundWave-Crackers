@@ -29,11 +29,11 @@ export function ContactSection() {
                   Visit Us
                 </h3>
                 <p className="text-text/60">
-                  Sattur to Sivakasi Main Road
+                  Sattur-Sivakasi-kalugumalai Road,
                   <br />
-                  Sivakasi, Tamilnadu
+                  Kanajanpatti Road, Madathupatti, Tamilnadu
                   <br />
-                  India - 626201
+                  India - 626128
                 </p>
               </div>
             </div>
@@ -47,9 +47,9 @@ export function ContactSection() {
                   Call Us
                 </h3>
                 <p className="text-text/60">
-                  +91 8668029052
+                  +91 9994827099
                   <br />
-                  +91 9789785488
+                  +91 8668029052
                 </p>
               </div>
             </div>
@@ -64,8 +64,8 @@ export function ContactSection() {
                 </h3>
                 <p className="text-text/60">
                   soundwavecrackers@gmail.com
-                  <br />
-                  support@soundwavecrackers.com
+                  {/* <br />
+                  support@soundwavecrackers.com */}
                 </p>
               </div>
             </div>
@@ -128,7 +128,7 @@ export function ContactSection() {
 
         <div className="mt-12 rounded-lg overflow-hidden h-80">
           <iframe
-            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d15743.670428424452!2d77.79702274438844!3d9.442045050185751!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3b06cec03941565f%3A0x47c5b5f672dd0165!2sParapatti%2C%20Sivakasi%2C%20Tamil%20Nadu!5e0!3m2!1sen!2sin!4v1740511838623!5m2!1sen!2sin"
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d343.2634143280052!2d77.77957219522368!3d9.356997505518772!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3b06c8487ac1126b%3A0x4b316c9fe9c95bd0!2sKananjampatti%20Rd%2C%20Tamil%20Nadu!5e1!3m2!1sen!2sin!4v1742992874126!5m2!1sen!2sin"
             width="100%"
             height="100%"
             style={{ border: 0 }}
