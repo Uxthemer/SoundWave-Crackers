@@ -21,6 +21,11 @@
     @apply bg-background text-text font-body transition-colors duration-300;
   }
 
+  /* Prevent text selection on headings and labels */
+  h1, h2, h3, h4, h5, h6, label {
+    @apply select-none cursor-default;
+  }
+
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -28,7 +33,7 @@
   input[type="tel"],
   input[type="search"],
   textarea {
-    @apply border-2 border-card-border/50 focus:border-primary-orange;
+    @apply border-2 border-card-border/50 focus:border-primary-orange cursor-text select-text;
   }
 }
 
@@ -38,7 +43,7 @@
            text-white font-montserrat font-bold rounded-lg
            transform transition-all duration-300
            hover:scale-105 hover:shadow-lg hover:shadow-primary-red/20
-           border border-white/10;
+           border border-white/10 select-none cursor-pointer;
   }
 
   .card {
@@ -56,7 +61,7 @@
   .theme-toggle {
     @apply p-2 rounded-full transition-colors duration-300
            hover:bg-card/50 focus:outline-none focus:ring-2
-           focus:ring-primary-orange focus:ring-opacity-50;
+           focus:ring-primary-orange focus:ring-opacity-50 select-none cursor-pointer;
   }
 
   .quantity-input {
@@ -166,7 +171,7 @@
 }
 
 .shiny-text {
-  color: #ff6200a4; /* Adjust this color to change intensity/style */
+  color: #ff6200a4;
   background: linear-gradient(
     120deg,
     rgba(246, 255, 0, 0) 40%,
