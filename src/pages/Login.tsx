@@ -10,9 +10,27 @@ import { z } from "zod";
 
 const emailSchema = z.string().email("Invalid email format");
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number");
-const passwordSchema = z
-  .string()
-  .min(6, "Password must be at least 6 characters");
+// const passwordSchema = z
+//   .string()
+//   .min(6, "Password must be at least 6 characters");
+
+const loginSchema = z
+  .object({
+    identifier: z.string(),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+  })
+  .superRefine((data, ctx) => {
+    const isEmail = emailSchema.safeParse(data.identifier).success;
+    const isPhone = phoneSchema.safeParse(data.identifier).success;
+
+    if (!isEmail && !isPhone) {
+      ctx.addIssue({
+        path: ["identifier"],
+        code: z.ZodIssueCode.custom,
+        message: "Must be a valid email or phone number",
+      });
+    }
+  });
 
 type LoginMethod = "email" | "phone";
 
@@ -35,9 +53,8 @@ export function Login() {
     setIsLoading(true);
 
     try {
-      // Validate email and password
-      emailSchema.parse(email);
-      passwordSchema.parse(password);
+      // Validate identifier (email or phone) and password
+      loginSchema.parse({ identifier: email, password });
 
       const { error } = await signInWithEmail(email, password);
       if (error) throw error;
@@ -116,7 +133,10 @@ export function Login() {
     if (phoneUserError) throw phoneUserError;
 
     if (phoneUser) {
-      const { error } = await signInWithEmail(phoneUser.email, atob(phoneUser.pwd));
+      const { error } = await signInWithEmail(
+        phoneUser.email,
+        atob(phoneUser.pwd)
+      );
       if (error) throw error;
     }
 
