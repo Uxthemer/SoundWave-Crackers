@@ -139,34 +139,34 @@ export function ExploreCrackers() {
   return (
     <>
     <div className="pt-6 min-h-screen">
-      <div className="sticky top-[70px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
+      <div className="sticky top-[89px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
         <div className="container mx-auto px-6">
-          <div className="py-4">
-            <div className="flex flex-wrap items-center gap-4 bg-card/50 p-4 rounded-xl">
-              <div className="flex-1 min-w-[120px] text-center">
-                <p className="text-sm text-text/60">Selected Products</p>
-                <p className="font-montserrat font-bold text-xl">
+          <div className="py-2">
+            <div className="flex flex-wrap items-center gap-2 bg-card/50 p-2 rounded-xl">
+              <div className="flex-1 min-w-[100px] text-center">
+                <p className="text-sm text-text/60">Products</p>
+                <p className="font-montserrat font-bold text-l md:text-xl">
                   {items.length}
                 </p>
               </div>
-              <div className="flex-1 min-w-[120px] text-center">
-                <p className="text-sm text-text/60">Total Quantity</p>
-                <p className="font-montserrat font-bold text-xl">
+              <div className="flex-1 min-w-[100px] text-center">
+                <p className="text-sm text-text/60">Quantity</p>
+                <p className="font-montserrat font-bold text-l md:text-xl">
                   {totalQuantity}
                 </p>
               </div>
-              <div className="flex-1 min-w-[120px] text-center">
-                <p className="text-sm text-text/60">Total Amount</p>
-                <p className="font-montserrat font-bold text-xl text-primary-orange">
+              <div className="flex-1 min-w-[100px] text-center">
+                <p className="text-sm text-text/60">Amount</p>
+                <p className="font-montserrat font-bold text-l md:text-xl text-primary-orange">
                   ₹{totalAmount.toFixed(2)}
                 </p>
               </div>
               <button
-                className="btn-primary flex items-center gap-2 w-full md:w-auto"
+                className="hidden md:flex btn-primary flex items-center gap-2 md:w-auto"
                 onClick={() => setIsCartOpen(true)}
               >
                 <ShoppingCart className="w-5 h-5" />
-                <span>View Cart</span>
+                <span className="hidden md:block">View Cart</span>
               </button>
             </div>
           </div>
@@ -246,7 +246,7 @@ export function ExploreCrackers() {
           <div
             className={
               viewMode === "grid"
-                ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8"
+                ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6"
                 : "space-y-6"
             }
           >
@@ -255,7 +255,7 @@ export function ExploreCrackers() {
                 key={product.id}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`card group p-3 ${
+                className={`card group p-2 ${
                   viewMode === "list" ? "flex space-x-6" : ""
                 }`}
               >

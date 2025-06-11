@@ -118,16 +118,17 @@ export function Cart({ isOpen, onClose }: CartProps) {
   if (!isOpen) return null;
 
   return (
-    <motion.div
+     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 z-50"
+      className="fixed inset-0 bg-black/50 z-50 flex justify-end"
     >
-      <div className="absolute right-0 top-0 h-full w-full max-w-4xl bg-background overflow-y-auto">
-        <div className="sticky top-0 bg-background z-10 p-6 border-b border-card-border/10">
+      <div className="h-full w-full max-w-4xl bg-background overflow-y-auto flex flex-col">
+        {/* Header */}
+        <div className="sticky top-0 bg-background z-10 p-4 md:p-6 border-b border-card-border/10">
           <div className="flex items-center justify-between">
-            <h2 className="font-heading text-2xl">Shopping Cart</h2>
+            <h2 className="font-heading text-xl md:text-2xl">Shopping Cart</h2>
             <button
               onClick={onClose}
               className="p-2 hover:bg-card/50 rounded-full transition-colors"
@@ -137,46 +138,45 @@ export function Cart({ isOpen, onClose }: CartProps) {
           </div>
         </div>
 
-        <div className="p-6">
+        {/* Body */}
+        <div className="p-4 md:p-6 flex-grow">
           {items.length === 0 ? (
             <p className="text-center text-text/60">Your cart is empty</p>
           ) : (
-            <>
-              <div className="bg-card/30 rounded-xl overflow-hidden shadow-lg mb-8">
-                <table className="w-full">
+            <div className="flex flex-col gap-6">
+              {/* Cart Table */}
+              <div className="bg-card/30 rounded-xl overflow-x-auto shadow-lg">
+                <table className="min-w-full text-sm">
                   <thead>
                     <tr className="bg-card/50">
-                      <th className="py-4 px-6 text-left">Product</th>
-                      <th className="py-4 px-6 text-center">Quantity</th>
-                      <th className="py-4 px-6 text-right">Price</th>
-                      <th className="py-4 px-6 text-right">Total</th>
-                      <th className="py-4 px-6"></th>
+                      <th className="py-4 px-2 sm:px-4 text-left whitespace-nowrap">Product</th>
+                      <th className="py-4 px-2 sm:px-4 text-center whitespace-nowrap">Quantity</th>
+                      <th className="py-4 px-2 sm:px-4 text-right whitespace-nowrap">Price</th>
+                      <th className="py-4 px-2 sm:px-4 text-right whitespace-nowrap">Total</th>
+                      <th className="py-4 px-2 sm:px-4 whitespace-nowrap"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="border-t border-card-border/10"
-                      >
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-4">
+                      <tr key={item.id} className="border-t border-card-border/10">
+                        <td className="py-4 px-2 sm:px-4 max-w-xs">
+                          <div className="flex items-center gap-2 sm:gap-4 max-w-full">
                             <img
                               src={item.image}
                               alt={item.name}
-                              className="w-16 h-16 object-cover rounded-lg"
+                              className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
                             />
-                            <div>
-                              <h3 className="font-montserrat font-bold">
+                            <div className="min-w-0">
+                              <h3 className="font-montserrat font-bold truncate">
                                 {item.name}
                               </h3>
-                              <p className="text-sm text-text/60">
+                              <p className="text-xs sm:text-sm text-text/60 truncate">
                                 {item.content}
                               </p>
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-6">
+                        <td className="py-4 px-2 sm:px-4">
                           <div className="flex justify-center">
                             <input
                               type="number"
@@ -188,22 +188,20 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                   parseInt(e.target.value) || 0
                                 )
                               }
-                              className="w-20 px-3 py-2 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                              className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                             />
                           </div>
                         </td>
-                        <td className="py-4 px-6 text-right">
-                          ₹{item.offer_price}
-                        </td>
-                        <td className="py-4 px-6 text-right font-bold">
+                        <td className="py-4 px-2 sm:px-4 text-right">₹{item.offer_price}</td>
+                        <td className="py-4 px-2 sm:px-4 text-right font-bold">
                           ₹{item.totalPrice.toFixed(2)}
                         </td>
-                        <td className="py-4 px-2 pr-4 text-right">
+                        <td className="py-4 px-2 sm:px-4 text-right">
                           <button
                             onClick={() => removeFromCart(item.id)}
                             className="text-primary-red hover:text-primary-red/80 transition-colors"
                           >
-                            <Trash2/> 
+                            <Trash2 />
                           </button>
                         </td>
                       </tr>
@@ -212,19 +210,22 @@ export function Cart({ isOpen, onClose }: CartProps) {
                 </table>
               </div>
 
-              <div className="flex justify-end mb-8">
-                <div className="bg-card/30 rounded-xl p-6 w-80">
-                  <h3 className="font-montserrat font-bold text-xl mb-4">
+              {/* Order Summary */}
+              <div className="w-full flex flex-col items-end">
+                <div className="bg-card/30 rounded-xl p-4 md:p-6 w-full max-w-sm">
+                  <h3 className="font-montserrat font-bold text-lg md:text-xl mb-4">
                     Order Summary
                   </h3>
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-2 mb-4 text-sm md:text-base">
                     <div className="flex justify-between">
                       <span className="text-text/60">Actual Price</span>
-                      <span><s>₹{totalActualAmount.toFixed(2)} </s></span>
+                      <span>
+                        <s>₹{totalActualAmount.toFixed(2)}</s>
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-text/60">You Saved (Discount)</span>
-                      <span>{(totalActualAmount - totalAmount).toFixed(2)}</span>
+                      <span>₹{(totalActualAmount - totalAmount).toFixed(2)}</span>
                     </div>
                   </div>
                   <div className="border-t border-card-border/10 pt-4">
@@ -238,15 +239,17 @@ export function Cart({ isOpen, onClose }: CartProps) {
                 </div>
               </div>
 
+              {/* Step Buttons */}
               {!showDeliveryForm && !showPayment && (
                 <button
                   onClick={() => setShowDeliveryForm(true)}
-                  className="btn-primary w-full mb-8"
+                  className="btn-primary w-full"
                 >
                   Proceed to Checkout
                 </button>
               )}
 
+              {/* Delivery Form */}
               {showDeliveryForm && (
                 <div className="bg-card/30 rounded-xl p-6 mb-8">
                   <h3 className="font-montserrat font-bold text-xl mb-6">
@@ -499,7 +502,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   )}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>
