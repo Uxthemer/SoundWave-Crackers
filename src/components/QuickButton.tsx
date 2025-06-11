@@ -1,10 +1,13 @@
 // components/QuickPurchaseButton.tsx
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const QuickPurchaseButton: React.FC = () => {
   const [animate, setAnimate] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+  // Check if the current path is not "/quick-purchase" to avoid animation on that page
+  const isQuickPurchasePage = location.pathname === "/quick-purchase";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -19,7 +22,7 @@ const QuickPurchaseButton: React.FC = () => {
   };
 
   return (
-    <button
+    !isQuickPurchasePage && <button
       onClick={handleClick}
       className={`hidden md:block fixed bottom-2 right-4 z-50 ${
         animate ? "animate-bounce" : ""

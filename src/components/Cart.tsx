@@ -122,7 +122,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 z-50 flex justify-end"
+      className="fixed inset-0 bg-black/50 z-60 flex justify-end"
     >
       <div className="h-full w-full max-w-4xl bg-background overflow-y-auto flex flex-col">
         {/* Header */}
