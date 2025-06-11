@@ -127,13 +127,24 @@ export function ContactSection() {
         </div>
 
         <div className="mt-12 rounded-lg overflow-hidden h-80">
-          <iframe
+          {/* <iframe
             src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d343.2634143280052!2d77.77957219522368!3d9.356997505518772!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3b06c8487ac1126b%3A0x4b316c9fe9c95bd0!2sKananjampatti%20Rd%2C%20Tamil%20Nadu!5e1!3m2!1sen!2sin!4v1742992874126!5m2!1sen!2sin"
             width="100%"
             height="100%"
             style={{ border: 0 }}
             allowFullScreen
             loading="lazy"
+          ></iframe> */}
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d445.3174111698699!2d77.78135421525435!3d9.356784794929018!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e1!3m2!1sen!2sin!4v1749632811746!5m2!1sen!2sin"
+            style={{border:0}}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            className="w-full h-full"
+            title="Google Map of Soundwave Crackers Location"
+            aria-label="Google Map of Soundwave Crackers Location"
+            aria-hidden="false"
           ></iframe>
         </div>
       </div>
