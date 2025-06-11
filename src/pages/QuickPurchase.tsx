@@ -247,12 +247,13 @@ export function QuickPurchase() {
                       transition={{ duration: 0.3 }}
                       className="space-y-1 bg-primary border border-gray"
                     >
-                      {categoryProducts.map((product) => (
+                      {categoryProducts.map((product, index) => (
                         <motion.div
                           key={product.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className="bg-card/10 rounded-lg p-3 shadow-sm hover:bg-card transition-colors"
+                          className={`${index % 2 === 0 ? 'bg-card': 'bg-card/10'} rounded-lg p-3 shadow-sm hover:bg-card transition-colors`}
+                          whileHover={{ scale: 1.02 }}
                         >
                           <div className="flex flex-col md:flex-row md:items-center gap-3">
                             <div className="flex items-center gap-3 flex-1">
