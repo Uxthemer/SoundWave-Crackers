@@ -113,7 +113,7 @@ export function BlogPost() {
                 />
               </div> */}
 
-              <div className="p-8">
+              <div className="pt-2 px-2 pb-4 sm:pt-6 sm:px-6 sm:pb-8">
                 {/* <h1 className="text-4xl font-heading text-primary-orange mb-4">
                   {blog.title}
                 </h1> */}

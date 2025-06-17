@@ -32,7 +32,7 @@ const QuickPurchaseButton: React.FC = () => {
       <img
         src="/assets/img/icons/Quick-Purchase-1.png"
         alt="Quick Purchase"
-        className="w-auto h-24 md:h-32 lg:h-32 xl:h-32 2xl:h-32 transition-transform duration-300 ease-in-out hover:scale-105"
+        className="w-auto h-14 transition-transform duration-300 ease-in-out hover:scale-105"
         loading="lazy"
       />
     </button>

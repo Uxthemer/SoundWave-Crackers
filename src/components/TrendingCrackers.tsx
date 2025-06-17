@@ -80,6 +80,11 @@ export function TrendingCrackers() {
       return () => {
         stockSubscription.unsubscribe();
       };
+    }else{
+      setTrendingProducts([]);
+      setQuantities({});
+      setProductStock({});
+      setLoading(false);
     }
   }, [products]);
 

@@ -6,6 +6,7 @@ export function CTASection() {
   return (
     <section className="py-16 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow opacity-10" />
+      <div className="absolute inset-0 bg-[url('/assets/img/banners/CTA-banner.png')] bg-center bg-cover" />
       <div className="container mx-auto px-6 relative">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

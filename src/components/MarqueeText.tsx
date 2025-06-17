@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 
 export function MarqueeText() {
   const messages = [
-    "🎆 Special Diwali Offer - Up to 80% OFF!",
-    "🚚 Minimum Orders Above ₹3000 for Tamilnadu",
-    "🚚 Minimum Orders Above ₹5000 for other states",
+    "🎆 Special Diwali Offer - <b>Up to 80% OFF!</b>",
+    "🚚 Minimum Orders Above <b>₹3000 for Tamilnadu</b>",
+    "🚚 Minimum Orders Above <b>₹5000 for other states</b>",
   ];
 
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
@@ -32,14 +32,14 @@ export function MarqueeText() {
     <div className="bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow text-white py-1 overflow-hidden">
       {isMobile ? (
         // Mobile View: Sliding fade-in-out text
-        <div className="text-center font-semibold animate-fadeInOut text-xs sm:text-sm md:text-base lg:text-lg">
-          {messages[currentMessageIndex]}
+        <div className="text-center font-semibold animate-fadeInOut text-xs sm:text-sm md:text-base lg:text-lg" dangerouslySetInnerHTML={{ __html: messages[currentMessageIndex] }} style={{ transition: 'opacity 0.5s ease-in-out' }}>
+          {/* {messages[currentMessageIndex]} */}
         </div>
       ) : (
         // Desktop View: Continuous marquee effect
         <div className="whitespace-nowrap flex space-x-4 animate-marquee text-xs sm:text-sm md:text-base lg:text-lg">
           {messages.map((message, index) => (
-            <span key={index} className="mx-4">{message}</span>
+            <span key={index} className="mx-4" dangerouslySetInnerHTML={{ __html: message }}></span>
           ))}
         </div>
       )}

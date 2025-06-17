@@ -39,7 +39,7 @@ interface AnalyticsData {
 }
 
 const COMPLETED_STATUSES = ['shipped', 'dispatched', 'delivered'];
-const PENDING_STATUSES = ['pending', 'processing'];
+const PENDING_STATUSES = ['enquiry received', 'packing', 'payment completed'];
 
 export function Analytics() {
   const [loading, setLoading] = useState(true);

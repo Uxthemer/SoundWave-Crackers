@@ -56,7 +56,7 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
           border-bottom: 2px solid #FF5722;
         }
         .logo {
-          height: 60px;
+          height: 100px;
         }
         .invoice-details {
           text-align: right;
@@ -161,8 +161,8 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
 
       <div class="footer">
         <p>Thank you for shopping with SoundWave Crackers!</p>
-        <p>Website: www.soundwavecrackers.com | Email: soundwavecracker@gmail.com</p>
-        <p>Phone: +91 8668029052, +91 9789785488</p>
+        <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
+        <p>Phone: +91 9363515184, +91 9994827099</p>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">

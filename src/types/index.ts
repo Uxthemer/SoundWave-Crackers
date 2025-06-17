@@ -54,7 +54,7 @@ export interface Order {
   id: string;
   userId: string;
   totalAmount: number;
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  status: 'enquiry received' | 'payment completed' | 'packing' | 'shipped' | 'delivered' | 'cancelled';
   paymentMethod: string;
   createdAt: string;
   shippingAddress: {

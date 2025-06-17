@@ -22,12 +22,12 @@ export const HowItWorks = () => {
     {
       icon: CreditCard,
       title: "Easy Payment",
-      description: "Secure payment options including EMI",
+      description: "Secure payment options including Google Pay, UPI and more",
     },
     {
       icon: Truck,
       title: "Fast Delivery",
-      description: "Quick delivery to your doorstep",
+      description: "Quick delivery to your nearest delivery location",
     },
     {
       icon: Clock,

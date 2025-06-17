@@ -159,7 +159,7 @@ export function Login() {
               <p className="text-text/60">Sign in to continue</p>
             </div>
 
-            <div className="flex gap-4 mb-6">
+            {/* <div className="flex gap-4 mb-6">
               <button
                 onClick={() => setLoginMethod("email")}
                 className={`flex-1 py-2 rounded-lg transition-colors ${
@@ -182,7 +182,7 @@ export function Login() {
                 <Phone className="w-5 h-5 mx-auto" />
                 <span className="text-sm mt-1">Phone</span>
               </button>
-            </div>
+            </div> */}
 
             {loginMethod === "email" ? (
               <form onSubmit={handleEmailLogin} className="space-y-6">
@@ -192,11 +192,12 @@ export function Login() {
                   </label>
                   <div className="relative">
                     <input
-                      type="email"
+                      type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                      placeholder="Enter your email"
+                      placeholder="Enter your email or phone number"
+                      required
                       disabled={isLoading}
                     />
                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />

@@ -1,35 +1,51 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { User, Mail, Phone, Lock, LogIn } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { OTPVerification } from '../components/OTPVerification';
-import toast from 'react-hot-toast';
-import { z } from 'zod';
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { User, Mail, Phone, Lock, LogIn } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { OTPVerification } from "../components/OTPVerification";
+import toast from "react-hot-toast";
+import { z } from "zod";
 
-const signupSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email format'),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid phone number'),
-  password: z.string().min(6, 'Password must be at least 6 characters')
-});
+const emailSchema = z.string().email("Invalid email format");
+const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number");
+
+const signupSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string(),
+    phone: z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+  })
+  .superRefine((data, ctx) => {
+    const isEmail = emailSchema.safeParse(data.email).success;
+    const isPhone = phoneSchema.safeParse(data.email).success;
+
+    if (!isEmail && !isPhone) {
+      ctx.addIssue({
+        path: ["identifier"],
+        code: z.ZodIssueCode.custom,
+        message: "Must be a valid email or phone number",
+      });
+    }
+  });
 
 export function Signup() {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: ''
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [showOTPVerification, setShowOTPVerification] = useState(false);
-  const [verificationId, setVerificationId] = useState('');
+  const [verificationId, setVerificationId] = useState("");
   const navigate = useNavigate();
   const { signUp, signInWithPhone, checkExistingUser } = useAuth();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,24 +56,30 @@ export function Signup() {
       // Validate form data
       signupSchema.parse(formData);
 
-       // Check if user exists
-       const existingUser = await checkExistingUser(formData.email, formData.phone);
-       if (existingUser.exists) {
-         throw new Error(existingUser.message);
-       }
+      // Check if user exists
+      const existingUser = await checkExistingUser(
+        formData.email,
+        formData.phone
+      );
+      if (existingUser.exists) {
+        throw new Error(existingUser.message);
+      }
+
+      // Skip OTP verification for now
+      handleVerified();
+      // Uncomment below lines to enable OTP verification
 
       // Send OTP for verification
-      const { verificationId: vId, error: verificationError } = await signInWithPhone(formData.phone);
-      
-      if (verificationError) throw verificationError;
-      if (!vId) throw new Error('Failed to send verification code');
+      // const { verificationId: vId, error: verificationError } = await signInWithPhone(formData.phone);
 
-      setVerificationId(vId);
-      setShowOTPVerification(true);
-      toast.success('Verification code sent successfully!');
+      // if (verificationError) throw verificationError;
+      // if (!vId) throw new Error('Failed to send verification code');
 
+      // setVerificationId(vId);
+      // setShowOTPVerification(true);
+      // toast.success('Verification code sent successfully!');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to sign up');
+      toast.error(error.message || "Failed to sign up");
     } finally {
       setIsLoading(false);
     }
@@ -72,15 +94,20 @@ export function Signup() {
         email: formData.email,
         password: formData.password,
         phone: formData.phone,
-        name: formData.name
+        name: formData.name,
       });
 
       if (signUpError) throw signUpError;
 
-      toast.success('Account created successfully! Please login to continue');
-      navigate('/login');
+      navigate("/");
+      toast.success(
+        "Account created & you are now logged in! Start shopping for your favorites.",
+        {
+          duration: 5000,
+        }
+      );
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create account');
+      toast.error(error.message || "Failed to create account");
     } finally {
       setIsLoading(false);
     }
@@ -103,7 +130,9 @@ export function Signup() {
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <label className="block text-sm font-medium mb-2">Full Name</label>
+                <label className="block text-sm font-medium mb-2">
+                  Full Name
+                </label>
                 <div className="relative">
                   <input
                     type="text"
@@ -122,12 +151,12 @@ export function Signup() {
                 <label className="block text-sm font-medium mb-2">Email</label>
                 <div className="relative">
                   <input
-                    type="email"
+                    type="text"
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
                     className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
-                    placeholder="Enter your email"
+                    placeholder="Enter your email or phone number"
                     disabled={isLoading}
                   />
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
@@ -135,7 +164,9 @@ export function Signup() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Phone Number</label>
+                <label className="block text-sm font-medium mb-2">
+                  Phone Number
+                </label>
                 <div className="relative">
                   <input
                     type="tel"
@@ -149,13 +180,16 @@ export function Signup() {
                   />
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                 </div>
-                <p className="text-sm text-text/60 mt-1">
-                  A verification code will be sent to this number
+                <p className="text-xs text-text/60 mt-1">
+                  A verification code will be sent to this number while placing
+                  order.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2">Password</label>
+                <label className="block text-sm font-medium mb-2">
+                  Password
+                </label>
                 <div className="relative">
                   <input
                     type="password"
@@ -168,7 +202,7 @@ export function Signup() {
                   />
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                 </div>
-                <p className="text-sm text-text/60 mt-1">
+                <p className="text-xs text-text/60 mt-1">
                   Must be at least 6 characters
                 </p>
               </div>
@@ -191,8 +225,11 @@ export function Signup() {
 
             <div className="mt-6 text-center">
               <p className="text-text/60">
-                Already have an account?{' '}
-                <Link to="/login" className="text-primary-orange hover:text-primary-red">
+                Already have an account?{" "}
+                <Link
+                  to="/login"
+                  className="text-primary-orange hover:text-primary-red"
+                >
                   Sign In
                 </Link>
               </p>
