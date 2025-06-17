@@ -173,7 +173,7 @@ export function ExploreCrackers() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-8 mt-5">
+      <div className="container mx-auto px-3 md:px-6 py-8 mt-5">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 space-y-4 md:space-y-0">
           <h1 className="font-heading text-4xl">Explore Crackers</h1>
           <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
