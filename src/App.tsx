@@ -4,6 +4,7 @@ import {
   Routes,
   Route,
   Link,
+  NavLink,
   Navigate,
   useLocation,
   useNavigate,
@@ -227,30 +228,54 @@ function AppContent() {
 
           {/* Desktop Navigation Links */}
           <div className="hidden xl:flex items-center space-x-8">
-            <Link
+            <NavLink
               to="/"
-              className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
             >
               Home
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               to="/quick-purchase"
-              className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
             >
               Quick Purchase
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               to="/explore"
-              className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
             >
               Explore Crackers
-            </Link>
-            <Link
+            </NavLink>
+            <NavLink
               to="/monthly-installment"
-              className="font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
             >
               Monthly Installment(Chit)
-            </Link>
+            </NavLink>
           </div>
 
           <div className="flex items-center space-x-4">
