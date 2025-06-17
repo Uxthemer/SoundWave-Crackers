@@ -161,6 +161,9 @@ export function Signup() {
                   />
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
                 </div>
+                <p className="text-xs text-text/60 mt-1">
+                  Order details and status updates will be sent to this email.
+                </p>
               </div>
 
               <div>
