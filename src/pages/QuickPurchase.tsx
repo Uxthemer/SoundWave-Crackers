@@ -333,7 +333,7 @@ export function QuickPurchase() {
 
                             <div className="flex flex-wrap items-center gap-3 md:gap-6">
                               <div className="flex space-x-4 items-center gap-3 justify-between w-full md:w-auto">
-                                <div className="flex gap-2 items-center">
+                                <div className="flex flex-col gap-1 items-center">
                                   <span className="text-sm text-text/60 line-through">
                                     ₹{product.actual_price}
                                   </span>
@@ -342,7 +342,7 @@ export function QuickPurchase() {
                                   </span>
                                 </div>
 
-                                <div className="flex items-center">
+                                <div className="flex">
                                   <button
                                     onClick={() => handleDecrement(product.id)}
                                     className="p-2 rounded-l-lg bg-red-500/80 text-white hover:bg-red-500/60 transition-colors"
