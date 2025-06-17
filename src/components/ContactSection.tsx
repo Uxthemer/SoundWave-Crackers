@@ -29,11 +29,13 @@ export function ContactSection() {
                   Visit Us
                 </h3>
                 <p className="text-text/60">
-                  Sattur-Sivakasi-kalugumalai Road,
+                  SoundWave Crackers
                   <br />
-                  Kanajanpatti Road, Madathupatti, Tamilnadu
+                  Kananjampatti, Sattur-Sivakasi-kalugumalai Road,
                   <br />
-                  India - 626128
+                  Vembakottai, Sivakasi, Tamilnadu
+                  <br />
+                  India - 626131
                 </p>
               </div>
             </div>
@@ -47,9 +49,9 @@ export function ContactSection() {
                   Call Us
                 </h3>
                 <p className="text-text/60">
-                  +91 9994827099
+                  +91 9363515184
                   <br />
-                  +91 8668029052
+                  +91 9994827099
                 </p>
               </div>
             </div>

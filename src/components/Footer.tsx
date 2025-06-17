@@ -57,36 +57,36 @@ export function Footer() {
             </h3>
             <ul className="space-y-4">
               <li>
-                <Link
-                  to="/about"
+                <a
+                  href="/#cracker-categories"
+                  className="text-text/60 hover:text-primary-orange transition-colors"
+                >
+                  Crackers Categories
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/#trending-crackers"
+                  className="text-text/60 hover:text-primary-orange transition-colors"
+                >
+                  Trending Products
+                </a>
+              </li>
+              <li>
+                <a
+                  href="/#about-us"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   About Us
-                </Link>
+                </a>
               </li>
               <li>
-                <Link
-                  to="/products"
-                  className="text-text/60 hover:text-primary-orange transition-colors"
-                >
-                  Products
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/offers"
-                  className="text-text/60 hover:text-primary-orange transition-colors"
-                >
-                  Special Offers
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/contact"
+                <a
+                  href="/#contact-us"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   Contact Us
-                </Link>
+                </a>
               </li>
             </ul>
           </div>
@@ -98,35 +98,35 @@ export function Footer() {
             <ul className="space-y-4">
               <li>
                 <Link
-                  to="/sitemap"
+                  to="/payment"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Sitemap
+                  Payment Options
                 </Link>
               </li>
               <li>
                 <Link
-                  to="/blog"
+                  to="/track-order"
+                  className="text-text/60 hover:text-primary-orange transition-colors"
+                >
+                  Track Your Order
+                </Link>
+              </li>
+              <li>
+                <a
+                  href="/#blog"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   Blog
-                </Link>
+                </a>
               </li>
               <li>
-                <Link
-                  to="/faq"
+                <a
+                  href="/#faqs"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   FAQ
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/contact"
-                  className="text-text/60 hover:text-primary-orange transition-colors"
-                >
-                  Contact Us
-                </Link>
+                </a>
               </li>
             </ul>
           </div>
@@ -164,7 +164,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-card-border/10 pt-8">
+        <div className="border-t border-card-border/10 pt-8 pb-8">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-text/60">
               © 2025 SoundWave Crackers. All rights reserved.

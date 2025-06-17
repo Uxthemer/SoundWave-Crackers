@@ -44,7 +44,7 @@ export async function createOrder(order: {
       user_id: userData.user.id,
       total_amount: order.total_amount,
       payment_method: order.payment_method,
-      status: 'pending',
+      status: 'Enquiry Received',
       discount_amt: 0,
       discount_percentage:'',
       referred_by:order.delivery_details.referralPhone,

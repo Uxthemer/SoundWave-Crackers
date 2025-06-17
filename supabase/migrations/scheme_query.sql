@@ -150,3 +150,82 @@ CREATE INDEX idx_scheme_selections_user_id ON scheme_selections(user_id);
 CREATE INDEX idx_scheme_selections_status ON scheme_selections(status);
 CREATE INDEX idx_payments_scheme_selection_id ON payments(scheme_selection_id);
 CREATE INDEX idx_payments_status ON payments(status);
+
+-- In Supabase SQL Editor
+create or replace function notify_order_placed()
+returns trigger as $$
+begin
+  perform net.http_post(
+    'https://YOUR_EDGE_FUNCTION_URL/send-order-email',
+    json_build_object('order_id', NEW.id)::text,
+    'application/json'
+  );
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists order_placed_trigger on orders;
+create trigger order_placed_trigger
+after insert on orders
+for each row execute procedure notify_order_placed();
+
+create or replace function notify_order_status_changed()
+returns trigger as $$
+begin
+  if NEW.status is distinct from OLD.status then
+    perform net.http_post(
+      'https://YOUR_EDGE_FUNCTION_URL/send-status-email',
+      json_build_object('order_id', NEW.id)::text,
+      'application/json'
+    );
+  end if;
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists order_status_changed_trigger on orders;
+create trigger order_status_changed_trigger
+after update on orders
+for each row execute procedure notify_order_status_changed();
+
+import { serve } from "std/server";
+import { createClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
+
+const resend = new Resend(Deno.env.get("RESEND_API_KEY")!);
+
+serve(async (req) => {
+  const { order_id } = await req.json();
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+
+  // Fetch order and user profile
+  const { data: order } = await supabase.from("orders").select("*").eq("id", order_id).single();
+  if (!order) return new Response("Order not found", { status: 404 });
+
+  const { data: user } = await supabase.from("user_profiles").select("*").eq("user_id", order.user_id).single();
+  if (!user) return new Response("User not found", { status: 404 });
+
+  // Fetch admin emails
+  const { data: admins } = await supabase
+    .from("user_profiles")
+    .select("email")
+    .in("role", ["SuperAdmin", "Admin"]);
+  const adminEmails = admins?.map((a: any) => a.email).filter(Boolean);
+
+  // Compose email
+  const recipients = [user.email, ...adminEmails];
+  await resend.emails.send({
+    from: "orders@yourdomain.com",
+    to: recipients,
+    subject: `New Order Placed: ${order.id}`,
+    html: `<p>Order placed by ${user.full_name} (${user.email})</p>
+           <p>Order ID: ${order.id}</p>
+           <p>Status: ${order.status}</p>`
+  });
+
+  return new Response("OK");
+});
+

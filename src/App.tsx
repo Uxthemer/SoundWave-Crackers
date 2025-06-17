@@ -57,6 +57,8 @@ import { Analytics } from "./pages/Analytics";
 import { Sitemap } from "./pages/Sitemap";
 import { NotFound } from "./pages/NotFound";
 import QuickPurchaseButton from "./components/QuickButton";
+import { TrackOrder } from "./pages/TrackOrder";
+import { Payment } from "./pages/Payment";
 
 const ProtectedRoute = ({
   children,
@@ -100,12 +102,16 @@ function BottomNav() {
       >
         <Home
           className={`w-5 h-5 ${
-            isActive("/") ? "text-orange-500" : "text-gray-600 dark:text-gray-400"
+            isActive("/")
+              ? "text-orange-500"
+              : "text-gray-600 dark:text-gray-400"
           }`}
         />
         <span
           className={`text-xs ${
-            isActive("/") ? "text-orange-500" : "text-gray-600 dark:text-gray-400"
+            isActive("/")
+              ? "text-orange-500"
+              : "text-gray-600 dark:text-gray-400"
           }`}
         >
           Home
@@ -329,14 +335,26 @@ function AppContent() {
           element={
             <>
               <HeroSlider />
-              <AboutSection />
-              <CrackerCategories />
-              <TrendingCrackers />
+              <div id="about-us" className="scroll-mt-10">
+                <AboutSection />
+              </div>
+              <div id="cracker-categories" className="scroll-mt-28">
+                <CrackerCategories />
+              </div>
+              <div id="trending-crackers" className="scroll-mt-10">
+                <TrendingCrackers />
+              </div>
               <CTASection />
               <HowItWorks />
-              <FAQSection />
-              <BlogSection />
-              <ContactSection />
+              <div id="faqs" className="scroll-mt-10">
+                <FAQSection />
+              </div>
+              <div id="blog" className="scroll-mt-16">
+                <BlogSection />
+              </div>
+              <div id="contact-us" className="scroll-mt-10">
+                <ContactSection />
+              </div>
             </>
           }
         />
@@ -407,6 +425,8 @@ function AppContent() {
         <Route path="/shipping-policy" element={<ShippingPolicy />} />
         <Route path="/sitemap" element={<Sitemap />} />
         <Route path="*" element={<NotFound />} />
+        <Route path="/track-order" element={<TrackOrder />} />
+        <Route path="/payment" element={<Payment />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

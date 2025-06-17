@@ -46,10 +46,10 @@ interface Order {
 }
 
 const ORDER_STATUSES = [
+  "Enquiry Submitted",
   "Order Placed",
   "Processing",
   "Shipped",
-  "Dispatched",
   "Delivered",
   "Cancelled",
 ];
