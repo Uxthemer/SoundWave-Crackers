@@ -98,4 +98,5 @@ export interface ProductImport {
   content: string;
   stock: number;
   description?: string;
+  order?: number | null;
 }

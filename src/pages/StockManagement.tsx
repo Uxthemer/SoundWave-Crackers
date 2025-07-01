@@ -32,7 +32,8 @@ interface Product {
     name: string;
   };
   apr?: string;
-  
+  order?: number;
+  is_active?: boolean;
 }
 
 interface Category {
@@ -50,6 +51,8 @@ export function StockManagement() {
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState<Partial<Product>>({});
   const { userRole } = useAuth();
 
   useEffect(() => {
@@ -121,7 +124,8 @@ export function StockManagement() {
           discount_percentage: editForm.discount_percentage,
           image_url: editForm.image_url,
           description: editForm.description,
-          apr: editForm.apr,
+          apr: editForm.apr ? Number(Number(editForm.apr).toFixed(2)) : null,
+          is_active: editForm.is_active,
         })
         .eq("id", editingProduct.id);
 
@@ -312,7 +316,7 @@ export function StockManagement() {
           <p>
             📞 +91 9363515184 | 💬
             <a href="https://wa.me/919363515184" target="_blank" style="color: white">WhatsApp Us</a>
-            | 📞 +91 9994827099
+            | 📞 +91 9789794518
           </p>
           <p>
             🌐
@@ -457,6 +461,15 @@ export function StockManagement() {
             <Printer className="w-5 h-5" />
             <span>Price List</span>
           </button>
+          {["admin", "superadmin"].includes(userRole?.name || "") && (
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Add Product</span>
+            </button>
+          )}
         </div>
 
         <div className="bg-card/30 rounded-xl overflow-hidden">
@@ -470,6 +483,11 @@ export function StockManagement() {
                   <th className="py-4 px-6 text-left">Stock</th>
                   <th className="py-4 px-6 text-left">Actual Price</th>
                   <th className="py-4 px-6 text-left">Offer Price</th>
+                  {userRole?.name === "superadmin" && (
+                    <th className="py-4 px-6 text-left">APR</th>
+                  )}
+                  <th className="py-4 px-6 text-left">Order</th>
+                  <th className="py-4 px-6 text-left">Active</th>
                   <th className="py-4 px-6 text-center">Actions</th>
                 </tr>
               </thead>
@@ -488,22 +506,28 @@ export function StockManagement() {
                   </tr>
                 ) : (
                   filteredProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="border-t border-card-border/10"
-                    >
+                    <tr key={product.id} className="border-t border-card-border/10">
                       <td className="py-4 px-6">{product.name}</td>
                       <td className="py-4 px-6">{product.categories?.name}</td>
                       <td className="py-4 px-6">{product.content}</td>
-                      <td
-                        className={`py-4 px-6 ${
-                          product.stock <= 20 ? "text-red-500 font-bold" : ""
-                        }`}
-                      >
+                      <td className={`py-4 px-6 ${product.stock <= 20 ? "text-red-500 font-bold" : ""}`}>
                         {product.stock}
                       </td>
                       <td className="py-4 px-6">₹{product.actual_price}</td>
                       <td className="py-4 px-6">₹{product.offer_price}</td>
+                      {userRole?.name === "superadmin" && (
+                        <td className="py-4 px-6">{product.apr || "-"}</td>
+                      )}
+                      <td className="py-4 px-6">{product.order ?? "-"}</td>
+                      <td className="py-4 px-6">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                          product.is_active
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}>
+                          {product.is_active ? "Active" : "Inactive"}
+                        </span>
+                      </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center justify-center space-x-2">
                           <button
@@ -652,6 +676,17 @@ export function StockManagement() {
                       rows={2}
                     />
                   </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Active</label>
+                    <select
+                      value={editForm.is_active ? "true" : "false"}
+                      onChange={e => setEditForm(f => ({ ...f, is_active: e.target.value === "true" }))}
+                      className="w-full px-3 py-2 border rounded"
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
+                    </select>
+                  </div>
                 </div>
                 <div className="flex justify-end gap-4 mt-8">
                   <button
@@ -666,6 +701,185 @@ export function StockManagement() {
                     className="px-6 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90"
                   >
                     Save
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add Modal */}
+      {showAddModal && (
+        <>
+          {/* Prevent background scroll when modal is open */}
+          <style>{`body { overflow: hidden !important; }`}</style>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-xl mx-2 relative overflow-y-auto" style={{ maxHeight: "90vh" }}>
+              <button
+                className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
+                onClick={() => setShowAddModal(false)}
+                aria-label="Close"
+              >
+                ×
+              </button>
+              <h2 className="text-2xl font-bold mb-4 text-center">Add Product</h2>
+              <form
+                onSubmit={async e => {
+                  e.preventDefault();
+                  try {
+                    const { error } = await supabase.from("products").insert({
+                      name: addForm.name,
+                      category_id: addForm.category_id,
+                      stock: addForm.stock,
+                      actual_price: addForm.actual_price,
+                      offer_price: addForm.offer_price,
+                      content: addForm.content,
+                      discount_percentage: addForm.discount_percentage,
+                      image_url: addForm.image_url,
+                      description: addForm.description,
+                      apr: addForm.apr ? Number(Number(addForm.apr).toFixed(2)) : null,
+                      order: addForm.order,
+                    });
+                    if (error) throw error;
+                    setShowAddModal(false);
+                    setAddForm({});
+                    fetchProducts();
+                  } catch (err) {
+                    alert("Failed to add product");
+                  }
+                }}
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block mb-1 font-medium">Product Name</label>
+                    <input
+                      type="text"
+                      value={addForm.name || ""}
+                      onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Category</label>
+                    <select
+                      value={addForm.category_id || ""}
+                      onChange={e => setAddForm(f => ({ ...f, category_id: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      required
+                    >
+                      <option value="">Select</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Content</label>
+                    <input
+                      type="text"
+                      value={addForm.content || ""}
+                      onChange={e => setAddForm(f => ({ ...f, content: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Stock</label>
+                    <input
+                      type="number"
+                      value={addForm.stock ?? ""}
+                      onChange={e => setAddForm(f => ({ ...f, stock: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Actual Price</label>
+                    <input
+                      type="number"
+                      value={addForm.actual_price ?? ""}
+                      onChange={e => setAddForm(f => ({ ...f, actual_price: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Offer Price</label>
+                    <input
+                      type="number"
+                      value={addForm.offer_price ?? ""}
+                      onChange={e => setAddForm(f => ({ ...f, offer_price: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">APR</label>
+                    <input
+                      type="text"
+                      value={addForm.apr || ""}
+                      onChange={e => setAddForm(f => ({ ...f, apr: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="APR"
+                      disabled={userRole?.name !== "superadmin"}
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Order</label>
+                    <input
+                      type="number"
+                      value={addForm.order ?? ""}
+                      onChange={e => setAddForm(f => ({ ...f, order: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                      placeholder="Order"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Image URL</label>
+                    <input
+                      type="text"
+                      value={addForm.image_url || ""}
+                      onChange={e => setAddForm(f => ({ ...f, image_url: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Image URL"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Discount %</label>
+                    <input
+                      type="text"
+                      value={addForm.discount_percentage || ""}
+                      onChange={e => setAddForm(f => ({ ...f, discount_percentage: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Discount %"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block mb-1 font-medium">Description</label>
+                    <textarea
+                      value={addForm.description || ""}
+                      onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Description"
+                      rows={2}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-4 mt-8">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-6 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90"
+                  >
+                    Add
                   </button>
                 </div>
               </form>

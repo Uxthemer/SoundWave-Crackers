@@ -308,6 +308,18 @@ export function Dashboard() {
               </div>
             </div>
           </Link>
+
+          <Link to="/expenses" className="card hover:border-primary-orange group">
+            <div className="flex items-center space-x-4">
+              <div className="bg-primary-orange/10 p-4 rounded-full group-hover:bg-primary-orange/20 transition-colors">
+                <DollarSign className="w-6 h-6 text-primary-orange" />
+              </div>
+              <div>
+                <h3 className="font-montserrat font-bold text-lg">Expense Tracking</h3>
+                <p className="text-text/60">Manage and track expenses</p>
+              </div>
+            </div>
+          </Link>
         </div>
       </div>
     </div>

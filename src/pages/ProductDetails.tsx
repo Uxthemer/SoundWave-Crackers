@@ -223,7 +223,10 @@ export function ProductDetails() {
 
             <div className="prose prose-invert">
               <h2 className="font-montserrat font-bold text-xl mb-4">Description</h2>
-              <p className="text-text/80">{product.description}</p>
+              <div
+                className="text-text/80"
+                dangerouslySetInnerHTML={{ __html: product.description ?? '' }}
+              />
             </div>
           </div>
         </div>

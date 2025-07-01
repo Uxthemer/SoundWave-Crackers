@@ -45,7 +45,7 @@ export function QuickPurchase() {
   }, [modalImage]);
 
   useEffect(() => {
-    if (products.length > 0) {
+    if (products.length > 0 && categories.length > 0) {
       // Initialize all categories as expanded
       const initialExpandState: Record<string, boolean> = {};
       categories.forEach((cat) => {
@@ -66,11 +66,9 @@ export function QuickPurchase() {
 
       const grouped = filtered.reduce((acc, product) => {
         const categoryName = product.categories?.name || "Uncategorized";
-
         if (!acc[categoryName]) {
           acc[categoryName] = [];
         }
-
         acc[categoryName].push({
           id: product.id,
           name: product.name,
@@ -86,7 +84,6 @@ export function QuickPurchase() {
           content: product.content,
           stock: product.stock,
         });
-
         return acc;
       }, {} as Record<string, any[]>);
 
@@ -99,7 +96,8 @@ export function QuickPurchase() {
       });
       setQuantities(newQuantities);
     }
-  }, [products, searchTerm]);
+    // eslint-disable-next-line
+  }, [products, categories, searchTerm]);
 
   const handleQuantityChange = (productId: string, value: string) => {
     const newQuantity = Math.max(0, parseInt(value) || 0);
