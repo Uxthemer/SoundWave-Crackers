@@ -30,8 +30,8 @@ export function AnnouncementBar() {
           </div>
           <div className="flex items-center space-x-2">
             <Phone className="w-4 h-4" />
-            <a href="tel:+919994827099" className="text-sm">
-              9994827099
+            <a href="tel:+919789794518" className="text-sm">
+              9789794518
             </a>
           </div>
         </div>
@@ -57,11 +57,11 @@ export function AnnouncementBar() {
               </a>
             </div>
             <div className="flex items-center space-x-2">
-              <a href="tel:+919994827099">
+              <a href="tel:+919789794518">
                 <Phone className="w-4 h-4" />
               </a>
-              <a href="tel:+919994827099" className="text-sm">
-                9994827099
+              <a href="tel:+919789794518" className="text-sm">
+                9789794518
               </a>
             </div>
             <div className="flex items-center space-x-2">

@@ -50,7 +50,9 @@ export function useProducts() {
             image_url
           )
         `)
-        .order('name');
+        .eq('is_active', true) // Only fetch active products
+        .order('order', { nullsFirst: false }) // sort by order, nulls last
+        .order('name'); // fallback sort
 
       if (error) throw error;
 
@@ -121,7 +123,8 @@ export function useProducts() {
         discount: Number(row['Discount %'] || row.discount || 0),
         content: row.Content || row.content || '',
         stock: Number(row.Stock || row.stock || 0),
-        description: row.Description || row.description || ''
+        description: row.Description || row.description || '', // can be HTML or text
+        order: row.Order !== undefined ? Number(row.Order) : null, // support order column
       }));
       
       const { data: categories } = await supabase
@@ -156,7 +159,8 @@ export function useProducts() {
             discount_percentage: product.discount,
             content: product.content,
             stock: product.stock,
-            description: product.description
+            description: product.description,
+            order: product.order,
           });
       }
       

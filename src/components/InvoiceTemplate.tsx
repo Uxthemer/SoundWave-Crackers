@@ -162,7 +162,7 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
       <div class="footer">
         <p>Thank you for shopping with SoundWave Crackers!</p>
         <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
-        <p>Phone: +91 9363515184, +91 9994827099</p>
+        <p>Phone: +91 9363515184, +91 9789794518</p>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">

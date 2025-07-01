@@ -287,7 +287,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             full_name: data.name,
             email: data.email,
             phone: data.phone,
-            pwd: btoa(data.password),
             phone_verified: true,
           });
 
@@ -307,9 +306,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithPhone = async (phone: string) => {
     try {
-      // For signup, we don't check if user exists
+      // For login, check if user exists (skip for signup)
       if (window.location.pathname !== "/signup") {
-        // Check if user exists for login
         const { data: userProfile } = await supabase
           .from("user_profiles")
           .select("*")
@@ -325,23 +323,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Clear existing verifier if any
+      // Always clear and re-create the verifier
       if (recaptchaVerifierRef.current) {
         recaptchaVerifierRef.current.clear();
         recaptchaVerifierRef.current = null;
       }
 
+      // Remove any existing recaptcha container (prevents duplicate widgets)
+      const existing = document.getElementById("recaptcha-container");
+      if (existing) existing.innerHTML = "";
+
       // Create new verifier
-      const verifier = new RecaptchaVerifier(auth, "recaptcha-container", {
-        size: "invisible",
-        callback: () => {},
-        "expired-callback": () => {
-          if (recaptchaVerifierRef.current) {
-            recaptchaVerifierRef.current.clear();
-            recaptchaVerifierRef.current = null;
-          }
-        },
-      });
+      const verifier = new RecaptchaVerifier(
+        auth, // auth instance first!
+        "recaptcha-container", // container id
+        {
+          size: "invisible",
+          callback: () => {},
+          "expired-callback": () => {
+            if (recaptchaVerifierRef.current) {
+              recaptchaVerifierRef.current.clear();
+              recaptchaVerifierRef.current = null;
+            }
+          },
+        }
+      );
 
       recaptchaVerifierRef.current = verifier;
       await verifier.render();
@@ -352,6 +358,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         formattedPhone,
         verifier
       );
+
+      // After sending, clear the verifier so resend works
+      if (recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current.clear();
+        recaptchaVerifierRef.current = null;
+      }
 
       return { verificationId, error: null };
     } catch (error) {

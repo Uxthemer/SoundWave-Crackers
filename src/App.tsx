@@ -60,6 +60,7 @@ import { NotFound } from "./pages/NotFound";
 import QuickPurchaseButton from "./components/QuickButton";
 import { TrackOrder } from "./pages/TrackOrder";
 import { Payment } from "./pages/Payment";
+import { Expenses } from "./pages/Expenses";
 
 const ProtectedRoute = ({
   children,
@@ -452,6 +453,14 @@ function AppContent() {
         <Route path="*" element={<NotFound />} />
         <Route path="/track-order" element={<TrackOrder />} />
         <Route path="/payment" element={<Payment />} />
+        <Route
+          path="/expenses"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Expenses />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
