@@ -9,7 +9,7 @@ export function CTASection() {
       <img
         src="/assets/img/cards/gift-box-new.png"
         alt="Gift Box Left"
-        className="hidden lg:block absolute left-0 top-1/2 -translate-y-1/2 w-96 xl:w-[28rem] z-10 ml-8"
+        className="hidden mt-5 lg:block absolute left-0 top-1/2 -translate-y-1/2 w-96 xl:w-[28rem] z-10 ml-8"
         style={{ pointerEvents: "none" }}
       />
       <img

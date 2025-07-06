@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fetchOrders, supabase } from "../lib/supabase";
 import { Loader2 } from "lucide-react";
 
@@ -7,15 +7,40 @@ export function TrackOrder() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>("");
+
+  useEffect(() => {
+    // Fetch user and role
+    (async () => {
+      const session = await supabase.auth.getSession();
+      const currentUser = session.data?.session?.user;
+      setUser(currentUser);
+
+      if (currentUser) {
+        // Fetch user profile to get role
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("role_id")
+          .eq("user_id", currentUser.id)
+          .single();
+        if (profile?.role_id) {
+          const { data: role } = await supabase
+            .from("roles")
+            .select("name")
+            .eq("id", profile.role_id)
+            .single();
+          setUserRole(role?.name || "");
+        }
+      }
+    })();
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setOrders([]);
-    // Check login
-    const session = await supabase.auth.getSession();
-    const currentUser = session.data?.session?.user;
-    if (!currentUser) {
+    if (!user) {
       setError("You must be logged in to track your order.");
       return;
     }
@@ -26,10 +51,20 @@ export function TrackOrder() {
     setLoading(true);
 
     const data = await fetchOrders(input);
-    if (!data || data.length === 0) {
-      setError("No orders found for the given input.");
-    } else {
+
+    // Only admin/superadmin can see all orders
+    if (userRole === "admin" || userRole === "superadmin") {
       setOrders(data);
+    } else {
+      // Filter orders to only those belonging to the current user
+      const myOrders = data.filter(
+        (order: any) => order.user_id === user.id
+      );
+      if (!myOrders.length) {
+        setError("No orders found for the given input.");
+      } else {
+        setOrders(myOrders);
+      }
     }
     setLoading(false);
   };
@@ -70,7 +105,7 @@ export function TrackOrder() {
               >
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-lg">Order ID:</span>
-                  <span className="font-mono">{order.id}</span>
+                  <span className="font-mono">{order.short_id || order.id}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="font-bold">Phone:</span>

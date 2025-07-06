@@ -112,12 +112,13 @@ export const createUserProfile = async (userId: string, phone: string) => {
  */
 export const fetchOrders = async (input: string) => {
   try {
-    // Check if input is a phone number (10+ digits)
     const isPhone = /^\d{10,}$/.test(input.trim());
     let query = supabase.from("orders").select("*");
 
     if (isPhone) {
       query = query.eq("phone", input.trim());
+    } else if (input.trim().startsWith("SWC-")) {
+      query = query.eq("short_id", input.trim());
     } else {
       query = query.eq("id", input.trim());
     }

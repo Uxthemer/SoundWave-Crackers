@@ -43,6 +43,7 @@ interface Order {
   status: string;
   payment_method: string;
   items?: OrderItem[];
+  short_id: string;
 }
 
 const ORDER_STATUSES = [
@@ -143,7 +144,7 @@ export function MyOrders() {
 
   const exportOrder = (order: Order) => {
     const orderData = {
-      "Order ID": order.id,
+      "Order ID": order.short_id || order.id,
       "Customer Name": order.full_name,
       Email: order.email,
       Phone: order.phone,
@@ -340,7 +341,7 @@ export function MyOrders() {
                       className="border-t border-card-border/10"
                     >
                       <td className="py-4 px-6 font-mono text-sm">
-                        {order.id}
+                        {order.short_id || order.id}
                       </td>
                       <td className="py-4 px-6">{order.full_name}</td>
                       <td className="py-4 px-6">

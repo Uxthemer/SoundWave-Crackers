@@ -16,6 +16,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  short_id?: string;
   created_at: string;
   full_name: string;
   email: string;
@@ -29,6 +30,7 @@ interface Order {
   status: string;
   payment_method: string;
   items?: OrderItem[];
+  discount_amt?: number;
 }
 
 interface InvoiceTemplateProps {
@@ -105,7 +107,7 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
         <img src="/assets/img/logo/logo_2.png" alt="SoundWave Crackers" class="logo" />
         <div class="invoice-details">
           <h2>INVOICE</h2>
-          <p>Order ID: ${order.id}</p>
+          <p>Order ID: ${order.short_id || order.id}</p>
           <p>Date: ${format(new Date(order.created_at), 'PPpp')}</p>
           <p>Status: ${order.status}</p>
         </div>
@@ -154,7 +156,9 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
         </table>
 
         <div class="total">
-          <p><strong>Total Amount: ₹${order.total_amount}</strong></p>
+          <p><strong>Total Amount: ₹${order.total_amount.toFixed(2)}</strong></p>
+          <p><strong>Discount: -₹${order.discount_amt?.toFixed(2) || "0.00"}</strong></p>
+          <p><strong>Grand Total: ₹${(order.total_amount - (order.discount_amt || 0)).toFixed(2)}</strong></p>
           <p>Payment Method: ${order.payment_method}</p>
         </div>
       </div>

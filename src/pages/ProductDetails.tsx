@@ -1,37 +1,43 @@
-import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { ChevronRight, Star, Plus, Minus, ShoppingCart, Loader2 } from 'lucide-react';
-import { Swiper, SwiperSlide } from 'swiper/react';
-import { Navigation, Thumbs } from 'swiper/modules';
-import { Swiper as SwiperType } from 'swiper';
+import { useState, useEffect } from "react";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import {
+  ChevronRight,
+  Star,
+  Plus,
+  Minus,
+  ShoppingCart,
+  Loader2,
+} from "lucide-react";
 import { useProducts } from "../hooks/useProducts";
-import { useCartStore } from '../store/cartStore';
-import 'swiper/css';
-import 'swiper/css/navigation';
-import 'swiper/css/thumbs';
-import { i } from 'framer-motion/client';
+import { useCartStore } from "../store/cartStore";
+import "swiper/css";
+import "swiper/css/navigation";
+import "swiper/css/thumbs";
+import { ProductImageSlider } from "../components/ProductImageSlider";
 
 export function ProductDetails() {
   const { productId } = useParams();
   const { products, loading } = useProducts();
   const navigate = useNavigate();
   const { items, addToCart, updateQuantity } = useCartStore();
-  const [thumbsSwiper, setThumbsSwiper] = useState<SwiperType | null>(null);
   const [showQuantity, setShowQuantity] = useState(false);
 
-  const product = products.find(p => p.id === productId);
-  const cartItem = items.find(item => item.id === productId);
+  const product = products.find((p) => p.id === productId);
+  const cartItem = items.find((item) => item.id === productId);
   const [quantity, setQuantity] = useState(cartItem?.quantity || 1);
 
   useEffect(() => {
     // Update local quantity when cart changes
-    const item = items.find(item => item.id === productId);
+    const item = items.find((item) => item.id === productId);
     if (item) {
       setQuantity(item.quantity);
       setShowQuantity(true);
+    } else {
+      // If not in cart, reset to default
+      setQuantity(1);
+      setShowQuantity(false);
     }
-  }, [items, productId]);
+  }, [productId, product?.id, items]);
 
   if (loading) {
     return (
@@ -42,12 +48,16 @@ export function ProductDetails() {
   }
 
   if (!product) {
-    navigate('/explore');
+    navigate("/explore");
     return null;
   }
 
   const relatedProducts = products
-    .filter(p => p.categories.id === product.category_id && p.id !== product.id)
+    .filter(
+      (p) =>
+        p.categories.id === product.category_id &&
+        p.id !== product.id // Exclude the current product
+    )
     .slice(0, 4);
 
   const handleQuantityChange = (value: string) => {
@@ -78,30 +88,31 @@ export function ProductDetails() {
 
   const handleAddToCart = () => {
     if (product) {
-      addToCart({
-        id: product.id,
-        name: product.name,
-        description: product.description || '',
-        image: `${
-            product.image_url
-              ? `/assets/img/crackers/${product.image_url}`
-              : "/assets/img/logo/logo-product.png"
-          }`,
-        offer_price: product.offer_price,
-        actual_price: product.actual_price,
-        content: product.content || '',
-        discount_percentage: product.discount_percentage,
-        cateDescription: product.categories.description,
-        image_url: product.categories.image_url || '',
-        created_at: product.categories.created_at,
-        category: {
-          id: product.categories.id,
-          name: product.categories.name,
+      addToCart(
+        {
+          id: product.id,
+          name: product.name,
+          description: product.description || "",
+          image: product.image_url
+            ? `/assets/img/crackers/${product.image_url.split(",")[0]}`
+            : "/assets/img/logo/logo-product.png",
+          offer_price: product.offer_price,
+          actual_price: product.actual_price,
+          content: product.content || "",
+          discount_percentage: product.discount_percentage,
           cateDescription: product.categories.description,
-          image_url: product.categories.image_url || '',
+          image_url: product.categories.image_url || "",
           created_at: product.categories.created_at,
-        }
-      }, quantity);
+          category: {
+            id: product.categories.id,
+            name: product.categories.name,
+            cateDescription: product.categories.description,
+            image_url: product.categories.image_url || "",
+            created_at: product.categories.created_at,
+          },
+        },
+        quantity
+      );
       setShowQuantity(true);
     }
   };
@@ -111,11 +122,18 @@ export function ProductDetails() {
       <div className="container mx-auto px-4">
         {/* Breadcrumb */}
         <nav className="flex items-center space-x-2 text-sm mb-8">
-          <Link to="/" className="text-text/60 hover:text-primary-orange">Home</Link>
+          <Link to="/" className="text-text/60 hover:text-primary-orange">
+            Home
+          </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
-          <Link to="/explore" className="text-text/60 hover:text-primary-orange">Explore</Link>
+          <Link
+            to="/explore"
+            className="text-text/60 hover:text-primary-orange"
+          >
+            Explore
+          </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
-          <Link 
+          <Link
             to={`/explore?category=${product.categories.name.toLowerCase()}`}
             className="text-text/60 hover:text-primary-orange"
           >
@@ -129,27 +147,32 @@ export function ProductDetails() {
           {/* Product Images */}
           <div className="space-y-4">
             <div className="relative bg-card rounded-xl overflow-hidden">
-              <Swiper
-                modules={[Navigation, Thumbs]}
-                navigation
-                thumbs={thumbsSwiper ? { swiper: thumbsSwiper } : undefined}
-                className="aspect-square"
-              >
-                <SwiperSlide>
-                  <img
-                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo-product.png`}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                </SwiperSlide>
-              </Swiper>
+              {product.image_url && product.image_url.split(",").length > 1 ? (
+                <ProductImageSlider
+                  images={product.image_url
+                    .split(",")
+                    .map((url) => `/assets/img/crackers/${url}`)}
+                  alt={product.name}
+                  className="aspect-square"
+                />
+              ) : (
+                <img
+                  src={
+                    product.image_url
+                      ? `/assets/img/crackers/${product.image_url}`
+                      : "/assets/img/logo/logo-product.png"
+                  }
+                  alt={product.name}
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
           </div>
 
           {/* Product Details */}
           <div>
             <h1 className="font-heading text-4xl mb-4">{product.name}</h1>
-            
+
             {/* <div className="flex items-center space-x-4 mb-6">
               <div className="flex items-center">
                 {[...Array(5)].map((_, i) => (
@@ -172,8 +195,12 @@ export function ProductDetails() {
             <div className="bg-card/50 rounded-xl p-6 mb-8">
               <div className="flex items-end gap-4 mb-4">
                 <div>
-                  <p className="text-sm text-text/60 line-through">₹{product.actual_price}</p>
-                  <p className="text-3xl font-bold text-primary-orange">₹{product.offer_price}</p>
+                  <p className="text-sm text-text/60 line-through">
+                    ₹{product.actual_price}
+                  </p>
+                  <p className="text-3xl font-bold text-primary-orange">
+                    ₹{product.offer_price}
+                  </p>
                 </div>
                 <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
                   {product.discount_percentage}% OFF
@@ -217,17 +244,35 @@ export function ProductDetails() {
               </div>
 
               <p className="text-sm text-text/60">
-                Total: <span className="font-bold text-text">₹{(quantity * product.offer_price).toFixed(2)}</span>
+                Total:{" "}
+                <span className="font-bold text-text">
+                  ₹{(quantity * product.offer_price).toFixed(2)}
+                </span>
               </p>
             </div>
 
             <div className="prose prose-invert">
-              <h2 className="font-montserrat font-bold text-xl mb-4">Description</h2>
+              <h2 className="font-montserrat font-bold text-xl mb-4">
+                Description
+              </h2>
               <div
-                className="text-text/80"
-                dangerouslySetInnerHTML={{ __html: product.description ?? '' }}
+                className="text-text/80 space-y-4"
+                dangerouslySetInnerHTML={{ __html: product.description ?? "" }}
               />
             </div>
+            <p>
+              <strong>Safety Tips:</strong>
+              <ul className="ml-5">
+                <li>Light one at a time.</li>
+                <li>keep water nearby</li>
+                <li>
+                  keep away from flammable materials, Maintain a safe distance.
+                </li>
+                <li>Supervise children, wear ear protection.</li>
+                <li>Do not hold in hand</li>
+                <li>keep away from pets.</li>
+              </ul>
+            </p>
           </div>
         </div>
 
@@ -236,8 +281,10 @@ export function ProductDetails() {
           <h2 className="font-heading text-3xl mb-8">Related Products</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {relatedProducts.map((relatedProduct) => {
-              const relatedCartItem = items.find(item => item.id === relatedProduct.id);
-              
+              const relatedCartItem = items.find(
+                (item) => item.id === relatedProduct.id
+              );
+
               return (
                 <Link
                   key={relatedProduct.id}
@@ -245,11 +292,27 @@ export function ProductDetails() {
                   className="block card group"
                 >
                   <div className="relative mb-4 overflow-hidden rounded-lg">
-                    <img
-                      src={relatedProduct.image_url ? `/assets/img/crackers/${relatedProduct.image_url}` : `/assets/img/logo/logo-product.png`}
-                      alt={relatedProduct.name}
-                      className="w-full h-48 object-cover transform group-hover:scale-110 transition-transform duration-500"
-                    />
+                    {relatedProduct.image_url &&
+                    relatedProduct.image_url.split(",").length > 1 ? (
+                      <ProductImageSlider
+                        images={relatedProduct.image_url
+                          .split(",")
+                          .map((url) => `/assets/img/crackers/${url}`)}
+                        alt={relatedProduct.name}
+                        className="aspect-square transform group-hover:scale-110 transition-transform duration-500"
+                      />
+                    ) : (
+                      <img
+                        src={
+                          relatedProduct.image_url
+                            ? `/assets/img/crackers/${relatedProduct.image_url}`
+                            : `/assets/img/logo/logo-product.png`
+                        }
+                        alt={relatedProduct.name}
+                        className="aspect-square transform group-hover:scale-110 transition-transform duration-500"
+                      />
+                    )}
+
                     <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm">
                       {relatedProduct.discount_percentage}% OFF
                     </div>
@@ -259,12 +322,20 @@ export function ProductDetails() {
                       </div>
                     )}
                   </div>
-                  <h3 className="font-montserrat font-bold text-lg mb-2">{relatedProduct.name}</h3>
-                  <p className="text-sm text-text/60 mb-4">{relatedProduct.content}</p>
+                  <h3 className="font-montserrat font-bold text-lg mb-2">
+                    {relatedProduct.name}
+                  </h3>
+                  <p className="text-sm text-text/60 mb-4">
+                    {relatedProduct.content}
+                  </p>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-text/60 line-through">₹{relatedProduct.actual_price}</p>
-                      <p className="font-bold text-primary-orange">₹{relatedProduct.offer_price}</p>
+                      <p className="text-sm text-text/60 line-through">
+                        ₹{relatedProduct.actual_price}
+                      </p>
+                      <p className="font-bold text-primary-orange">
+                        ₹{relatedProduct.offer_price}
+                      </p>
                     </div>
                   </div>
                 </Link>

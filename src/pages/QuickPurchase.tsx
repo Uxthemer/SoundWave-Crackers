@@ -14,6 +14,7 @@ import { useCartStore } from "../store/cartStore";
 import { Cart } from "../components/Cart";
 import { useProducts } from "../hooks/useProducts";
 import { useCategories } from "../hooks/useCategories";
+import { ProductImageSlider } from "../components/ProductImageSlider";
 
 export function QuickPurchase() {
   const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
@@ -29,7 +30,10 @@ export function QuickPurchase() {
     Record<string, boolean>
   >({});
   const [filteredProductCount, setFilteredProductCount] = useState(0);
-  const [modalImage, setModalImage] = useState<{ src: string; alt: string } | null>(null);
+  const [modalImage, setModalImage] = useState<{
+    src: string[];
+    alt: string;
+  } | null>(null);
 
   // Prevent background scroll when modal is open
   useEffect(() => {
@@ -73,11 +77,11 @@ export function QuickPurchase() {
           id: product.id,
           name: product.name,
           category: categoryName,
-          image: `${
-            product.image_url
-              ? `/assets/img/crackers/${product.image_url}`
-              : "/assets/img/logo/logo-product.png"
-          }`,
+          image: product.image_url
+            ? product.image_url
+                .split(",")
+                .map((img: string) => `/assets/img/crackers/${img.trim()}`)
+            : [`/assets/img/logo/logo-product.png`],
           actual_price: product.actual_price,
           offer_price: product.offer_price,
           discount: product.discount_percentage,
@@ -250,7 +254,9 @@ export function QuickPurchase() {
                           key={product.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          className={`${index % 2 === 0 ? 'bg-card': 'bg-card/10'} rounded-lg p-3 shadow-sm hover:bg-card transition-colors`}
+                          className={`${
+                            index % 2 === 0 ? "bg-card" : "bg-card/10"
+                          } rounded-lg p-3 shadow-sm hover:bg-card transition-colors`}
                           whileHover={{ scale: 1.02 }}
                         >
                           <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -266,11 +272,25 @@ export function QuickPurchase() {
                                 }
                                 className="focus:outline-none"
                               >
-                                <img
-                                  src={product.image}
-                                  alt={product.name}
-                                  className="w-14 h-14 object-cover rounded-lg shadow-md"
-                                />
+                                <div className="w-14 h-14 flex items-center justify-center overflow-hidden rounded-lg shadow-md bg-white">
+                                  {product.image && product.image.length > 1 ? (
+                                    <ProductImageSlider
+                                      images={product.image}
+                                      alt={product.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <img
+                                      src={
+                                        product.image && product.image.length === 1
+                                          ? product.image[0]
+                                          : `/assets/img/logo/logo-product.png`
+                                      }
+                                      alt={product.name}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
+                                </div>
                               </button>
                               {/* </Link> */}
                               <div className="flex-1 min-w-0">
@@ -316,13 +336,19 @@ export function QuickPurchase() {
                                       >
                                         ×
                                       </button>
-                                      <h2 className="mb-4 text-lg font-bold text-text text-center">{modalImage.alt}</h2>
-                                      <img
+                                      <h2 className="mb-4 text-lg font-bold text-text text-center">
+                                        {modalImage.alt}
+                                      </h2>
+                                      {/* <img
                                         src={modalImage.src}
                                         alt={modalImage.alt}
                                         className="max-w-[80vw] max-h-[80vh] rounded"
+                                      /> */}
+                                      <ProductImageSlider
+                                        images={modalImage.src}
+                                        alt={modalImage.alt}
+                                        className="max-w-[80vw] max-h-[80vh] rounded"
                                       />
-                                      
                                     </div>
                                   </div>
                                 )}

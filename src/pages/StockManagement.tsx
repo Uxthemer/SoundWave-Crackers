@@ -10,6 +10,8 @@ import {
   Download,
   Upload,
   Printer,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
@@ -28,6 +30,7 @@ interface Product {
   discount_percentage: string;
   image_url: string;
   description: string;
+  product_code?: string;
   categories?: {
     name: string;
   };
@@ -53,6 +56,8 @@ export function StockManagement() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
+  const [sortField, setSortField] = useState<string>("order");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const { userRole } = useAuth();
 
   useEffect(() => {
@@ -390,6 +395,65 @@ export function StockManagement() {
     return matchesSearch && matchesCategory;
   });
 
+  // Add sorting handler
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  // Helper to safely get the value for sorting
+  const getSortValue = (product: Product, field: string): string | number | boolean => {
+    switch (field) {
+      case "order":
+        return product.order ?? 0;
+      case "product_code":
+        // @ts-ignore
+        return (product as any).product_code ?? "";
+      case "name":
+        return product.name ?? "";
+      case "categories.name":
+        return product.categories?.name ?? "";
+      case "content":
+        return product.content ?? "";
+      case "stock":
+        return product.stock ?? 0;
+      case "actual_price":
+        return product.actual_price ?? 0;
+      case "offer_price":
+        return product.offer_price ?? 0;
+      case "apr":
+        return product.apr ?? "";
+      case "is_active":
+        return product.is_active ?? false;
+      default:
+        // fallback for any other field
+        // @ts-ignore
+        return (product as any)[field] ?? "";
+    }
+  };
+
+  // Sort products based on selected field and direction
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    const aValue = getSortValue(a, sortField);
+    const bValue = getSortValue(b, sortField);
+
+    if (typeof aValue === "number" && typeof bValue === "number") {
+      return sortDirection === "asc" ? aValue - bValue : bValue - aValue;
+    }
+    if (typeof aValue === "boolean" && typeof bValue === "boolean") {
+      return sortDirection === "asc"
+        ? Number(aValue) - Number(bValue)
+        : Number(bValue) - Number(aValue);
+    }
+    return sortDirection === "asc"
+      ? String(aValue).localeCompare(String(bValue))
+      : String(bValue).localeCompare(String(aValue));
+  });
+
   if (!["admin", "superadmin"].includes(userRole?.name || "")) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -477,36 +541,109 @@ export function StockManagement() {
             <table className="w-full">
               <thead>
                 <tr className="bg-card/50">
-                  <th className="py-4 px-6 text-left">Product Name</th>
-                  <th className="py-4 px-6 text-left">Category</th>
-                  <th className="py-4 px-6 text-left">Content</th>
-                  <th className="py-4 px-6 text-left">Stock</th>
-                  <th className="py-4 px-6 text-left">Actual Price</th>
-                  <th className="py-4 px-6 text-left">Offer Price</th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("order")}>
+                    <span className="flex items-center gap-1">
+                      Order
+                      {sortField === "order" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("product_code")}>
+                    <span className="flex items-center gap-1">
+                      Product Code
+                      {sortField === "product_code" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("name")}>
+                    <span className="flex items-center gap-1">
+                      Product Name
+                      {sortField === "name" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("categories.name")}>
+                    <span className="flex items-center gap-1">
+                      Category
+                      {sortField === "categories.name" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("content")}>
+                    <span className="flex items-center gap-1">
+                      Content
+                      {sortField === "content" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("stock")}>
+                    <span className="flex items-center gap-1">
+                      Stock
+                      {sortField === "stock" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("actual_price")}>
+                    <span className="flex items-center gap-1">
+                      Actual Price
+                      {sortField === "actual_price" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("offer_price")}>
+                    <span className="flex items-center gap-1">
+                      Offer Price
+                      {sortField === "offer_price" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
                   {userRole?.name === "superadmin" && (
-                    <th className="py-4 px-6 text-left">APR</th>
+                    <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("apr")}>
+                      <span className="flex items-center gap-1">
+                        APR
+                        {sortField === "apr" && (
+                          sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                        )}
+                      </span>
+                    </th>
                   )}
-                  <th className="py-4 px-6 text-left">Order</th>
-                  <th className="py-4 px-6 text-left">Active</th>
+                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("is_active")}>
+                    <span className="flex items-center gap-1">
+                      Active
+                      {sortField === "is_active" && (
+                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </th>
                   <th className="py-4 px-6 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-text/60">
+                    <td colSpan={11} className="py-8 text-center text-text/60">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
-                ) : filteredProducts.length === 0 ? (
+                ) : sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-text/60">
+                    <td colSpan={11} className="py-8 text-center text-text/60">
                       No products found
                     </td>
                   </tr>
                 ) : (
-                  filteredProducts.map((product) => (
+                  sortedProducts.map((product) => (
                     <tr key={product.id} className="border-t border-card-border/10">
+                      <td className="py-4 px-6">{product.order ?? "-"}</td>
+                      <td className="py-4 px-6">{product.product_code || "-"}</td>
                       <td className="py-4 px-6">{product.name}</td>
                       <td className="py-4 px-6">{product.categories?.name}</td>
                       <td className="py-4 px-6">{product.content}</td>
@@ -518,7 +655,6 @@ export function StockManagement() {
                       {userRole?.name === "superadmin" && (
                         <td className="py-4 px-6">{product.apr || "-"}</td>
                       )}
-                      <td className="py-4 px-6">{product.order ?? "-"}</td>
                       <td className="py-4 px-6">
                         <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                           product.is_active

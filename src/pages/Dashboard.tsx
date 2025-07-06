@@ -151,11 +151,11 @@ export function Dashboard() {
                 <ShoppingCart className="w-6 h-6 text-primary-orange" />
               </div>
             </div>
-            <div className="flex items-center text-sm">
+            {/* <div className="flex items-center text-sm">
               <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
               <span className="text-green-500">+12%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div>
+            </div> */}
           </button>
 
           <button 
@@ -171,11 +171,11 @@ export function Dashboard() {
                 <Users className="w-6 h-6 text-primary-yellow" />
               </div>
             </div>
-            <div className="flex items-center text-sm">
+            {/* <div className="flex items-center text-sm">
               <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
               <span className="text-green-500">+5%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div>
+            </div> */}
           </button>
 
           <button 
@@ -191,11 +191,11 @@ export function Dashboard() {
                 <DollarSign className="w-6 h-6 text-primary-red" />
               </div>
             </div>
-            <div className="flex items-center text-sm">
+            {/* <div className="flex items-center text-sm">
               <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
               <span className="text-green-500">+18%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div>
+            </div> */}
           </button>
 
           <button 
@@ -211,11 +211,11 @@ export function Dashboard() {
                 <TrendingUp className="w-6 h-6 text-green-500" />
               </div>
             </div>
-            <div className="flex items-center text-sm">
+            {/* <div className="flex items-center text-sm">
               <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
               <span className="text-green-500">+15%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div>
+            </div> */}
           </button>
         </div>
 
