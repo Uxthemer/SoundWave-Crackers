@@ -37,7 +37,24 @@ export async function createOrder(order: {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
-  // Start a transaction to update stock and create order
+  // 1. Generate next short_id (atomic, safe for concurrency)
+  const { data: lastOrder, error: lastOrderError } = await supabase
+    .from('orders')
+    .select('short_id')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  let nextNumber = 1;
+  if (lastOrder && lastOrder.short_id) {
+    const match = lastOrder.short_id.match(/SWC-(\d+)/);
+    if (match) {
+      nextNumber = parseInt(match[1], 10) + 1;
+    }
+  }
+  const shortId = `SWC-${String(nextNumber).padStart(3, "0")}`;
+
+  // 2. Insert order with short_id
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .insert({
@@ -46,8 +63,8 @@ export async function createOrder(order: {
       payment_method: order.payment_method,
       status: 'Enquiry Received',
       discount_amt: 0,
-      discount_percentage:'',
-      referred_by:order.delivery_details.referralPhone,
+      discount_percentage: '',
+      referred_by: order.delivery_details.referralPhone,
       full_name: order.delivery_details.customerName,
       phone: order.delivery_details.phone,
       address: order.delivery_details.address,
@@ -55,7 +72,8 @@ export async function createOrder(order: {
       city: order.delivery_details.city,
       state: order.delivery_details.state,
       pincode: order.delivery_details.pincode,
-      country: order.delivery_details.country
+      country: order.delivery_details.country,
+      short_id: shortId // <-- Add this
     })
     .select()
     .single();
@@ -75,17 +93,13 @@ export async function createOrder(order: {
 
   // Update product stock
   for (const item of order.items) {
-    // Get current stock
     const { data: product } = await supabase
       .from('products')
       .select('stock')
       .eq('id', item.product_id)
       .single();
-    
     if (product) {
       const newStock = Math.max(0, (product.stock || 0) - item.quantity);
-      
-      // Update stock
       await supabase
         .from('products')
         .update({ stock: newStock })

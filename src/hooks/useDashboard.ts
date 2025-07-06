@@ -52,22 +52,55 @@ export function useDashboard() {
       // Fetch all orders
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
-        .select('*')
+        .select(`
+          *,
+          order_items:order_items (
+            price,
+            quantity,
+            product:product_id (
+              apr
+            )
+          )
+        `)
         .gte('created_at', startDate.toISOString())
         .lte('created_at', endDate.toISOString());
 
       if (ordersError) throw ordersError;
 
-      // Fetch total user count
+      // Calculate total revenue
+      const revenue = orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
+
+      // Calculate total profit
+      const profit = orders?.reduce((sum, order) => {
+        if (!order.order_items) return sum;
+        const orderProfit = order.order_items.reduce((itemSum: number, item: any) => {
+          const price = Number(item.price) || 0;
+          const apr = Number(item.product?.apr) || 0;
+          const qty = Number(item.quantity) || 0;
+          return itemSum + (price - apr) * qty;
+        }, 0);
+        // Subtract discount_amt from this order's profit
+        const discount = Number(order.discount_amt) || 0;
+        return sum + (orderProfit - discount);
+      }, 0) || 0;
+
+      // Fetch the customer role id first
+      const { data: roles, error: rolesError } = await supabase
+        .from('roles')
+        .select('id')
+        .eq('name', 'customer')
+        .single();
+
+      if (rolesError || !roles) throw rolesError || new Error('Customer role not found');
+      const customerRoleId = roles.id;
+
+      // Now count users with that role_id
       const { count: userCount, error: usersError } = await supabase
         .from('user_profiles')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('role_id', customerRoleId);
 
       if (usersError) throw usersError;
-
-      // Calculate stats
-      const revenue = orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
-      const profit = revenue * 0.2; // Assuming 20% profit margin
 
       setStats({
         totalOrders: orders?.length || 0,

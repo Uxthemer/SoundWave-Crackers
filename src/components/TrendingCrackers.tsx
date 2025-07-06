@@ -13,6 +13,7 @@ import { useCartStore } from "../store/cartStore";
 import { useProducts } from "../hooks/useProducts";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { ProductImageSlider } from "../components/ProductImageSlider";
 
 export function TrendingCrackers() {
   const { addToCart } = useCartStore();
@@ -47,7 +48,7 @@ export function TrendingCrackers() {
           if (payload.new) {
             setProductStock(prev => ({
               ...prev,
-              [payload.new.id]: payload.new.stock
+              [(payload.new as { id: string; stock: number }).id]: (payload.new as { id: string; stock: number }).stock
             }));
           }
         })
@@ -155,10 +156,14 @@ export function TrendingCrackers() {
             >
               <div className="relative mb-4 overflow-hidden rounded-lg">
                 <Link to={`/product/${product.id}`}>
-                  <img
-                    src={product.image_url ? `/assets/img/crackers/${product.image_url}` : `/assets/img/logo/logo-product.png`}
+                  <ProductImageSlider
+                    images={
+                      product.image_url
+                        ? product.image_url.split(',').map((img: string) => `/assets/img/crackers/${img.trim()}`)
+                        : [`/assets/img/logo/logo-product.png`]
+                    }
                     alt={product.name}
-                    className="w-full h-50 object-cover transform group-hover:scale-110 transition-transform duration-500"
+                    className="w-full h-50 object-cover rounded-lg"
                   />
                 </Link>
                 <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm">

@@ -10,6 +10,7 @@ import {
   Loader2,
   Printer,
   ReceiptText,
+  Percent,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
@@ -46,6 +47,8 @@ interface Order {
   status: string;
   payment_method: string;
   items?: OrderItem[];
+  discount_amt?: number;
+  short_id?: string;
 }
 
 const ORDER_STATUSES = [
@@ -75,6 +78,11 @@ export function Orders() {
   } | null>(null);
   const [lrNumber, setLRNumber] = useState("");
   const [lrError, setLRError] = useState("");
+  const [discountValue, setDiscountValue] = useState<number | string>('');
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
+  const [discountOrderId, setDiscountOrderId] = useState<string | null>(null);
+  const [discountInput, setDiscountInput] = useState<number | string>('');
 
   useEffect(() => {
     fetchOrders();
@@ -297,56 +305,52 @@ export function Orders() {
         <title>Order ${order.id}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
-           .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 30px;
-          padding-bottom: 20px;
-          border-bottom: 2px solid #FF5722;
-        }
-        .logo {
-          height: 100px;
-        }
-        .invoice-details {
-          text-align: right;
-        }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #FF5722;
+          }
+          .logo {
+            height: 100px;
+          }
+          .invoice-details {
+            text-align: right;
+          }
           h1 { color: #FF5722; }
           .section { margin-bottom: 20px; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f5f5f5; }
-          .total {  text-align: right;
-          font-size: 1.2em;
-          margin-top: 20px; }
+          .total {  text-align: right; font-size: 1.2em; margin-top: 20px; }
           .footer {
-          margin-top: 50px;
-          padding-top: 20px;
-          border-top: 1px solid #ddd;
-          text-align: center;
-          color: #666;
-        }
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            color: #666;
+          }
         </style>
       </head>
       <body>
         <div class="header">
-        <img src="/assets/img/logo/logo_2.png" alt="SoundWave Crackers" class="logo" />
-        <div class="invoice-details">
-          <h2>Order Summary</h2>
-          <p>Order ID: ${order.id}</p>
-          <p>Date: ${format(new Date(order.created_at), "PPpp")}</p>
-          <p>Status: ${order.status}</p>
-          <p><strong>Payment Method:</strong> ${order.payment_method}</p>
+          <img src="/assets/img/logo/logo_2.png" alt="SoundWave Crackers" class="logo" />
+          <div class="invoice-details">
+            <h2>Order Summary</h2>
+            <p>Order ID: ${order.short_id || order.id}</p>
+            <p>Date: ${format(new Date(order.created_at), "PPpp")}</p>
+            <p>Status: ${order.status}</p>
+            <p><strong>Payment Method:</strong> ${order.payment_method}</p>
+          </div>
         </div>
-      </div>
         <div class="section">
           <h2>Customer Information</h2>
           <p><strong>Name:</strong> ${order.full_name}</p>
           <p><strong>Email:</strong> ${order.email}</p>
           <p><strong>Phone:</strong> ${order.phone}</p>
-          <p><strong>Alternate Phone:</strong> ${
-            order.alternate_phone || "-"
-          }</p>
+          <p><strong>Alternate Phone:</strong> ${order.alternate_phone || "-"}</p>
         </div>
         <div class="section">
           <h2>Shipping Address</h2>
@@ -380,15 +384,26 @@ export function Orders() {
               `
                 )
                 .join("")}
+              <tr>
+                <td colspan="4" style="text-align:right;font-weight:bold;">Total Amount:</td>
+                <td style="text-align:right;font-weight:bold;">₹${order.total_amount.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td colspan="4" style="text-align:right;font-weight:bold;">Discount:</td>
+                <td style="text-align:right;font-weight:bold;">-₹${order.discount_amt?.toFixed(2) || "0.00"}</td>
+              </tr>
+              <tr>
+                <td colspan="4" style="text-align:right;font-weight:bold;">Grand Total:</td>
+                <td style="text-align:right;font-weight:bold;">₹${(order.total_amount - (order.discount_amt || 0)).toFixed(2)}</td>
+              </tr>
             </tbody>
           </table>
-          <p class="total">Total Amount: ₹${order.total_amount}</p>
         </div>
-         <div class="footer">
-        <p>Thank you for shopping with SoundWave Crackers!</p>
-        <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
-        <p>Phone: +91 9363515184, +91 9789794518</p>
-      </div>
+        <div class="footer">
+          <p>Thank you for shopping with SoundWave Crackers!</p>
+          <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
+          <p>Phone: +91 9363515184, +91 9789794518</p>
+        </div>
       </body>
       </html>
     `;
@@ -456,6 +471,12 @@ export function Orders() {
       </div>
     );
   }
+
+  const handleOpenDiscountModal = (order: Order) => {
+    setDiscountOrderId(order.id);
+    setDiscountInput(order.discount_amt ?? '');
+    setShowDiscountModal(true);
+  };
 
   return (
     <div className="min-h-screen pt-8 pb-12">
@@ -544,6 +565,7 @@ export function Orders() {
                   <th className="py-4 px-6 text-left">Contact</th>
                   <th className="py-4 px-6 text-left">Status</th>
                   <th className="py-4 px-6 text-right">Amount</th>
+                  <th className="py-4 px-6 text-right">Discounted Amount</th>
                   <th className="py-4 px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
@@ -564,13 +586,13 @@ export function Orders() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-text/60">
+                    <td colSpan={8} className="py-8 text-center text-text/60">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-8 text-center text-text/60">
+                    <td colSpan={8} className="py-8 text-center text-text/60">
                       No orders found
                     </td>
                   </tr>
@@ -581,7 +603,7 @@ export function Orders() {
                       className="border-t border-card-border/10"
                     >
                       <td className="py-4 px-6 font-mono text-sm">
-                        {order.id}
+                        {order.short_id || order.id}
                       </td>
                       <td className="py-4 px-6">{order.full_name}</td>
                       <td className="py-4 px-6">
@@ -611,6 +633,9 @@ export function Orders() {
                       <td className="py-4 px-6 text-right">
                         ₹{order.total_amount.toFixed(2)}
                       </td>
+                      <td className="py-4 px-6 text-right">
+                        ₹{(order.discount_amt || 0).toFixed(2)}
+                      </td>
                       <td className="py-4 px-6">
                         {format(new Date(order.created_at), "MMM dd, yyyy")}
                       </td>
@@ -630,13 +655,16 @@ export function Orders() {
                           >
                             <Download className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handlePrint(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="Print Order"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
+                          {/* Replace print button with discount button for superadmin */}
+                          {userRole?.name === "superadmin" && (
+                            <button
+                              onClick={() => handleOpenDiscountModal(order)}
+                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                              title="Add/Edit Discount"
+                            >
+                              <Percent className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleInvoicePrint(order)}
                             className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
@@ -719,6 +747,22 @@ export function Orders() {
                       </td>
                       <td className="py-3 px-4 text-right font-bold">
                         ₹{selectedOrder.total_amount}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-card-border/10 bg-card/50">
+                      <td colSpan={4} className="py-3 px-4 text-right font-bold">
+                        Discount:
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-green-700">
+                        -₹{selectedOrder.discount_amt?.toFixed(2) || "0.00"}
+                      </td>
+                    </tr>
+                    <tr className="border-t border-card-border/10 bg-card/50">
+                      <td colSpan={4} className="py-3 px-4 text-right font-bold">
+                        Grand Total:
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold">
+                        ₹{(selectedOrder.total_amount - (selectedOrder.discount_amt || 0)).toFixed(2)}
                       </td>
                     </tr>
                   </tbody>
@@ -820,6 +864,81 @@ export function Orders() {
                 disabled={updatingStatus}
               >
                 {updatingStatus ? "Updating..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discount Modal for Superadmin */}
+      {showDiscountModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
+              onClick={() => setShowDiscountModal(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-center">
+              Set Discount Amount
+            </h2>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={discountInput}
+              onChange={e => setDiscountInput(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg mb-6"
+              placeholder="Enter discount amount"
+              disabled={savingDiscount}
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                onClick={() => setShowDiscountModal(false)}
+                disabled={savingDiscount}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-primary-orange text-white hover:bg-primary-orange/90"
+                onClick={async () => {
+                  if (!discountOrderId) return;
+                  setSavingDiscount(true);
+                  try {
+                    const { error } = await supabase
+                      .from('orders')
+                      .update({ discount_amt: Number(discountInput) || 0 })
+                      .eq('id', discountOrderId);
+                    if (error) throw error;
+                    setOrders(orders =>
+                      orders.map(o =>
+                        o.id === discountOrderId
+                          ? { ...o, discount_amt: Number(discountInput) || 0 }
+                          : o
+                      )
+                    );
+                    // If the selected order is the one being updated, update it too
+                    if (selectedOrder?.id === discountOrderId) {
+                      setSelectedOrder({
+                        ...selectedOrder,
+                        discount_amt: Number(discountInput) || 0,
+                      });
+                    }
+                    setShowDiscountModal(false);
+                    setDiscountOrderId(null);
+                    setDiscountInput('');
+                  } catch (err) {
+                    alert('Failed to update discount');
+                  } finally {
+                    setSavingDiscount(false);
+                  }
+                }}
+                disabled={savingDiscount}
+              >
+                {savingDiscount ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
