@@ -18,6 +18,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { BulkImportModal } from "../components/BulkImportModal";
 import * as XLSX from "xlsx";
+import { p } from "framer-motion/client";
 
 interface Product {
   id: string;
@@ -37,6 +38,7 @@ interface Product {
   apr?: string;
   order?: number;
   is_active?: boolean;
+  yt_link?: string;
 }
 
 interface Category {
@@ -131,6 +133,9 @@ export function StockManagement() {
           description: editForm.description,
           apr: editForm.apr ? Number(Number(editForm.apr).toFixed(2)) : null,
           is_active: editForm.is_active,
+          yt_link: editForm.yt_link,
+          order: editForm.order,
+          product_code: editForm.product_code,
         })
         .eq("id", editingProduct.id);
 
@@ -720,6 +725,17 @@ export function StockManagement() {
                       required
                     />
                   </div>
+                 
+                  <div>
+                    <label className="block mb-1 font-medium">Product Code</label>
+                    <input
+                      type="text"
+                      value={editForm.product_code || ""}
+                      onChange={e => setEditForm(f => ({ ...f, product_code: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Product Code"
+                    />
+                  </div>
                   <div>
                     <label className="block mb-1 font-medium">Category</label>
                     <select
@@ -823,6 +839,26 @@ export function StockManagement() {
                       <option value="false">Inactive</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="block mb-1 font-medium">YouTube Video ID</label>
+                    <input
+                      type="text"
+                      value={editForm.yt_link || ""}
+                      onChange={e => setEditForm(f => ({ ...f, yt_link: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="YouTube Link"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Order</label>
+                    <input
+                      type="number"
+                      value={editForm.order ?? ""}
+                      onChange={e => setEditForm(f => ({ ...f, order: Number(e.target.value) }))}
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-end gap-4 mt-8">
                   <button
@@ -876,6 +912,9 @@ export function StockManagement() {
                       description: addForm.description,
                       apr: addForm.apr ? Number(Number(addForm.apr).toFixed(2)) : null,
                       order: addForm.order,
+                      is_active: addForm.is_active !== undefined ? addForm.is_active : true,
+                      product_code: addForm.product_code || "",
+                      yt_link: addForm.yt_link || "",
                     });
                     if (error) throw error;
                     setShowAddModal(false);
@@ -895,6 +934,16 @@ export function StockManagement() {
                       onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
                       className="w-full px-3 py-2 border rounded"
                       required
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Product Code</label>
+                    <input
+                      type="text"
+                      value={addForm.product_code || ""}
+                      onChange={e => setAddForm(f => ({ ...f, product_code: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Product Code"
                     />
                   </div>
                   <div>
@@ -1002,7 +1051,30 @@ export function StockManagement() {
                       rows={2}
                     />
                   </div>
+                  <div>
+                    <label className="block mb-1 font-medium">Active</label>
+                    <select
+                      value={addForm.is_active !== undefined ? String(addForm.is_active) : "true"}
+                      onChange={e => setAddForm(f => ({ ...f, is_active: e.target.value === "true" }))}
+                      className="w-full px-3 py-2 border rounded"
+                    >
+                      <option value="true">Active</option>
+                      <option value="false">Inactive</option>
+                    </select>
                 </div>
+
+                  <div>
+                    <label className="block mb-1 font-medium">YouTube Video ID</label>
+                    <input
+                      type="text"
+                      value={addForm.yt_link || ""}
+                      onChange={e => setAddForm(f => ({ ...f, yt_link: e.target.value }))}
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="YouTube Link"
+                    />
+                  </div>
+                </div>
+              
                 <div className="flex justify-end gap-4 mt-8">
                   <button
                     type="button"

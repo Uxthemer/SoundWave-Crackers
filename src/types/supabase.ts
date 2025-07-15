@@ -45,6 +45,7 @@ export interface Database {
           content: string | null
           stock: number
           created_at: string
+          yt_link: string | null
         }
         Insert: {
           id?: string
@@ -273,9 +274,11 @@ export interface Database {
           scheme_id: string
           start_date: string
           end_date: string
-          status: 'active' | 'completed' | 'cancelled'
+          status: 'active' | 'completed' | 'cancelled' | 'delayed'
           created_at: string
           updated_at: string
+          amount_paid: number | null
+          next_due_date: string | null
         }
         Insert: {
           id?: string

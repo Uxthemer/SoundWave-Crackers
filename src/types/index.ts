@@ -99,4 +99,5 @@ export interface ProductImport {
   stock: number;
   description?: string;
   order?: number | null;
+  yt_link?: string;
 }

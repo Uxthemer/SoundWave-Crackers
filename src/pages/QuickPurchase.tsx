@@ -103,6 +103,15 @@ export function QuickPurchase() {
     // eslint-disable-next-line
   }, [products, categories, searchTerm]);
 
+  // set initial quantities for products in the cart
+  useEffect(() => {
+    const initialQuantities: Record<string, number> = {};
+    items.forEach((item) => {
+      initialQuantities[item.id] = item.quantity;
+    });
+    setQuantities(initialQuantities);
+  }, [items]);
+
   const handleQuantityChange = (productId: string, value: string) => {
     const newQuantity = Math.max(0, parseInt(value) || 0);
     setQuantities((prev) => ({ ...prev, [productId]: newQuantity }));
@@ -282,7 +291,8 @@ export function QuickPurchase() {
                                   ) : (
                                     <img
                                       src={
-                                        product.image && product.image.length === 1
+                                        product.image &&
+                                        product.image.length === 1
                                           ? product.image[0]
                                           : `/assets/img/logo/logo-product.png`
                                       }
@@ -326,32 +336,6 @@ export function QuickPurchase() {
                                     </span>
                                   </div>
                                 </div>
-                                {modalImage && (
-                                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-block-100 bg-opacity-5">
-                                    <div className="relative bg-white/90 p-4 rounded-lg shadow-sm shadow-gray/90 max-w-3xl w-full flex flex-col items-center">
-                                      <button
-                                        onClick={() => setModalImage(null)}
-                                        className="absolute top-2 right-2 text-gray-700 hover:text-red-500 text-2xl font-bold"
-                                        aria-label="Close"
-                                      >
-                                        ×
-                                      </button>
-                                      <h2 className="mb-4 text-lg font-bold text-text text-center">
-                                        {modalImage.alt}
-                                      </h2>
-                                      {/* <img
-                                        src={modalImage.src}
-                                        alt={modalImage.alt}
-                                        className="max-w-[80vw] max-h-[80vh] rounded"
-                                      /> */}
-                                      <ProductImageSlider
-                                        images={modalImage.src}
-                                        alt={modalImage.alt}
-                                        className="max-w-[80vw] max-h-[80vh] rounded"
-                                      />
-                                    </div>
-                                  </div>
-                                )}
                               </div>
                             </div>
 
@@ -421,6 +405,36 @@ export function QuickPurchase() {
         </div>
       </div>
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      {modalImage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-block-100 bg-opacity-5">
+          <div className="relative bg-white p-4 rounded-lg shadow-sm shadow-gray/90 max-w-3xl w-full flex flex-col items-center border border-[#cac6c6]">
+            <button
+              onClick={() => setModalImage(null)}
+              className="absolute top-2 right-2 text-gray-700 hover:text-red-500 text-2xl font-bold"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="mb-4 text-lg font-bold text-text text-center">
+              {modalImage.alt}
+            </h2>
+            {modalImage.src.length === 1 ? (
+              <img
+                src={modalImage.src[0]}
+                alt={modalImage.alt}
+                className="max-w-[80vw] max-h-[80vh] rounded"
+              />
+            ) : (
+              /* Use ProductImageSlider for multiple images */
+              <ProductImageSlider
+                images={modalImage.src}
+                alt={modalImage.alt}
+                className="max-w-[80vw] max-h-[80vh] rounded"
+              />
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

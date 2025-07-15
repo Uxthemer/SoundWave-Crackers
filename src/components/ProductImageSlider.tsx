@@ -35,8 +35,8 @@ export function ProductImageSlider({ images, alt, className = "" }: ProductImage
           <img
             src={src}
             alt={alt}
-            className="w-full h-full object-cover"
-            style={{ objectFit: "cover", width: "100%", height: "100%" }}
+            className={`${className} object-fit-cover`}
+            style={{ width: "100%", height: "100%" }}
           />
         </SwiperSlide>
       ))}
