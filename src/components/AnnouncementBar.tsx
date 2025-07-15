@@ -75,7 +75,7 @@ export function AnnouncementBar() {
           {/* Social Icons */}
           <div className="flex items-center space-x-4">
             <a
-              href="https://facebook.com"
+              href="https://www.facebook.com/share/1EdxBeuFzS/"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white/80 transition-colors"
@@ -84,7 +84,7 @@ export function AnnouncementBar() {
               <Facebook className="w-4 h-4" />
             </a>
             <a
-              href="https://instagram.com"
+              href="https://www.instagram.com/soundwavecrackers/?igsh=MjE0OGJsZXkwcjhk#"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white/80 transition-colors"
@@ -93,7 +93,7 @@ export function AnnouncementBar() {
               <Instagram className="w-4 h-4" />
             </a>
             <a
-              href="https://twitter.com"
+              href="https://www.youtube.com/@SoundWaveCrackers"
               target="_blank"
               rel="noopener noreferrer"
               className="hover:text-white/80 transition-colors"

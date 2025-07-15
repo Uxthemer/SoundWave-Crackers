@@ -25,26 +25,35 @@ export function Footer() {
             </p>
             <div className="flex space-x-4">
               <a
-                href="#"
+                href="https://www.facebook.com/share/1EdxBeuFzS/"
                 className="text-text/60 hover:text-primary-orange transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook-Footer"
               >
                 <Facebook className="w-5 h-5" />
               </a>
-              <a
+              {/* <a
                 href="#"
                 className="text-text/60 hover:text-primary-orange transition-colors"
               >
                 <Twitter className="w-5 h-5" />
-              </a>
+              </a> */}
               <a
-                href="#"
+                href="https://www.instagram.com/soundwavecrackers/?igsh=MjE0OGJsZXkwcjhk#"
                 className="text-text/60 hover:text-primary-orange transition-colors"
+                aria-label="Instagram-Footer"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 <Instagram className="w-5 h-5" />
               </a>
               <a
-                href="#"
+                href="https://www.youtube.com/@SoundWaveCrackers"
                 className="text-text/60 hover:text-primary-orange transition-colors"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Youtube-Footer"
               >
                 <Youtube className="w-5 h-5" />
               </a>

@@ -68,6 +68,7 @@ export function BulkImportModal({
         discount_percentage: "10",
         content: "1 Box - 10 Pieces",
         description: "Product description",
+        yt_link: "video_id",
       },
     ];
 

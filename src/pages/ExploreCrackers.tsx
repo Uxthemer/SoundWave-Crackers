@@ -9,6 +9,7 @@ import {
   ShoppingCart,
   Loader2,
   Search,
+  Youtube,
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
@@ -16,6 +17,7 @@ import { useProducts } from "../hooks/useProducts";
 import { useCategories } from "../hooks/useCategories";
 import { Cart } from "../components/Cart";
 import { ProductImageSlider } from "../components/ProductImageSlider";
+import { boolean } from "zod";
 
 export function ExploreCrackers() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -28,6 +30,8 @@ export function ExploreCrackers() {
   const [displayProducts, setDisplayProducts] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
 
   // Get category from URL params
   useEffect(() => {
@@ -73,6 +77,7 @@ export function ExploreCrackers() {
         discount: p.discount_percentage,
         content: p.content,
         stock: p.stock,
+        yt_link: p.yt_link,
       }));
 
       setDisplayProducts(mappedProducts);
@@ -90,14 +95,33 @@ export function ExploreCrackers() {
     }
   }, [selectedCategory, products, searchTerm]);
 
+  // set initial quntities from cart items if exists
+  useEffect(() => {
+    if (items.length > 0) {
+      const initialQuantities: Record<string, number> = {};
+      items.forEach((item) => {
+        initialQuantities[item.id] = item.quantity;
+      });
+      setQuantities(initialQuantities);
+    }
+  }, [items]);
+
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
     setSearchParams(category === "all" ? {} : { category });
   };
 
-  const handleQuantityChange = (productId: string, value: string) => {
+  const handleQuantityChange = (product: any, value: string) => {
+    // Check if product is in stock
+    if (product.stock !== undefined && product.stock <= 0) {
+      return;
+    }
     const newQuantity = Math.max(0, parseInt(value) || 0);
-    setQuantities((prev) => ({ ...prev, [productId]: newQuantity }));
+    setQuantities((prev) => ({ ...prev, [product.id]: newQuantity }));
+
+    const currentQty = quantities[product.id] || 0;
+    const quantityChange = newQuantity - currentQty;
+    addToCart(product, quantityChange);
   };
 
   const handleIncrement = (product: any) => {
@@ -128,6 +152,22 @@ export function ExploreCrackers() {
     }
     setQuantities((prev) => ({ ...prev, [product.id]: 1 }));
     addToCart(product, 1);
+  };
+
+  // check if product already exists in cart
+  const productInCart = (productId: string) => {
+    return items.some((item) => item.id === productId);
+  };
+
+  // check if product is already in cart and has quantity greater than 0 then return quantity
+  const getProductQuantityFromCart = (productId: string) => {
+    const item = items.find((item) => item.id === productId);
+    return item ? item.quantity : 0;
+  };
+
+  const openVideoModal = (videoUrl: string) => {
+    setVideoUrl(videoUrl);
+    setIsVideoModalOpen(true);
   };
 
   if (productsLoading) {
@@ -284,9 +324,20 @@ export function ExploreCrackers() {
                         />
                       )}
                     </Link>
-                    <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm">
+                    <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
                       {product.discount}% OFF
                     </div>
+                    {
+                      product.yt_link && (
+                        <button
+                          onClick={() => openVideoModal(product.yt_link)}
+                          className="absolute bottom-2 right-2 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
+                          aria-label="Youtube"
+                          title="Watch video in youtube"
+                        >
+                          <Youtube className="w-6 h-6 text-red-500 hover:fill-red-500 hover:text-black" />
+                        </button>
+                      )}
                     {product.stock !== undefined && product.stock <= 0 && (
                       <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                         <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
@@ -313,6 +364,18 @@ export function ExploreCrackers() {
                       <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
                         {product.content}
                       </p>
+                      
+                      {/* {product.yt_link && (
+                        <a
+                          href={product.yt_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-left hover:text-red/80 transition-colors"
+                          aria-label="Youtube"
+                        >
+                          <Youtube className="w-4 h-4" />
+                        </a>
+                      )} */}
                       <div className="text-right">
                         <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
                           ₹{product.actual_price}
@@ -337,11 +400,12 @@ export function ExploreCrackers() {
                             <Minus className="w-4 h-4" />
                           </button>
                           <input
-                            type="number"
-                            min="0"
+                            type="text"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
                             value={quantities[product.id] || 0}
                             onChange={(e) =>
-                              handleQuantityChange(product.id, e.target.value)
+                              handleQuantityChange(product, e.target.value)
                             }
                             className="quantity-input"
                             aria-label="Quantity"
@@ -373,6 +437,29 @@ export function ExploreCrackers() {
         </div>
       </div>
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      {isVideoModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+          onClick={() => setIsVideoModalOpen(false)}
+        >
+          <div className="relative w-full max-w-3xl max-w-[80vw] max-h-[80vh] h-full">
+            <button
+              className="absolute top-4 right-4 text-white text-2xl"
+              onClick={() => setIsVideoModalOpen(false)}
+            >
+              &times;
+            </button>
+            <iframe
+              className="w-full h-full rounded-lg"
+              src={`https://youtube.com/embed/${videoUrl}`}
+              title="Product Video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking video
+            ></iframe>
+          </div>
+        </div>
+      )}
     </>
   );
 }

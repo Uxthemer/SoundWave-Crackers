@@ -16,7 +16,7 @@ import { supabase } from "../lib/supabase";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 
 export function TrendingCrackers() {
-  const { addToCart } = useCartStore();
+  const { addToCart, items } = useCartStore();
   const { products, loading: productsLoading } = useProducts();
   const [trendingProducts, setTrendingProducts] = useState(products);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -86,6 +86,20 @@ export function TrendingCrackers() {
       setQuantities({});
       setProductStock({});
       setLoading(false);
+    }
+  }, [products]);
+
+  // set initial quantities for trending products if it exists in cart
+  useEffect(() => {
+    if (products.length > 0) {
+      const initialQuantities: Record<string, number> = {};
+      products.forEach(product => {
+        const cartItem = items.find(item => item.id === product.id);
+        if (cartItem) {
+          initialQuantities[product.id] = cartItem.quantity;
+        }
+      });
+      setQuantities(initialQuantities);
     }
   }, [products]);
 

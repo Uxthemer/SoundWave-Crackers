@@ -7,6 +7,7 @@ import {
   Minus,
   ShoppingCart,
   Loader2,
+  Youtube,
 } from "lucide-react";
 import { useProducts } from "../hooks/useProducts";
 import { useCartStore } from "../store/cartStore";
@@ -25,6 +26,8 @@ export function ProductDetails() {
   const product = products.find((p) => p.id === productId);
   const cartItem = items.find((item) => item.id === productId);
   const [quantity, setQuantity] = useState(cartItem?.quantity || 1);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
 
   useEffect(() => {
     // Update local quantity when cart changes
@@ -38,6 +41,11 @@ export function ProductDetails() {
       setShowQuantity(false);
     }
   }, [productId, product?.id, items]);
+
+  const openVideoModal = (videoUrl: string) => {
+    setVideoUrl(videoUrl);
+    setIsVideoModalOpen(true);
+  };
 
   if (loading) {
     return (
@@ -54,9 +62,7 @@ export function ProductDetails() {
 
   const relatedProducts = products
     .filter(
-      (p) =>
-        p.categories.id === product.category_id &&
-        p.id !== product.id // Exclude the current product
+      (p) => p.categories.id === product.category_id && p.id !== product.id // Exclude the current product
     )
     .slice(0, 4);
 
@@ -192,7 +198,7 @@ export function ProductDetails() {
               </span>
             </div> */}
 
-            <div className="bg-card/50 rounded-xl p-6 mb-8">
+            <div className="relative bg-card/50 rounded-xl p-6 mb-8">
               <div className="flex items-end gap-4 mb-4">
                 <div>
                   <p className="text-sm text-text/60 line-through">
@@ -206,6 +212,15 @@ export function ProductDetails() {
                   {product.discount_percentage}% OFF
                 </span>
               </div>
+
+              ({product.yt_link && <button
+                onClick={() => openVideoModal(product.yt_link || "")}
+                className="absolute top-4 right-4 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
+                aria-label="Youtube"
+                title="Watch video in youtube"
+              >
+                <Youtube className="w-8 h-8 text-red-500 hover:fill-red-500 hover:text-black" />
+              </button>})
 
               <p className="text-text/60 mb-6">{product.content}</p>
 
@@ -344,6 +359,29 @@ export function ProductDetails() {
           </div>
         </div>
       </div>
+       {isVideoModalOpen && (
+        <div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
+          onClick={() => setIsVideoModalOpen(false)}
+        >
+          <div className="relative w-full max-w-3xl max-w-[80vw] max-h-[80vh] h-full">
+            <button
+              className="absolute top-4 right-4 text-white text-2xl"
+              onClick={() => setIsVideoModalOpen(false)}
+            >
+              &times;
+            </button>
+            <iframe
+              className="w-full h-full rounded-lg"
+              src={`https://youtube.com/embed/${videoUrl}`}
+              title="Product Video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking video
+            ></iframe>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

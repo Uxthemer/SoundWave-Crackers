@@ -105,13 +105,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
           setShowPhoneVerification(false);
           setVerificationId("");
           clearRecaptcha(); // <-- Clear recaptcha on error
-          confetti({
-            particleCount: 120,
-            spread: 90,
-            origin: { y: 1 },
-            startVelocity: 35,
-            angle: 90,
-          });
+          fireworkConfetti();
           toast.success(
             "Order placed successfully! We will contact you shortly through phone or whatsapp for further details.",
             { duration: 10000 }
