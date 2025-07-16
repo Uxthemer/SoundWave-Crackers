@@ -213,14 +213,14 @@ export function ProductDetails() {
                 </span>
               </div>
 
-              ({product.yt_link && <button
+              {product.yt_link && <button
                 onClick={() => openVideoModal(product.yt_link || "")}
                 className="absolute top-4 right-4 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
                 aria-label="Youtube"
                 title="Watch video in youtube"
               >
                 <Youtube className="w-8 h-8 text-red-500 hover:fill-red-500 hover:text-black" />
-              </button>})
+              </button>}
 
               <p className="text-text/60 mb-6">{product.content}</p>
 
