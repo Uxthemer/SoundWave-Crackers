@@ -6,8 +6,8 @@ export function Sitemap() {
   const sitemapData = {
     mainPages: [
       { title: "Home", path: "/" },
-      { title: "Quick Purchase", path: "/quick-purchase" },
-      { title: "Explore Crackers", path: "/explore" },
+      { title: "Quick Purchase", path: "/quick-online-cracker" },
+      { title: "Explore Crackers", path: "/buy-cracker-online" },
       { title: "Monthly Installment", path: "/payment" },
     ],
     accountPages: [

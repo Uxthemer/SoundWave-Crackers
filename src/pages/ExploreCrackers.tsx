@@ -182,7 +182,7 @@ export function ExploreCrackers() {
     <>
       <div className="pt-6 min-h-screen">
         <div className="sticky top-[89px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
-          <div className="container mx-auto px-6">
+          <div className="container mx-auto px-2 md:px-6">
             <div className="py-2">
               <div className="flex flex-wrap items-center gap-2 bg-card/50 p-2 rounded-xl">
                 <div className="flex-1 min-w-[100px] text-center">
@@ -298,12 +298,12 @@ export function ExploreCrackers() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   className={`card group p-2 ${
-                    viewMode === "list" ? "flex space-x-6" : ""
+                    viewMode === "list" ? "flex space-x-2 md:space-x-6" : ""
                   }`}
                 >
                   <div
                     className={`relative overflow-hidden rounded-lg ${
-                      viewMode === "list" ? "w-48 flex-shrink-0" : "block mb-4"
+                      viewMode === "list" ? "w-24 h-24 md:w-48 md:h-auto flex-shrink-0" : "block mb-4"
                     }`}
                   >
                     <Link to={`/product/${product.id}`}>
@@ -387,7 +387,7 @@ export function ExploreCrackers() {
                     </div>
                     <div
                       className={`flex items-center ${
-                        viewMode !== "list" ? "justify-center" : ""
+                        viewMode !== "list" ? "justify-center" : "justify-center md:justify-end w-full md:w-auto"
                       }`}
                     >
                       {quantities[product.id] ? (
@@ -422,7 +422,7 @@ export function ExploreCrackers() {
                         <button
                           onClick={() => handleAddToCart(product)}
                           className={`btn-primary ${
-                            viewMode !== "list" ? "w-full" : ""
+                            viewMode !== "list" ? "w-full" : "w-full md:w-auto"
                           } `}
                         >
                           Add to Cart

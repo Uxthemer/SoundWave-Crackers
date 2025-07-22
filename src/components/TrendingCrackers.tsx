@@ -152,7 +152,7 @@ export function TrendingCrackers() {
         <div className="flex justify-between items-center mb-12">
           <h2 className="font-heading text-4xl">Trending Crackers</h2>
           <Link
-            to="/explore"
+            to="/buy-cracker-online"
             className="flex items-center space-x-2 text-primary-orange hover:text-primary-red transition-colors"
           >
             <span>View All</span>

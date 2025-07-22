@@ -91,10 +91,10 @@ export function Footer() {
               </li>
               <li>
                 <a
-                  href="/#contact-us"
+                  href="/blog/firecracker-safety-tips"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Contact Us
+                  Safty Tips
                 </a>
               </li>
             </ul>

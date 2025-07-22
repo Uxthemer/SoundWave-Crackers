@@ -355,6 +355,7 @@ export function QuickPurchase() {
                                     onClick={() => handleDecrement(product.id)}
                                     className="p-2 rounded-l-lg bg-red-500/80 text-white hover:bg-red-500/60 transition-colors"
                                     disabled={!quantities[product.id]}
+                                    id={`decrement-${product.id}`}
                                   >
                                     <Minus className="w-4 h-4" />
                                   </button>
@@ -369,6 +370,7 @@ export function QuickPurchase() {
                                       )
                                     }
                                     className="w-16 px-1 py-1 text-center border-x border-card-border/10 bg-card"
+                                    id={`input-quantity-${product.id}`}
                                   />
                                   <button
                                     onClick={() => handleIncrement(product.id)}
@@ -377,6 +379,7 @@ export function QuickPurchase() {
                                       product.stock !== undefined &&
                                       product.stock <= 0
                                     }
+                                    id={`increment-${product.id}`}
                                   >
                                     <Plus className="w-4 h-4" />
                                   </button>

@@ -26,7 +26,7 @@ export function CrackerCategories() {
         <div className="flex justify-between items-center mb-12">
           <h2 className="font-heading text-4xl">Cracker Categories</h2>
           <Link
-            to="/explore"
+            to="/buy-cracker-online"
             className="flex items-center space-x-2 text-primary-orange hover:text-primary-red transition-colors"
           >
             <span>View All</span>
@@ -37,7 +37,7 @@ export function CrackerCategories() {
           {categories.map((category) => (
             <Link 
               key={category.id} 
-              to={`/explore?category=${category.name.toLowerCase()}`} 
+              to={`/buy-cracker-online?category=${category.name.toLowerCase()}`} 
               className="transform hover:scale-110 transition-transform duration-500"
             >
               <div className="card group relative overflow-hidden aspect-square flex flex-col items-center justify-center text-center p-2">

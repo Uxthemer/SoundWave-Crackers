@@ -6,8 +6,8 @@ const QuickPurchaseButton: React.FC = () => {
   const [animate, setAnimate] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
-  // Check if the current path is not "/quick-purchase" to avoid animation on that page
-  const isQuickPurchasePage = location.pathname === "/quick-purchase";
+  // Check if the current path is not "/quick-online-cracker" to avoid animation on that page
+  const isQuickPurchasePage = location.pathname === "/quick-online-cracker";
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -18,7 +18,7 @@ const QuickPurchaseButton: React.FC = () => {
   }, []);
 
   const handleClick = () => {
-    navigate("/quick-purchase");
+    navigate("/quick-online-cracker");
   };
 
   return (
@@ -30,7 +30,7 @@ const QuickPurchaseButton: React.FC = () => {
       aria-label="Quick Purchase"
     >
       <img
-        src="/assets/img/icons/Quick-Purchase-1.png"
+        src="/assets/img/icons/quick-purchase-1.png"
         alt="Quick Purchase"
         className="w-auto h-14 transition-transform duration-300 ease-in-out hover:scale-105"
         loading="lazy"

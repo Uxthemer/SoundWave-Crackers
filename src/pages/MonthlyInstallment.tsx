@@ -27,19 +27,19 @@ type SchemeSelection = Database["public"]["Tables"]["scheme_selections"]["Row"];
 const schemeSlides = [
   {
     id: 1,
-    image: "/assets/img/schemes/scheme1.jpg",
+    image: "/assets/img/banners/CTA-banner.png",
     title: "Monthly Savings Scheme",
     description: "Save monthly and get extra crackers as bonus!",
   },
   {
     id: 2,
-    image: "/assets/img/schemes/scheme2.jpg",
+    image: "/assets/img/banners/footer-banner.png",
     title: "Flexible Payment Options",
     description: "Choose your monthly installment amount",
   },
   {
     id: 3,
-    image: "/assets/img/schemes/scheme3.jpg",
+    image: "/assets/img/banners/CTA-banner.png",
     title: "Free Delivery",
     description: "Get your crackers delivered free of cost",
   },

@@ -50,6 +50,8 @@ import { MonthlyInstallment } from "./pages/MonthlyInstallment";
 import { useCartStore } from "./store/cartStore";
 import CancellationPolicy from "./pages/CancellationPolicy";
 import ShippingPolicy from "./pages/ShippingPolicy";
+import PrivacyPolicy from "./pages/privacy";
+import TermsOfService from "./pages/terms";
 import { BlogSection } from "./components/BlogSection";
 import { FAQSection } from "./components/FAQSection";
 import { BlogPost } from "./pages/BlogPost";
@@ -120,19 +122,19 @@ function BottomNav() {
         </span>
       </button>
       <button
-        onClick={() => navigate("/quick-purchase")}
+        onClick={() => navigate("/quick-online-cracker")}
         className="flex flex-col items-center text-sm focus:outline-none"
       >
         <ShoppingCart
           className={`w-5 h-5 ${
-            isActive("/quick-purchase")
+            isActive("/quick-online-cracker")
               ? "text-orange-500"
               : "text-gray-600 dark:text-gray-400"
           }`}
         />
         <span
           className={`text-xs ${
-            isActive("/quick-purchase")
+            isActive("/quick-online-cracker")
               ? "text-orange-500"
               : "text-gray-600 dark:text-gray-400"
           }`}
@@ -141,19 +143,19 @@ function BottomNav() {
         </span>
       </button>
       <button
-        onClick={() => navigate("/explore")}
+        onClick={() => navigate("/buy-cracker-online")}
         className="flex flex-col items-center text-sm focus:outline-none"
       >
         <GalleryThumbnails
           className={`w-5 h-5 ${
-            isActive("/explore")
+            isActive("/buy-cracker-online")
               ? "text-orange-500"
               : "text-gray-600 dark:text-gray-400"
           }`}
         />
         <span
           className={`text-xs ${
-            isActive("/explore")
+            isActive("/buy-cracker-online")
               ? "text-orange-500"
               : "text-gray-600 dark:text-gray-400"
           }`}
@@ -242,7 +244,7 @@ function AppContent() {
               Home
             </NavLink>
             <NavLink
-              to="/quick-purchase"
+              to="/quick-online-cracker"
               className={({ isActive }) =>
                 `font-montserrat font-semibold transition-colors ${
                   isActive
@@ -254,7 +256,7 @@ function AppContent() {
               Quick Purchase
             </NavLink>
             <NavLink
-              to="/explore"
+              to="/buy-cracker-online"
               className={({ isActive }) =>
                 `font-montserrat font-semibold transition-colors ${
                   isActive
@@ -267,6 +269,7 @@ function AppContent() {
             </NavLink>
             <NavLink
               to="/monthly-installment"
+              title="Monthly Installment (Chit)"
               className={({ isActive }) =>
                 `font-montserrat font-semibold transition-colors ${
                   isActive
@@ -275,12 +278,12 @@ function AppContent() {
                 }`
               }
             >
-              Monthly Installment(Chit)
+              Chit Scheme
             </NavLink>
           </div>
 
           <div className="flex items-center space-x-4">
-            <button onClick={toggleTheme} className="theme-toggle">
+            <button onClick={toggleTheme} className="theme-toggle" id="theme-toggle">
               {theme === "dark" ? (
                 <Sun className="w-6 h-6 text-primary-yellow hover:text-primary-yellow/50" />
               ) : (
@@ -289,7 +292,7 @@ function AppContent() {
             </button>
             <UserMenu />
             <div className="relative">
-              <button onClick={() => setIsCartOpen(true)} className="relative">
+              <button onClick={() => setIsCartOpen(true)} className="relative" id="cart-button">
                 <ShoppingCart className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
                 {items.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-primary-red text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -328,25 +331,26 @@ function AppContent() {
                 Home
               </Link>
               <Link
-                to="/quick-purchase"
+                to="/quick-online-cracker"
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
                 Quick Purchase
               </Link>
               <Link
-                to="/explore"
+                to="/buy-cracker-online"
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
                 Explore Crackers
               </Link>
               <Link
+              title="Monthly Installment (Chit)"
                 to="/monthly-installment"
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
-                Monthly Installment(Chit)
+                Chit Scheme
               </Link>
             </div>
           </div>
@@ -384,8 +388,8 @@ function AppContent() {
             </>
           }
         />
-        <Route path="/quick-purchase" element={<QuickPurchase />} />
-        <Route path="/explore" element={<ExploreCrackers />} />
+        <Route path="/quick-online-cracker" element={<QuickPurchase />} />
+        <Route path="/buy-cracker-online" element={<ExploreCrackers />} />
         <Route path="/product/:productId" element={<ProductDetails />} />
         <Route path="/monthly-installment" element={<MonthlyInstallment />} />
         <Route path="/login" element={<Login />} />
@@ -449,6 +453,8 @@ function AppContent() {
         />
         <Route path="/cancellation-policy" element={<CancellationPolicy />} />
         <Route path="/shipping-policy" element={<ShippingPolicy />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/sitemap" element={<Sitemap />} />
         <Route path="*" element={<NotFound />} />
         <Route path="/track-order" element={<TrackOrder />} />
