@@ -37,12 +37,12 @@ export function CTASection() {
             exclusive discounts and special festival offers.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 md:gap-8 mt-2">
-            <Link to="/explore">
+            <Link to="/buy-cracker-online">
               <button className="btn-primary px-8 py-4 text-lg w-full sm:w-auto">
                 Explore More Crackers
               </button>
             </Link>
-            <Link to="/quick-purchase">
+            <Link to="/quick-online-cracker">
               <button className="px-8 py-4 text-lg border-2 border-primary-orange text-primary-orange rounded-lg hover:bg-primary-orange hover:text-white transition-colors w-full sm:w-auto">
                 Quick Purchase
               </button>

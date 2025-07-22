@@ -56,7 +56,7 @@ export function ProductDetails() {
   }
 
   if (!product) {
-    navigate("/explore");
+    navigate("/buy-cracker-online");
     return null;
   }
 
@@ -133,14 +133,14 @@ export function ProductDetails() {
           </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <Link
-            to="/explore"
+            to="/buy-cracker-online"
             className="text-text/60 hover:text-primary-orange"
           >
             Explore
           </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <Link
-            to={`/explore?category=${product.categories.name.toLowerCase()}`}
+            to={`/buy-cracker-online?category=${product.categories.name.toLowerCase()}`}
             className="text-text/60 hover:text-primary-orange"
           >
             {product.categories.name}
