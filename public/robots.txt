@@ -4,8 +4,12 @@ Allow: /
 # Sitemap
 Sitemap: https://soundwavecrackers.com/sitemap.xml
 
-# Disallow admin and private routes
+# Disallow admin and private/user-only routes
 Disallow: /admin/
 Disallow: /profile/
 Disallow: /myorders/
 Disallow: /api/
+Disallow: /analytics/
+Disallow: /users/
+Disallow: /orders/
+Disallow: /privacy/

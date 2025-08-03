@@ -197,3 +197,23 @@
 .shiny-text.disabled {
   animation: none;
 }
+
+.shining-text {
+  position: relative;
+  background: linear-gradient(90deg, #000000 20%, #ff1a0a 50%, #000000 80%);
+  background-size: 200% auto;
+  color: #000000;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine-wave 2s linear infinite;
+}
+
+@keyframes shine-wave {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: 0% center;
+  }
+}

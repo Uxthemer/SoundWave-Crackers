@@ -44,6 +44,7 @@ interface Product {
 interface Category {
   id: string;
   name: string;
+  order?: number;
 }
 
 export function StockManagement() {
@@ -95,7 +96,7 @@ export function StockManagement() {
       const { data, error } = await supabase
         .from("categories")
         .select("*")
-        .order("name");
+        .order("order"); // <-- order by category order
 
       if (error) throw error;
       setCategories(data || []);
@@ -154,63 +155,153 @@ export function StockManagement() {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const content = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Stock Management Report</title>
-        <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          h1 { color: #FF5722; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f5f5f5; }
-          .low-stock { color: #FF0000; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <h1>Stock Management Report</h1>
-        <p>Generated on: ${format(new Date(), "PPpp")}</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Product Name</th>
-              <th>Category</th>
-              <th>Content</th>
-              <th>Stock</th>
-              <th>Actual Price</th>
-              <th>Offer Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${filteredProducts
-              .map(
-                (product) => `
-              <tr>
-                <td>${product.name}</td>
-                <td>${product.categories?.name || "-"}</td>
-                <td>${product.content || "-"}</td>
-                <td class="${product.stock <= 20 ? "low-stock" : ""}">${
-                  product.stock
-                }</td>
-                <td>₹${product.actual_price}</td>
-                <td>₹${product.offer_price}</td>
-              </tr>
-            `
-              )
-              .join("")}
-          </tbody>
-        </table>
-      </body>
-      </html>
+    // Group products by category and sort products by order inside each category
+    const grouped: { [cat: string]: Product[] } = {};
+    filteredProducts.forEach((product) => {
+      const catName = product.categories?.name || "Uncategorized";
+      if (!grouped[catName]) grouped[catName] = [];
+      grouped[catName].push(product);
+    });
+
+    // Sort products inside each category by product.order
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
+
+    // Get category order mapping from categories state
+    const categoryOrderMap: Record<string, number> = {};
+    categories.forEach((cat) => {
+      categoryOrderMap[cat.name] = cat.order ?? 0;
+    });
+
+    // Sort categories by category order
+    const sortedCategoryNames = Object.keys(grouped).sort(
+      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
+    );
+
+    // Generate table rows
+    let tableRows = "";
+    let serial = 1;
+    sortedCategoryNames.forEach((catName) => {
+      const products = grouped[catName];
+      // Category row
+      tableRows += `
+      <tr>
+        <td colspan="7" style="text-align:center; font-weight:bold; background:#f5f5f5; font-size:1.1rem;">
+          ${catName}
+        </td>
+      </tr>
     `;
+      // Product rows
+      products.forEach((product) => {
+        tableRows += `
+        <tr>
+          <td>${serial++}</td>
+          <td>${product.name}</td>
+          <td>${product.content || "-"}</td>
+          <td class="${product.stock <= 20 ? "text-red-500 font-bold" : ""}">${product.stock}</td>
+          <td><del>₹${product.actual_price}</del></td>
+          <td>₹${product.offer_price}</td>
+          <td>${product.apr || "-"}</td>
+        </tr>
+      `;
+      });
+    });
+
+    const content = `
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soundwave Crackers - Stock Report 2025</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif, "Segoe UI";
+      background-color: #fff0f5;
+      color: #333;
+    }
+    .table-section {
+      padding: 20px;
+    }
+    .table-overlay {
+      background-color: rgba(255, 255, 255, 0.88);
+      padding: 30px;
+      border-radius: 12px;
+      margin: auto;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    table.product-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    table.product-table th,
+    table.product-table td {
+      border: 1px solid #999;
+      padding: 12px 15px;
+      text-align: center;
+    }
+    table.product-table th {
+      background-color: brown;
+      font-weight: bold;
+      color: wheat;
+    }
+    .text-red-500 {
+      color: #FF0000 !important;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <section class="table-section">
+    <div class="table-overlay">
+      <table class="product-table">
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Product</th>
+            <th>Content</th>
+            <th>Stock</th>
+            <th>Actual Price</th>
+            <th>Offer Price</th>
+            <th>APR</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <footer style="text-align: center; padding: 20px; font-size: 0.9rem; color: #666;">
+    <p><strong>Soundwave Crackers</strong> - Your premier destination for premium-quality crackers and fireworks, making your celebrations brighter and more memorable.</p>
+    <p>Thank you for choosing Soundwave Crackers! For inquiries, contact us</p>
+  </footer>
+  <script>
+    // Wait for DOM to be loaded before printing
+    function readyToPrint() {
+      setTimeout(function() {
+        window.print();
+        window.close();
+      }, 300);
+    }
+    if (document.readyState === "complete") {
+      readyToPrint();
+    } else {
+      window.onload = readyToPrint;
+    }
+  </script>
+</body>
+</html>
+  `;
 
     printWindow.document.write(content);
     printWindow.document.close();
-    printWindow.print();
   };
 
-  const handlePriceListDownload = async () => {
+  const handlePriceListDownload1 = async () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
@@ -388,7 +479,167 @@ export function StockManagement() {
 
     printWindow.document.write(content);
     printWindow.document.close();
-    printWindow.print();
+  };
+
+  const handlePriceListDownload = async () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    // Group products by category and sort products by order inside each category
+    const grouped: { [cat: string]: Product[] } = {};
+    filteredProducts.forEach((product) => {
+      const catName = product.categories?.name || "Uncategorized";
+      if (!grouped[catName]) grouped[catName] = [];
+      grouped[catName].push(product);
+    });
+
+    // Sort products inside each category by product.order
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
+
+    // Get category order mapping from categories state
+    const categoryOrderMap: Record<string, number> = {};
+    categories.forEach((cat) => {
+      categoryOrderMap[cat.name] = cat.order ?? 0;
+    });
+
+    // Sort categories by category order
+    const sortedCategoryNames = Object.keys(grouped).sort(
+      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
+    );
+
+    // Generate table rows
+    let tableRows = "";
+    let serial = 1;
+    sortedCategoryNames.forEach((catName) => {
+      const products = grouped[catName];
+      // Category row
+      tableRows += `
+      <tr>
+        <td colspan="5" style="text-align:center; font-weight:bold; background:#f5f5f5; font-size:1.1rem;">
+          ${catName}
+        </td>
+      </tr>
+    `;
+      // Product rows
+      products.forEach((product) => {
+        tableRows += `
+        <tr>
+          <td>${serial++}</td>
+          <td>${product.name}</td>
+          <td><del>₹${product.actual_price}</del></td>
+          <td>₹${product.offer_price}</td>
+          <td>${product.content || "-"}</td>
+        </tr>
+      `;
+      });
+    });
+
+    const content = `
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soundwave Crackers - Price List 2025</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif, "Segoe UI";
+      background-color: #fff0f5;
+      color: #333;
+    }
+    .header-image {
+      width: 100%;
+      max-height: 400px;
+      display: block;
+      margin: 0 auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+    .table-overlay {
+      background-color: rgba(255, 255, 255, 0.88);
+      padding: 20px 10px;
+      border-radius: 12px;
+      margin: auto;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    table.product-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    table.product-table th,
+    table.product-table td {
+      border: 1px solid #999;
+      padding: 12px 15px;
+      text-align: center;
+    }
+    table.product-table th {
+      background-color: brown;
+      font-weight: bold;
+      color: wheat;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/assets/img/banners/price-list-header.png" alt="Soundwave Crackers Banner" class="header-image" />
+  </header>
+  <section class="table-section">
+    <div class="table-overlay">
+      <table class="product-table">
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Product</th>
+            <th>Actual Price</th>
+            <th>Offer Price</th>
+            <th>Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <footer style="text-align: center; padding: 20px; font-size: 0.9rem; color: #666;">
+    <p><strong>Soundwave Crackers</strong> - Your premier destination for premium-quality crackers and fireworks, making your celebrations brighter and more memorable.</p>
+    <p>Thank you for choosing Soundwave Crackers! For inquiries, contact us</p>
+  </footer>
+  <script>
+    // Wait for all images and DOM to be loaded before printing
+    function readyToPrint() {
+      const img = document.querySelector('.header-image');
+      if (img && !img.complete) {
+        img.onload = function() {
+          setTimeout(function() {
+            window.print();
+            window.close();
+          }, 300);
+        };
+      } else {
+        setTimeout(function() {
+          window.print();
+          window.close();
+        }, 300);
+      }
+    }
+    if (document.readyState === "complete") {
+      readyToPrint();
+    } else {
+      window.onload = readyToPrint;
+    }
+  </script>
+</body>
+</html>
+  `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
   };
 
   const filteredProducts = products.filter((product) => {
@@ -411,7 +662,10 @@ export function StockManagement() {
   };
 
   // Helper to safely get the value for sorting
-  const getSortValue = (product: Product, field: string): string | number | boolean => {
+  const getSortValue = (
+    product: Product,
+    field: string
+  ): string | number | boolean => {
     switch (field) {
       case "order":
         return product.order ?? 0;
@@ -482,8 +736,8 @@ export function StockManagement() {
               {filteredProducts.length} products
             </span>
           </div>
-          <div className="flex flex-wrap gap-4">
-            <div className="relative">
+          <div className="flex flex-wrap gap-4 w-full md:w-auto">
+            <div className="relative w-full sm:w-auto">
               <input
                 type="text"
                 placeholder="Search products..."
@@ -496,7 +750,7 @@ export function StockManagement() {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="px-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+              className="px-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange w-full sm:w-auto"
             >
               <option value="all">All Categories</option>
               {categories.map((category) => (
@@ -508,24 +762,25 @@ export function StockManagement() {
           </div>
         </div>
 
-        <div className="flex gap-4 mb-6">
+        {/* Responsive Button Group */}
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6 w-full">
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
           >
             <Upload className="w-5 h-5" />
             <span>Bulk Import</span>
           </button>
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
           >
             <Printer className="w-5 h-5" />
-            <span>Print Report</span>
+            <span>Print Stock Report</span>
           </button>
           <button
             onClick={handlePriceListDownload}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
           >
             <Printer className="w-5 h-5" />
             <span>Price List</span>
@@ -533,7 +788,7 @@ export function StockManagement() {
           {["admin", "superadmin"].includes(userRole?.name || "") && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
             >
               <Plus className="w-5 h-5" />
               <span>Add Product</span>
@@ -546,86 +801,146 @@ export function StockManagement() {
             <table className="w-full">
               <thead>
                 <tr className="bg-card/50">
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("order")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("order")}
+                  >
                     <span className="flex items-center gap-1">
                       Order
-                      {sortField === "order" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "order" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("product_code")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("product_code")}
+                  >
                     <span className="flex items-center gap-1">
                       Product Code
-                      {sortField === "product_code" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "product_code" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("name")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("name")}
+                  >
                     <span className="flex items-center gap-1">
                       Product Name
-                      {sortField === "name" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "name" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("categories.name")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("categories.name")}
+                  >
                     <span className="flex items-center gap-1">
                       Category
-                      {sortField === "categories.name" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "categories.name" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("content")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("content")}
+                  >
                     <span className="flex items-center gap-1">
                       Content
-                      {sortField === "content" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "content" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("stock")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("stock")}
+                  >
                     <span className="flex items-center gap-1">
                       Stock
-                      {sortField === "stock" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "stock" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("actual_price")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("actual_price")}
+                  >
                     <span className="flex items-center gap-1">
                       Actual Price
-                      {sortField === "actual_price" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "actual_price" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("offer_price")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("offer_price")}
+                  >
                     <span className="flex items-center gap-1">
                       Offer Price
-                      {sortField === "offer_price" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "offer_price" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
                   {userRole?.name === "superadmin" && (
-                    <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("apr")}>
+                    <th
+                      className="py-4 px-6 text-left cursor-pointer"
+                      onClick={() => handleSort("apr")}
+                    >
                       <span className="flex items-center gap-1">
                         APR
-                        {sortField === "apr" && (
-                          sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                        )}
+                        {sortField === "apr" &&
+                          (sortDirection === "asc" ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          ))}
                       </span>
                     </th>
                   )}
-                  <th className="py-4 px-6 text-left cursor-pointer" onClick={() => handleSort("is_active")}>
+                  <th
+                    className="py-4 px-6 text-left cursor-pointer"
+                    onClick={() => handleSort("is_active")}
+                  >
                     <span className="flex items-center gap-1">
                       Active
-                      {sortField === "is_active" && (
-                        sortDirection === "asc" ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />
-                      )}
+                      {sortField === "is_active" &&
+                        (sortDirection === "asc" ? (
+                          <ChevronUp className="w-4 h-4" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4" />
+                        ))}
                     </span>
                   </th>
                   <th className="py-4 px-6 text-center">Actions</th>
@@ -646,13 +961,22 @@ export function StockManagement() {
                   </tr>
                 ) : (
                   sortedProducts.map((product) => (
-                    <tr key={product.id} className="border-t border-card-border/10">
+                    <tr
+                      key={product.id}
+                      className="border-t border-card-border/10"
+                    >
                       <td className="py-4 px-6">{product.order ?? "-"}</td>
-                      <td className="py-4 px-6">{product.product_code || "-"}</td>
+                      <td className="py-4 px-6">
+                        {product.product_code || "-"}
+                      </td>
                       <td className="py-4 px-6">{product.name}</td>
                       <td className="py-4 px-6">{product.categories?.name}</td>
                       <td className="py-4 px-6">{product.content}</td>
-                      <td className={`py-4 px-6 ${product.stock <= 20 ? "text-red-500 font-bold" : ""}`}>
+                      <td
+                        className={`py-4 px-6 ${
+                          product.stock <= 20 ? "text-red-500 font-bold" : ""
+                        }`}
+                      >
                         {product.stock}
                       </td>
                       <td className="py-4 px-6">₹{product.actual_price}</td>
@@ -661,11 +985,13 @@ export function StockManagement() {
                         <td className="py-4 px-6">{product.apr || "-"}</td>
                       )}
                       <td className="py-4 px-6">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                          product.is_active
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-bold ${
+                            product.is_active
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
                           {product.is_active ? "Active" : "Inactive"}
                         </span>
                       </td>
@@ -707,31 +1033,44 @@ export function StockManagement() {
               >
                 ×
               </button>
-              <h2 className="text-2xl font-bold mb-4 text-center">Edit Product</h2>
+              <h2 className="text-2xl font-bold mb-4 text-center">
+                Edit Product
+              </h2>
               <form
-                onSubmit={e => {
+                onSubmit={(e) => {
                   e.preventDefault();
                   handleEditModalSave();
                 }}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block mb-1 font-medium">Product Name</label>
+                    <label className="block mb-1 font-medium">
+                      Product Name
+                    </label>
                     <input
                       type="text"
                       value={editForm.name || ""}
-                      onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, name: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       required
                     />
                   </div>
-                 
+
                   <div>
-                    <label className="block mb-1 font-medium">Product Code</label>
+                    <label className="block mb-1 font-medium">
+                      Product Code
+                    </label>
                     <input
                       type="text"
                       value={editForm.product_code || ""}
-                      onChange={e => setEditForm(f => ({ ...f, product_code: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          product_code: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Product Code"
                     />
@@ -740,12 +1079,19 @@ export function StockManagement() {
                     <label className="block mb-1 font-medium">Category</label>
                     <select
                       value={editForm.category_id || ""}
-                      onChange={e => setEditForm(f => ({ ...f, category_id: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          category_id: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       required
                     >
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -754,7 +1100,9 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={editForm.content || ""}
-                      onChange={e => setEditForm(f => ({ ...f, content: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, content: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                     />
                   </div>
@@ -763,27 +1111,46 @@ export function StockManagement() {
                     <input
                       type="number"
                       value={editForm.stock ?? ""}
-                      onChange={e => setEditForm(f => ({ ...f, stock: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          stock: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Actual Price</label>
+                    <label className="block mb-1 font-medium">
+                      Actual Price
+                    </label>
                     <input
                       type="number"
                       value={editForm.actual_price ?? ""}
-                      onChange={e => setEditForm(f => ({ ...f, actual_price: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          actual_price: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Offer Price</label>
+                    <label className="block mb-1 font-medium">
+                      Offer Price
+                    </label>
                     <input
                       type="number"
                       value={editForm.offer_price ?? ""}
-                      onChange={e => setEditForm(f => ({ ...f, offer_price: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          offer_price: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
@@ -793,7 +1160,9 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={editForm.apr || ""}
-                      onChange={e => setEditForm(f => ({ ...f, apr: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, apr: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="APR"
                     />
@@ -803,7 +1172,12 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={editForm.image_url || ""}
-                      onChange={e => setEditForm(f => ({ ...f, image_url: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          image_url: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Image URL"
                     />
@@ -813,16 +1187,28 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={editForm.discount_percentage || ""}
-                      onChange={e => setEditForm(f => ({ ...f, discount_percentage: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          discount_percentage: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Discount %"
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block mb-1 font-medium">Description</label>
+                    <label className="block mb-1 font-medium">
+                      Description
+                    </label>
                     <textarea
                       value={editForm.description || ""}
-                      onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          description: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Description"
                       rows={2}
@@ -832,7 +1218,12 @@ export function StockManagement() {
                     <label className="block mb-1 font-medium">Active</label>
                     <select
                       value={editForm.is_active ? "true" : "false"}
-                      onChange={e => setEditForm(f => ({ ...f, is_active: e.target.value === "true" }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          is_active: e.target.value === "true",
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                     >
                       <option value="true">Active</option>
@@ -840,11 +1231,15 @@ export function StockManagement() {
                     </select>
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">YouTube Video ID</label>
+                    <label className="block mb-1 font-medium">
+                      YouTube Video ID
+                    </label>
                     <input
                       type="text"
                       value={editForm.yt_link || ""}
-                      onChange={e => setEditForm(f => ({ ...f, yt_link: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, yt_link: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="YouTube Link"
                     />
@@ -854,7 +1249,12 @@ export function StockManagement() {
                     <input
                       type="number"
                       value={editForm.order ?? ""}
-                      onChange={e => setEditForm(f => ({ ...f, order: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          order: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
@@ -887,7 +1287,10 @@ export function StockManagement() {
           {/* Prevent background scroll when modal is open */}
           <style>{`body { overflow: hidden !important; }`}</style>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-xl mx-2 relative overflow-y-auto" style={{ maxHeight: "90vh" }}>
+            <div
+              className="bg-white rounded-lg shadow-lg p-4 sm:p-6 w-full max-w-xl mx-2 relative overflow-y-auto"
+              style={{ maxHeight: "90vh" }}
+            >
               <button
                 className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
                 onClick={() => setShowAddModal(false)}
@@ -895,9 +1298,11 @@ export function StockManagement() {
               >
                 ×
               </button>
-              <h2 className="text-2xl font-bold mb-4 text-center">Add Product</h2>
+              <h2 className="text-2xl font-bold mb-4 text-center">
+                Add Product
+              </h2>
               <form
-                onSubmit={async e => {
+                onSubmit={async (e) => {
                   e.preventDefault();
                   try {
                     const { error } = await supabase.from("products").insert({
@@ -910,9 +1315,14 @@ export function StockManagement() {
                       discount_percentage: addForm.discount_percentage,
                       image_url: addForm.image_url,
                       description: addForm.description,
-                      apr: addForm.apr ? Number(Number(addForm.apr).toFixed(2)) : null,
+                      apr: addForm.apr
+                        ? Number(Number(addForm.apr).toFixed(2))
+                        : null,
                       order: addForm.order,
-                      is_active: addForm.is_active !== undefined ? addForm.is_active : true,
+                      is_active:
+                        addForm.is_active !== undefined
+                          ? addForm.is_active
+                          : true,
                       product_code: addForm.product_code || "",
                       yt_link: addForm.yt_link || "",
                     });
@@ -927,21 +1337,32 @@ export function StockManagement() {
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block mb-1 font-medium">Product Name</label>
+                    <label className="block mb-1 font-medium">
+                      Product Name
+                    </label>
                     <input
                       type="text"
                       value={addForm.name || ""}
-                      onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({ ...f, name: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Product Code</label>
+                    <label className="block mb-1 font-medium">
+                      Product Code
+                    </label>
                     <input
                       type="text"
                       value={addForm.product_code || ""}
-                      onChange={e => setAddForm(f => ({ ...f, product_code: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          product_code: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Product Code"
                     />
@@ -950,13 +1371,20 @@ export function StockManagement() {
                     <label className="block mb-1 font-medium">Category</label>
                     <select
                       value={addForm.category_id || ""}
-                      onChange={e => setAddForm(f => ({ ...f, category_id: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          category_id: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       required
                     >
                       <option value="">Select</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -965,7 +1393,9 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={addForm.content || ""}
-                      onChange={e => setAddForm(f => ({ ...f, content: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({ ...f, content: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                     />
                   </div>
@@ -974,27 +1404,46 @@ export function StockManagement() {
                     <input
                       type="number"
                       value={addForm.stock ?? ""}
-                      onChange={e => setAddForm(f => ({ ...f, stock: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          stock: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Actual Price</label>
+                    <label className="block mb-1 font-medium">
+                      Actual Price
+                    </label>
                     <input
                       type="number"
                       value={addForm.actual_price ?? ""}
-                      onChange={e => setAddForm(f => ({ ...f, actual_price: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          actual_price: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Offer Price</label>
+                    <label className="block mb-1 font-medium">
+                      Offer Price
+                    </label>
                     <input
                       type="number"
                       value={addForm.offer_price ?? ""}
-                      onChange={e => setAddForm(f => ({ ...f, offer_price: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          offer_price: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                     />
@@ -1004,7 +1453,9 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={addForm.apr || ""}
-                      onChange={e => setAddForm(f => ({ ...f, apr: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({ ...f, apr: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="APR"
                       disabled={userRole?.name !== "superadmin"}
@@ -1015,7 +1466,12 @@ export function StockManagement() {
                     <input
                       type="number"
                       value={addForm.order ?? ""}
-                      onChange={e => setAddForm(f => ({ ...f, order: Number(e.target.value) }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          order: Number(e.target.value),
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       min={0}
                       placeholder="Order"
@@ -1026,7 +1482,9 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={addForm.image_url || ""}
-                      onChange={e => setAddForm(f => ({ ...f, image_url: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({ ...f, image_url: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Image URL"
                     />
@@ -1036,16 +1494,28 @@ export function StockManagement() {
                     <input
                       type="text"
                       value={addForm.discount_percentage || ""}
-                      onChange={e => setAddForm(f => ({ ...f, discount_percentage: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          discount_percentage: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Discount %"
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block mb-1 font-medium">Description</label>
+                    <label className="block mb-1 font-medium">
+                      Description
+                    </label>
                     <textarea
                       value={addForm.description || ""}
-                      onChange={e => setAddForm(f => ({ ...f, description: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          description: e.target.value,
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="Description"
                       rows={2}
@@ -1054,27 +1524,40 @@ export function StockManagement() {
                   <div>
                     <label className="block mb-1 font-medium">Active</label>
                     <select
-                      value={addForm.is_active !== undefined ? String(addForm.is_active) : "true"}
-                      onChange={e => setAddForm(f => ({ ...f, is_active: e.target.value === "true" }))}
+                      value={
+                        addForm.is_active !== undefined
+                          ? String(addForm.is_active)
+                          : "true"
+                      }
+                      onChange={(e) =>
+                        setAddForm((f) => ({
+                          ...f,
+                          is_active: e.target.value === "true",
+                        }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                     >
                       <option value="true">Active</option>
                       <option value="false">Inactive</option>
                     </select>
-                </div>
+                  </div>
 
                   <div>
-                    <label className="block mb-1 font-medium">YouTube Video ID</label>
+                    <label className="block mb-1 font-medium">
+                      YouTube Video ID
+                    </label>
                     <input
                       type="text"
                       value={addForm.yt_link || ""}
-                      onChange={e => setAddForm(f => ({ ...f, yt_link: e.target.value }))}
+                      onChange={(e) =>
+                        setAddForm((f) => ({ ...f, yt_link: e.target.value }))
+                      }
                       className="w-full px-3 py-2 border rounded"
                       placeholder="YouTube Link"
                     />
                   </div>
                 </div>
-              
+
                 <div className="flex justify-end gap-4 mt-8">
                   <button
                     type="button"

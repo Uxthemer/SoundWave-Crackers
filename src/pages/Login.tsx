@@ -7,6 +7,7 @@ import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
 import toast from "react-hot-toast";
 import { z } from "zod";
+import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
 const emailSchema = z.string().email("Invalid email format");
 const phoneSchema = z.string().regex(/^[6-9]\d{9}$/, "Invalid phone number");
@@ -34,6 +35,31 @@ const loginSchema = z
 
 type LoginMethod = "email" | "phone";
 
+// Helper for toast with icon and color
+function showToast(type: "success" | "error" | "warning", message: string) {
+  const icon =
+    type === "success"
+      ? <CheckCircle2 className="text-green-600 w-5 h-5 mr-2" />
+      : type === "error"
+      ? <XCircle className="text-red-600 w-5 h-5 mr-2" />
+      : <AlertTriangle className="text-yellow-500 w-5 h-5 mr-2" />;
+  toast(
+    <span className="flex items-center">{icon}{message}</span>,
+    {
+      duration: 6000,
+      icon: null,
+      style: {
+        background: type === "success"
+          ? "#e6ffed"
+          : type === "error"
+          ? "#ffeaea"
+          : "#fffbe5",
+        color: "#222",
+      },
+    }
+  );
+}
+
 export function Login() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [email, setEmail] = useState("");
@@ -59,10 +85,16 @@ export function Login() {
       const { error } = await signInWithEmail(email, password);
       if (error) throw error;
 
-      toast.success("Successfully signed in!");
+      showToast("success", "Successfully signed in!");
       navigate("/");
     } catch (error: any) {
-      toast.error(error.message || "Failed to sign in");
+      console.error(error);
+      showToast(
+        "error",
+        error.message && !error.message.startsWith("Failed")
+          ? "Invalid credentials or account not found."
+          : "Failed to sign in. Please check your details and try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +104,7 @@ export function Login() {
     e.preventDefault();
 
     if (retryDelay > 0) {
-      toast.error(`Please wait ${retryDelay} seconds before trying again`);
+      showToast("warning", `Please wait ${retryDelay} seconds before trying again`);
       return;
     }
 
@@ -100,48 +132,56 @@ export function Login() {
             });
           }, 1000);
 
-          throw new Error(
-            `Too many attempts. Please try again in ${delay} seconds`
-          );
+          showToast("warning", `Too many attempts. Please try again in ${delay} seconds`);
+          throw error;
         }
         throw error;
       }
 
       if (!verificationId) {
+        showToast("error", "Failed to send verification code. Please try again.");
         throw new Error("Failed to send verification code");
       }
 
       setVerificationId(verificationId);
       setShowOTPVerification(true);
-      toast.success("Verification code sent successfully!");
+      showToast("success", "Verification code sent successfully!");
 
       setRetryCount(0);
     } catch (error: any) {
-      toast.error(error.message || "An error occurred");
+      console.error(error);
+      showToast(
+        "error",
+        error.message && !error.message.startsWith("An error")
+          ? "Could not send verification code. Please check your number."
+          : "An error occurred. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleVerified = async () => {
-    // handle email based login based on mobile number verification
-    const { data: phoneUser, error: phoneUserError } = await supabase
-      .from("user_profiles")
-      .select("email, pwd")
-      .eq("phone", phone)
-      .single();
-    if (phoneUserError) throw phoneUserError;
-
-    if (phoneUser) {
-      const { error } = await signInWithEmail(
-        phoneUser.email,
-        atob(phoneUser.pwd)
-      );
-      if (error) throw error;
+    try {
+      const { data: phoneUser, error: phoneUserError } = await supabase
+        .from("user_profiles")
+        .select("email, pwd")
+        .eq("phone", phone)
+        .single();
+      if (phoneUserError) throw phoneUserError;
+      if (phoneUser) {
+        const { error } = await signInWithEmail(
+          phoneUser.email,
+          atob(phoneUser.pwd)
+        );
+        if (error) throw error;
+      }
+      showToast("success", "Successfully signed in!");
+      navigate("/");
+    } catch (error: any) {
+      console.error(error);
+      showToast("error", "Verification failed. Please try again.");
     }
-
-    toast.success("Successfully signed in!");
-    navigate("/");
   };
 
   return (

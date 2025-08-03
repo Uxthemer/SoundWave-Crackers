@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { User, Mail, Phone, Lock, LogIn } from "lucide-react";
+import { User, Mail, Phone, Lock, LogIn, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import toast from "react-hot-toast";
@@ -48,6 +48,30 @@ export function Signup() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  function showToast(type: "success" | "error" | "warning", message: string) {
+    const icon =
+      type === "success"
+        ? <CheckCircle2 className="text-green-600 w-5 h-5 mr-2" />
+        : type === "error"
+        ? <XCircle className="text-red-600 w-5 h-5 mr-2" />
+        : <AlertTriangle className="text-yellow-500 w-5 h-5 mr-2" />;
+    toast(
+      <span className="flex items-center">{icon}{message}</span>,
+      {
+        duration: 6000,
+        icon: null,
+        style: {
+          background: type === "success"
+            ? "#e6ffed"
+            : type === "error"
+            ? "#ffeaea"
+            : "#fffbe5",
+          color: "#222",
+        },
+      }
+    );
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -62,6 +86,7 @@ export function Signup() {
         formData.phone
       );
       if (existingUser.exists) {
+        showToast("error", existingUser.message || "User already exists.");
         throw new Error(existingUser.message);
       }
 
@@ -79,7 +104,13 @@ export function Signup() {
       // setShowOTPVerification(true);
       // toast.success('Verification code sent successfully!');
     } catch (error: any) {
-      toast.error(error.message || "Failed to sign up");
+      console.error(error);
+      showToast(
+        "error",
+        error.message && !error.message.startsWith("Failed")
+          ? "Could not sign up. Please check your details."
+          : "Failed to sign up. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -100,14 +131,13 @@ export function Signup() {
       if (signUpError) throw signUpError;
 
       navigate("/");
-      toast.success(
-        "Account created & you are now logged in! Start shopping for your favorites.",
-        {
-          duration: 5000,
-        }
+      showToast(
+        "success",
+        "Account created & you are now logged in! Start shopping for your favorites."
       );
     } catch (error: any) {
-      toast.error(error.message || "Failed to create account");
+      console.error(error);
+      showToast("error", "Failed to create account. Please try again.");
     } finally {
       setIsLoading(false);
     }
