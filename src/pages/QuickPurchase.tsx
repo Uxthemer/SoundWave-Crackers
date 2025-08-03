@@ -15,11 +15,13 @@ import { Cart } from "../components/Cart";
 import { useProducts } from "../hooks/useProducts";
 import { useCategories } from "../hooks/useCategories";
 import { ProductImageSlider } from "../components/ProductImageSlider";
+import { useAuth } from "../context/AuthContext"; // Import your auth context
 
 export function QuickPurchase() {
   const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
   const { products, loading } = useProducts();
   const { categories } = useCategories();
+  const { userProfile } = useAuth(); // Get user profile/role
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [groupedProducts, setGroupedProducts] = useState<Record<string, any[]>>(
@@ -316,25 +318,29 @@ export function QuickPurchase() {
                                   <span className="bg-primary-orange/10 text-primary-orange px-2 py-0.5 rounded-full text-xs">
                                     {product.discount}% OFF
                                   </span>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-xs text-text/60">
-                                      Stock :
-                                    </span>
-                                    <span
-                                      className={`font-bold text-sm ${
-                                        product.stock !== undefined &&
-                                        product.stock <= 0
-                                          ? "text-red-500"
-                                          : "text-text"
-                                      }`}
-                                    >
-                                      {product.stock !== undefined
-                                        ? product.stock > 0
-                                          ? `${product.stock}`
-                                          : "0"
-                                        : "Unlimited"}
-                                    </span>
-                                  </div>
+                                  {/* Show stock only for admin/superadmin */}
+                                  {(userProfile?.role === "admin" ||
+                                    userProfile?.role === "superadmin") && (
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-text/60">
+                                        Stock :
+                                      </span>
+                                      <span
+                                        className={`font-bold text-sm ${
+                                          product.stock !== undefined &&
+                                          product.stock <= 0
+                                            ? "text-red-500"
+                                            : "text-text"
+                                        }`}
+                                      >
+                                        {product.stock !== undefined
+                                          ? product.stock > 0
+                                            ? `${product.stock}`
+                                            : "0"
+                                          : "Unlimited"}
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>

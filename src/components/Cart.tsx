@@ -131,7 +131,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const handlePlaceOrder = async (paymentMethod: string) => {
     try {
       setIsProcessing(true);
-      setOrderError(null); // Clear previous error
+      setOrderError(null);
 
       // Check if user is authenticated
       const {
@@ -144,21 +144,21 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
       // --- PARALLEL STOCK CHECKS ---
       // Fire all stock queries in parallel
-      const stockResults = await Promise.all(
-        items.map((item) =>
-          supabase.from("products").select("stock").eq("id", item.id).single()
-        )
-      );
+      // const stockResults = await Promise.all(
+      //   items.map((item) =>
+      //     supabase.from("products").select("stock").eq("id", item.id).single()
+      //   )
+      // );
 
-      // Check for out-of-stock items
-      for (let i = 0; i < items.length; i++) {
-        const stock = stockResults[i].data?.stock ?? 0;
-        if (items[i].quantity > stock) {
-          throw new Error(
-            `Insufficient stock for ${items[i].name}. Only ${stock} left.`
-          );
-        }
-      }
+      // // Check for out-of-stock items
+      // for (let i = 0; i < items.length; i++) {
+      //   const stock = stockResults[i].data?.stock ?? 0;
+      //   if (items[i].quantity > stock) {
+      //     throw new Error(
+      //       `Insufficient stock for ${items[i].name}. Only ${stock} left.`
+      //     );
+      //   }
+      // }
 
       // Create order
       const orderItems = items.map((item) => ({

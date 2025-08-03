@@ -246,14 +246,14 @@ function AppContent() {
             <NavLink
               to="/quick-online-cracker"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors ${
+                `font-montserrat font-semibold transition-colors animate-bounce ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
                 }`
               }
             >
-              Quick Purchase
+                Quick Purchase
             </NavLink>
             <NavLink
               to="/buy-cracker-online"
@@ -271,7 +271,7 @@ function AppContent() {
               to="/monthly-installment"
               title="Monthly Installment (Chit)"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors ${
+                `font-montserrat font-semibold transition-colors relative shining-text ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
@@ -335,7 +335,13 @@ function AppContent() {
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
               >
-                Quick Purchase
+                <motion.span
+                  animate={{ y: [0, -8, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
+                  style={{ display: "inline-block" }}
+                >
+                  Quick Purchase
+                </motion.span>
               </Link>
               <Link
                 to="/buy-cracker-online"
@@ -345,9 +351,9 @@ function AppContent() {
                 Explore Crackers
               </Link>
               <Link
-              title="Monthly Installment (Chit)"
+                title="Monthly Installment (Chit)"
                 to="/monthly-installment"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors shining-text"
                 onClick={handleMenuItemClick}
               >
                 Chit Scheme

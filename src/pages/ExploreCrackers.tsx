@@ -300,10 +300,17 @@ export function ExploreCrackers() {
                   className={`card group p-2 ${
                     viewMode === "list" ? "flex space-x-2 md:space-x-6" : ""
                   }`}
+                  style={
+                    viewMode !== "list"
+                      ? { display: "flex", flexDirection: "column", height: "100%" }
+                      : {}
+                  }
                 >
                   <div
                     className={`relative overflow-hidden rounded-lg ${
-                      viewMode === "list" ? "w-24 h-24 md:w-48 md:h-auto flex-shrink-0" : "block mb-4"
+                      viewMode === "list"
+                        ? "w-24 h-24 md:w-48 md:h-auto flex-shrink-0"
+                        : "block mb-4"
                     }`}
                   >
                     <Link to={`/product/${product.id}`}>
@@ -347,47 +354,39 @@ export function ExploreCrackers() {
                     )}
                   </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <Link to={`/product/${product.id}`}>
-                          <h3 className="font-montserrat font-bold text-sm sm:text-xs md:text-sm lg:text-sm">
-                            {product.name}
-                          </h3>
-                        </Link>
-                        <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60">
-                          {product.category}
-                        </p>
+                  <div className="flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <Link to={`/product/${product.id}`}>
+                            <h3 className="font-montserrat font-bold text-sm sm:text-xs md:text-sm lg:text-sm">
+                              {product.name}
+                            </h3>
+                          </Link>
+                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60">
+                            {product.category}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-start justify-between mb-2">
-                      <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
-                        {product.content}
-                      </p>
-                      
-                      {/* {product.yt_link && (
-                        <a
-                          href={product.yt_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-left hover:text-red/80 transition-colors"
-                          aria-label="Youtube"
-                        >
-                          <Youtube className="w-4 h-4" />
-                        </a>
-                      )} */}
-                      <div className="text-right">
-                        <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
-                          ₹{product.actual_price}
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
+                          {product.content}
                         </p>
-                        <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
-                          ₹{product.offer_price}
-                        </p>
+                        <div className="text-right">
+                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
+                            ₹{product.actual_price}
+                          </p>
+                          <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
+                            ₹{product.offer_price}
+                          </p>
+                        </div>
                       </div>
                     </div>
                     <div
-                      className={`flex items-center ${
-                        viewMode !== "list" ? "justify-center" : "justify-center md:justify-end w-full md:w-auto"
+                      className={`flex items-center mt-auto ${
+                        viewMode !== "list"
+                          ? "justify-center"
+                          : "justify-center md:justify-end w-full md:w-auto"
                       }`}
                     >
                       {quantities[product.id] ? (
@@ -424,6 +423,7 @@ export function ExploreCrackers() {
                           className={`btn-primary ${
                             viewMode !== "list" ? "w-full" : "w-full md:w-auto"
                           } `}
+                          style={{ marginTop: "auto" }}
                         >
                           Add to Cart
                         </button>
