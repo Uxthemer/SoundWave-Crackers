@@ -105,13 +105,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
           setShowPhoneVerification(false);
           setVerificationId("");
           clearRecaptcha(); // <-- Clear recaptcha on error
-          fireworkConfetti();
           toast.success(
             "Order placed successfully! We will contact you shortly through phone or whatsapp for further details.",
             { duration: 10000 }
           );
           clearCart();
           onClose();
+          fireworkConfetti();
         }
       })();
     }
@@ -178,10 +178,21 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
       setLastOrderId(orderData.id);
 
-      setVerifyingPhone(deliveryDetails.phone);
-      setShowPhoneVerification(true);
+      // setVerifyingPhone(deliveryDetails.phone);
+      // setShowPhoneVerification(true);
+
       setShowPayment(false);
       setShowDeliveryForm(false);
+      setShowPhoneVerification(false);
+      setVerificationId("");
+      clearRecaptcha(); // <-- Clear recaptcha on error
+      toast.success(
+        "Order placed successfully! We will contact you shortly through phone or whatsapp for further details.",
+        { duration: 10000 }
+      );
+      clearCart();
+      onClose();
+      fireworkConfetti();
     } catch (error) {
       const msg =
         error instanceof Error ? error.message : "Failed to place order";
@@ -194,7 +205,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
   // Utility function for fireworks effect
   function fireworkConfetti() {
-    const duration = 3 * 1000; // 3 seconds (adjust as needed)
+    const duration = 10 * 1000; // 3 seconds (adjust as needed)
     const animationEnd = Date.now() + duration;
     const defaults = {
       startVelocity: 30,
@@ -455,7 +466,10 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   </thead>
                   <tbody>
                     {items.map((item) => (
-                      <tr key={item.id} className="border-t border-card-border/10">
+                      <tr
+                        key={item.id}
+                        className="border-t border-card-border/10"
+                      >
                         <td className="py-4 px-2 sm:px-4 max-w-xs">
                           <div className="flex items-center gap-2 sm:gap-4 max-w-full">
                             <img
@@ -464,8 +478,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                   ? Array.isArray(item.image)
                                     ? item.image[0]
                                     : item.image?.split(",")[0]
-                                  : `/assets/img/crackers/${item.image_url?.split(",")[0]}` ||
-                                    "/assets/img/logo/logo-product.png"
+                                  : `/assets/img/crackers/${
+                                      item.image_url?.split(",")[0]
+                                    }` || "/assets/img/logo/logo-product.png"
                               }
                               alt={item.name}
                               className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
@@ -528,8 +543,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
                             ? Array.isArray(item.image)
                               ? item.image[0]
                               : item.image?.split(",")[0]
-                            : `/assets/img/crackers/${item.image_url?.split(",")[0]}` ||
-                              "/assets/img/logo/logo-product.png"
+                            : `/assets/img/crackers/${
+                                item.image_url?.split(",")[0]
+                              }` || "/assets/img/logo/logo-product.png"
                         }
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-lg"
@@ -559,7 +575,10 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               min="0"
                               value={item.quantity}
                               onChange={(e) =>
-                                updateQuantity(item.id, parseInt(e.target.value) || 0)
+                                updateQuantity(
+                                  item.id,
+                                  parseInt(e.target.value) || 0
+                                )
                               }
                               className="w-12 px-2 py-1 text-center rounded-lg border border-card-border/10 focus:outline-none focus:border-primary-orange text-sm"
                             />
