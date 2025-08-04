@@ -91,10 +91,7 @@ export function Login() {
       console.error(error);
       showToast(
         "error",
-        error.message && !error.message.startsWith("Failed")
-          ? "Invalid credentials or account not found."
-          : "Failed to sign in. Please check your details and try again."
-      );
+        error.message);
     } finally {
       setIsLoading(false);
     }

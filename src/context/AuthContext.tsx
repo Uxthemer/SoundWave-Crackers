@@ -147,10 +147,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       subscription.unsubscribe();
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
     };
   }, []);
 
@@ -160,7 +156,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from("user_profiles")
         .select("*, roles(*)")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (profileError && profileError.code !== "PGRST116") {
         throw profileError;
@@ -224,14 +220,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { error: new Error("User not found. Please sign up.") };
       }
 
-      if (!userProfile.phone_verified) {
-        navigate("/signup");
-        return {
-          error: new Error(
-            "Phone number not verified. Please complete signup process."
-          ),
-        };
-      }
+      // if (!userProfile.phone_verified) {
+      //   navigate("/signup");
+      //   return {
+      //     error: new Error(
+      //       "Phone number not verified. Please complete signup process."
+      //     ),
+      //   };
+      // }
 
       // Proceed with supabase authentication
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -292,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (profileError) throw profileError;
       }
-      window.location.reload();
+      //window.location.reload();
       return { error: null };
     } catch (error) {
       return { error };
