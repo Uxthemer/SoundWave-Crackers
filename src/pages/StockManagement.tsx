@@ -569,12 +569,12 @@ export function StockManagement() {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.75rem;
-      font-weight: 600;
+      font-weight: 400;
     }
     table.product-table th,
     table.product-table td {
       border: 1px solid #999;
-      padding: 12px 15px;
+      padding: 5px 8px;
       text-align: center;
     }
     table.product-table th {
