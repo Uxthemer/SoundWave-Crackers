@@ -33,24 +33,14 @@ export function AboutSection() {
               <span ref={typedRef}></span>
             </p>
             <p className="text-text/80 mb-4 leading-relaxed ">
-              At <b>SoundWave Crackers</b>, we bring you the finest selection of
-              high-quality fireworks to make your celebrations truly
-              spectacular. As a trusted fireworks retailer, we curate a wide
-              range of <b>safe, vibrant, and exciting</b> crackers to suit every
-              occasion—from festivals and weddings to grand festivities.
+              <b>SoundWave Crackers</b> brings you top-quality fireworks to make every celebration pop! From festivals to weddings, we’ve got a vibrant range of safe and exciting crackers for all occasions.
             </p>
             <p className="text-text/80 mb-4 leading-relaxed">
-              We take pride in offering{" "}
-              <b>top-tier products from reputed manufacturers</b>, ensuring
-              safety, reliability, and dazzling displays. Customer satisfaction
-              is at the heart of what we do, and we strive to provide an
-              effortless shopping experience with the best deals and a wide
-              variety of choices
+             We only stock trusted brands, so you get bright, reliable fireworks without the worry. Great deals, easy shopping, and a huge selection — that’s what we’re all about.
             </p>
             <p className="text-text/80 mb-8 leading-relaxed">
               <i>
-                Light up your moments with <b>SoundWave Crackers</b> — where
-                every celebration shines brighter!
+                Light up the moment with <b>SoundWave Crackers</b> — where every celebration shines brighter!
               </i>
             </p>
             <div className="grid grid-cols-2 gap-6">
