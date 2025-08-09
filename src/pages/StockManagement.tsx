@@ -560,7 +560,7 @@ export function StockManagement() {
     }
     .table-overlay {
       background-color: rgba(255, 255, 255, 0.88);
-      padding: 20px 10px;
+      padding: 20px 6px;
       border-radius: 12px;
       margin: auto;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);

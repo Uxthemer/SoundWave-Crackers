@@ -37,7 +37,7 @@ export function CrackerCategories() {
           {categories.map((category) => (
             <Link 
               key={category.id} 
-              to={`/buy-cracker-online?category=${category.name.toLowerCase()}`} 
+              to={`/buy-cracker-online?category=${encodeURIComponent(category.name.toLowerCase())}`} 
               className="transform hover:scale-110 transition-transform duration-500"
             >
               <div className="card group relative overflow-hidden aspect-square flex flex-col items-center justify-center text-center p-2">
