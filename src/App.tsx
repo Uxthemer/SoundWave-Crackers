@@ -63,6 +63,7 @@ import QuickPurchaseButton from "./components/QuickButton";
 import { TrackOrder } from "./pages/TrackOrder";
 import { Payment } from "./pages/Payment";
 import { Expenses } from "./pages/Expenses";
+import { UpdatePassword } from "./pages/UpdatePassword";
 
 const ProtectedRoute = ({
   children,
@@ -234,7 +235,7 @@ function AppContent() {
             <NavLink
               to="/"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors ${
+                `font-montserrat font-semibold transition-colors cursor-pointer ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
@@ -246,19 +247,19 @@ function AppContent() {
             <NavLink
               to="/quick-online-cracker"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors animate-bounce ${
+                `font-montserrat font-semibold transition-colors animate-bounce cursor-pointer ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
                 }`
               }
             >
-                Quick Purchase
+              Quick Purchase
             </NavLink>
             <NavLink
               to="/buy-cracker-online"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors ${
+                `font-montserrat font-semibold transition-colors cursor-pointer ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
@@ -271,7 +272,7 @@ function AppContent() {
               to="/monthly-installment"
               title="Monthly Installment (Chit)"
               className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors relative shining-text ${
+                `font-montserrat font-semibold transition-colors relative shining-text cursor-pointer ${
                   isActive
                     ? "text-primary-orange"
                     : "text-primary hover:text-primary-orange"
@@ -325,14 +326,14 @@ function AppContent() {
             <div className="flex flex-col space-y-4">
               <Link
                 to="/"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors cursor-pointer"
                 onClick={handleMenuItemClick}
               >
                 Home
               </Link>
               <Link
                 to="/quick-online-cracker"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors cursor-pointer"
                 onClick={handleMenuItemClick}
               >
                 <motion.span
@@ -345,7 +346,7 @@ function AppContent() {
               </Link>
               <Link
                 to="/buy-cracker-online"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors cursor-pointer"
                 onClick={handleMenuItemClick}
               >
                 Explore Crackers
@@ -353,7 +354,7 @@ function AppContent() {
               <Link
                 title="Monthly Installment (Chit)"
                 to="/monthly-installment"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors shining-text"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors shining-text cursor-pointer"
                 onClick={handleMenuItemClick}
               >
                 Chit Scheme
@@ -473,6 +474,8 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+      
+      <Route path="/update-password" element={<UpdatePassword />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />

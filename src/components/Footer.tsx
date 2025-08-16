@@ -205,6 +205,10 @@ export function Footer() {
               </Link>
             </div>
           </div>
+          <div className="mt-4 text-center text-xs text-text/40">
+            Designed by{" "}
+            <span className="font-semibold text-primary-orange">UxThemer</span>
+          </div>
         </div>
       </div>
     </footer>
