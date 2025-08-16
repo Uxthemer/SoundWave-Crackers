@@ -249,8 +249,12 @@ export function Login() {
     setForgotLoading(true);
     try {
       emailSchema.parse(forgotEmail);
+      const redirectUrl =
+        import.meta.env.VITE_PUBLIC_SITE_URL
+          ? `${import.meta.env.VITE_PUBLIC_SITE_URL}/update-password`
+          : `${window.location.origin}/update-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: window.location.origin + "/update-password"
+        redirectTo: redirectUrl,
       });
       if (error) throw error;
       showToast("success", "Password reset link sent to your email.");
