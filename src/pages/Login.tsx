@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Phone, Mail, LogIn, AlertCircle, Lock } from "lucide-react";
+import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
@@ -60,6 +60,65 @@ function showToast(type: "success" | "error" | "warning", message: string) {
   );
 }
 
+function ForgotPasswordModal({
+  forgotEmail,
+  setForgotEmail,
+  forgotLoading,
+  setShowForgotModal,
+  handleForgotPassword,
+}: {
+  forgotEmail: string;
+  setForgotEmail: (v: string) => void;
+  forgotLoading: boolean;
+  setShowForgotModal: (v: boolean) => void;
+  handleForgotPassword: (e: React.FormEvent) => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+      <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-md relative">
+        <button
+          className="absolute top-2 right-2 text-gray-500 hover:text-primary"
+          onClick={() => setShowForgotModal(false)}
+        >
+          <XCircle className="w-6 h-6" />
+        </button>
+        <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+          <KeyRound className="w-6 h-6 text-primary-orange" />
+          Forgot Password
+        </h2>
+        <form onSubmit={handleForgotPassword} className="space-y-4">
+          <label className="block text-sm font-medium mb-2">
+            Enter your registered email address
+          </label>
+          <input
+            type="email"
+            value={forgotEmail}
+            onChange={(e) => setForgotEmail(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg border border-card-border/10 focus:outline-none focus:border-primary-orange"
+            placeholder="Email"
+            disabled={forgotLoading}
+            required
+          />
+          <button
+            type="submit"
+            className="btn-primary w-full flex items-center justify-center"
+            disabled={forgotLoading}
+          >
+            {forgotLoading ? (
+              <span className="animate-pulse">Sending...</span>
+            ) : (
+              <>
+                <KeyRound className="w-5 h-5 mr-2" />
+                <span>Send Reset Link</span>
+              </>
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function Login() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [email, setEmail] = useState("");
@@ -70,6 +129,9 @@ export function Login() {
   const [verificationId, setVerificationId] = useState("");
   const [retryDelay, setRetryDelay] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
 
   const { signInWithEmail, signInWithPhone } = useAuth();
   const navigate = useNavigate();
@@ -178,6 +240,27 @@ export function Login() {
     } catch (error: any) {
       console.error(error);
       showToast("error", "Verification failed. Please try again.");
+    }
+  };
+
+  // --- FORGOT PASSWORD LOGIC ---
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    try {
+      emailSchema.parse(forgotEmail);
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: window.location.origin + "/update-password"
+      });
+      if (error) throw error;
+      showToast("success", "Password reset link sent to your email.");
+      setShowForgotModal(false);
+      setForgotEmail("");
+    } catch (error: any) {
+      console.error(error);
+      showToast("error", "Failed to send reset link. Please check your email.");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -320,6 +403,16 @@ export function Login() {
               </form>
             )}
 
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                className="text-primary-orange hover:text-primary-red underline text-sm"
+                onClick={() => setShowForgotModal(true)}
+              >
+                Forgot Password?
+              </button>
+            </div>
+
             <div className="mt-6 text-center">
               <p className="text-text/60">
                 Don't have an account?{" "}
@@ -347,6 +440,15 @@ export function Login() {
           verificationId={verificationId}
           onVerified={handleVerified}
           onCancel={() => setShowOTPVerification(false)}
+        />
+      )}
+      {showForgotModal && (
+        <ForgotPasswordModal
+          forgotEmail={forgotEmail}
+          setForgotEmail={setForgotEmail}
+          forgotLoading={forgotLoading}
+          setShowForgotModal={setShowForgotModal}
+          handleForgotPassword={handleForgotPassword}
         />
       )}
     </div>
