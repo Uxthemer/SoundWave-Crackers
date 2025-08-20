@@ -195,7 +195,7 @@ export function StockManagement() {
       // Product rows
       products.forEach((product) => {
         tableRows += `
-        <tr>
+        <tr class="${product.is_active ? "" : "text-red-500 font-bold"}">
           <td>${serial++}</td>
           <td>${product.name}</td>
           <td>${product.content || "-"}</td>
@@ -457,7 +457,7 @@ export function StockManagement() {
               <tr>
               <td>${index + 1}</td>
               <td>${product.categories?.name || "-"}</td>
-                <td>${product.name}</td>
+                <td class="text-left">${product.name}</td>
                 <td>₹${product.actual_price}</td>
                 <td>₹${product.offer_price}</td>
                 <td>${product.content || "-"}</td>
@@ -484,6 +484,9 @@ export function StockManagement() {
   const handlePriceListDownload = async () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+
+    // Filter products based on active status
+    const filteredProducts = products.filter((product) => product.is_active);
 
     // Group products by category and sort products by order inside each category
     const grouped: { [cat: string]: Product[] } = {};
@@ -527,7 +530,7 @@ export function StockManagement() {
         tableRows += `
         <tr>
           <td>${serial++}</td>
-          <td>${product.name}</td>
+          <td class="text-align-left">${product.name}</td>
           <td><del>₹${product.actual_price}</del></td>
           <td>₹${product.offer_price}</td>
           <td>${product.content || "-"}</td>
@@ -576,6 +579,9 @@ export function StockManagement() {
       border: 1px solid #999;
       padding: 5px 8px;
       text-align: center;
+    }
+    table.product-table td.text-align-left {
+      text-align: left;
     }
     table.product-table th {
       background-color: brown;
