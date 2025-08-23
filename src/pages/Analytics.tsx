@@ -323,11 +323,11 @@ export function Analytics() {
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">Growth</h3>
+                <h3 className="text-sm font-montserrat font-bold">Available Stock</h3>
                 <div className="group relative">
                   <Info className="w-4 h-4 text-text/40 cursor-help" />
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Revenue growth compared to previous period
+                    Available stock value across all products 
                   </div>
                 </div>
               </div>

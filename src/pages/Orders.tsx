@@ -41,6 +41,7 @@ interface Order {
   alternate_phone: string;
   address: string;
   city: string;
+  district: string;
   state: string;
   pincode: string;
   total_amount: number;
