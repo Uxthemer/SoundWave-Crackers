@@ -217,3 +217,21 @@
     background-position: 0% center;
   }
 }
+
+@keyframes glow1 {
+  from {
+    text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 30px #0dbaf9, 0 0 40px #0dbaf9, 0 0 50px #0dbaf9, 0 0 60px #0dbaf9, 0 0 70px #0dbaf9;
+  }
+  to {
+    text-shadow: 0 0 10px #fff, 0 0 15px #3b38fc, 0 0 40px #3b38fc, 0 0 50px #3b38fc, 0 0 60px #3b38fc, 0 0 70px #3b38fc, 0 0 80px #3b38fc;
+  }
+}
+
+.glow-text {
+  font-size: 20px;
+  color: #2b00ff;
+  text-align: center;
+  animation: glow1 1s ease-in-out infinite alternate;
+}
+
+

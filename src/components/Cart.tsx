@@ -133,6 +133,49 @@ export function Cart({ isOpen, onClose }: CartProps) {
       setIsProcessing(true);
       setOrderError(null);
 
+      // verify all the mandatory fields
+      const { customerName, phone, address, city, state, district, pincode, email } =
+        deliveryDetails;
+      if (
+        !customerName ||
+        !phone ||
+        !address ||
+        !city ||
+        !state ||
+        !district ||
+        !pincode || !email
+      ) {
+        throw new Error("Please fill all mandatory fields");
+      }
+      if (items.length === 0) {
+        throw new Error("Your cart is empty");
+      }
+
+      // check phone number format (basic)
+      const phoneRegex = /^[6-9]\d{9}$/;
+      if (!phoneRegex.test(phone)) {
+        throw new Error("Please enter a valid 10-digit phone number");
+      }
+      if (deliveryDetails.alternatePhone) {
+        if (!phoneRegex.test(deliveryDetails.alternatePhone)) {
+          throw new Error(
+            "Please enter a valid 10-digit alternate phone number"
+          );
+        }
+      }
+      if (deliveryDetails.referralPhone) {
+        if (!phoneRegex.test(deliveryDetails.referralPhone)) {
+          throw new Error(
+            "Please enter a valid 10-digit referral phone number"
+          );
+        }
+      }
+      // check pincode format (basic)
+      const pinRegex = /^[1-9][0-9]{5}$/;
+      if (!pinRegex.test(pincode)) {
+        throw new Error("Please enter a valid 6-digit pincode");
+      }
+
       // Check if user is authenticated
       const {
         data: { user },
@@ -141,6 +184,19 @@ export function Cart({ isOpen, onClose }: CartProps) {
       if (authError || !user) {
         throw new Error("Please sign in to place an order");
       }
+
+      // check minimum order amount >= 2000
+      if (totalAmount < 2000) {
+        throw new Error("Minimum order amount is ₹2000");
+      }
+
+      // check minumum order amount should be 2000 and above for tamilnadu state and 5000 and above for other states
+      // if (state.toLowerCase() === "tamil nadu" && totalAmount < 2000) {
+      //   throw new Error("Minimum order amount is ₹2000");
+      // }
+      // else if (state.toLowerCase() !== "tamilnadu" && totalAmount < 5000) {
+      //   throw new Error("Minimum order amount is ₹5000 for your state");
+      // }
 
       // --- PARALLEL STOCK CHECKS ---
       // Fire all stock queries in parallel
@@ -181,7 +237,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       // setVerifyingPhone(deliveryDetails.phone);
       // setShowPhoneVerification(true);
 
-      setShowPayment(false);
+      setShowPayment(true);
       setShowDeliveryForm(false);
       setShowPhoneVerification(false);
       setVerificationId("");
@@ -191,7 +247,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
         { duration: 10000 }
       );
       clearCart();
-      onClose();
+      setOrderSuccess(true); 
+      //onClose();
       fireworkConfetti();
     } catch (error) {
       const msg =
@@ -320,7 +377,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         <div className="p-4 md:p-6 flex-grow">
           {orderSuccess ? (
             <div className="flex flex-col items-center justify-center min-h-[300px] gap-6">
-              <div className="bg-green-50 border border-green-200 rounded-xl p-6 max-w-lg w-full text-center shadow">
+              <div className="bg-green-50 border border-green-200 rounded-xl p-6 w-full text-center shadow">
                 <h2 className="text-2xl font-bold text-green-700 mb-2">
                   🎉 Enquiry Submitted Successfully!
                 </h2>
@@ -338,21 +395,24 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     href="/payment"
                     className="inline-block px-6 py-2 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition"
                   >
-                    Go to Payment Page
+                    Go to Payment Option Page
                   </a>
                 </div>
                 <div className="text-sm text-gray-700">
                   <div className="font-semibold mb-1">Contact Us:</div>
-                  <div>
-                    📞{" "}
-                    <a href="tel:+919876543210" className="underline">
-                      +91 98765 43210
+                  <div className="flex flex-row space-x-3 justify-center align-items-center mb-1">
+                    📞{"  "}
+                    <a href="tel:+919789794518" className="underline">
+                      +91 9789794518
+                    </a>
+                    <a href="tel:+919363515184" className="underline">
+                      +91 9363515184
                     </a>
                   </div>
                   <div>
                     📱{" "}
                     <a
-                      href="https://wa.me/919876543210"
+                      href="https://wa.me/919363515184"
                       className="underline"
                       target="_blank"
                       rel="noopener noreferrer"
@@ -363,15 +423,31 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   <div>
                     ✉️{" "}
                     <a
-                      href="mailto:support@soundwavecrackers.com"
+                      href="mailto:soundwavecrackers@gmail.com"
                       className="underline"
                     >
-                      support@soundwavecrackers.com
+                      soundwavecrackers@gmail.com
                     </a>
                   </div>
                 </div>
+                {// referral message like share it with your friends and family
+                //and earn 5% ref commission on their first order, provide shareable link and make that sharable like available on whatsapp and facebook
+                <div className="text-sm text-gray-700 mt-4 text-primary-orange font-semibold">
+                  Refer our website to your friends and family and earn <p className="font-bold">5%</p> referral commission on their first order!  
+                  Share the link:{" "}
+                  <a
+                    href="https://www.soundwavecrackers.com"
+                    className="underline"
+                    target="_blank"
+                    rel="noopener noreferrer" 
+                  >
+                    www.soundwavecrackers.com
+                  </a>  
+                </div>
+                }
+                
               </div>
-              <div className="w-full max-w-lg">
+              <div className="w-full">
                 <div className="bg-card/30 rounded-xl p-4 md:p-6 w-full">
                   <h3 className="font-montserrat font-bold text-lg md:text-xl mb-4">
                     Payment Options
@@ -422,7 +498,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         <div>
                           <p className="text-sm text-text/60">Account Name</p>
                           <p className="font-mono">
-                            SoundWave Crackers Pvt Ltd
+                            SoundWave Crackers
                           </p>
                         </div>
                         <div>
@@ -666,7 +742,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     onSubmit={(e) => {
                       e.preventDefault();
                       handlePlaceOrder("offline");
-                      setShowPayment(true);
+                      //setShowPayment(true);
                     }}
                   >
                     <div>
@@ -688,6 +764,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       </label>
                       <input
                         disabled
+                        readOnly
                         type="email"
                         name="email"
                         defaultValue={deliveryDetails.email}
@@ -701,24 +778,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         Phone *
                       </label>
                       <input
-                        disabled
-                        readOnly
                         type="tel"
                         name="phone"
                         value={deliveryDetails.phone}
-                        onChange={handleDeliveryDetailsChange}
-                        required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Address *
-                      </label>
-                      <input
-                        type="text"
-                        name="address"
-                        value={deliveryDetails.address}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -736,7 +798,19 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
-
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Address *
+                      </label>
+                      <input
+                        type="text"
+                        name="address"
+                        value={deliveryDetails.address}
+                        onChange={handleDeliveryDetailsChange}
+                        required
+                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
+                      />
+                    </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">
                         State *
@@ -856,97 +930,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     </div>
                   </form>
                   {orderError && (
-                    <div className="md:col-span-2 mt-2 text-center text-red-600 font-semibold">
+                    <div className="md:col-span-2 mt-2 text-center text-red-600">
                       {orderError}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {showPayment && (
-                <div className="bg-card/30 rounded-xl p-6">
-                  <h3 className="font-montserrat font-bold text-xl mb-6">
-                    Payment Options
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <button
-                      onClick={() => handlePlaceOrder("qr")}
-                      disabled={isProcessing}
-                      className="bg-card p-6 rounded-xl hover:bg-card/70 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <QrCode className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          Scan QR Code
-                        </h4>
-                      </div>
-                      <div className="bg-white p-4 rounded-lg mb-4">
-                        <img
-                          src="https://images.unsplash.com/photo-1614332287897-cdc485fa562d?w=800&auto=format&fit=crop"
-                          alt="QR Code"
-                          className="w-full aspect-square object-cover rounded"
-                        />
-                      </div>
-                      <p className="text-sm text-text/60 text-center">
-                        Scan to pay instantly
-                      </p>
-                    </button>
-
-                    <button
-                      onClick={() => handlePlaceOrder("upi")}
-                      disabled={isProcessing}
-                      className="bg-card p-6 rounded-xl hover:bg-card/70 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <Wallet className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          UPI Payment
-                        </h4>
-                      </div>
-                      <p className="text-sm text-text/60 mb-4">
-                        Pay using any UPI app
-                      </p>
-                      <div className="bg-background p-4 rounded-lg">
-                        <p className="font-mono text-center select-all">
-                          soundwavecrackers@upi
-                        </p>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => handlePlaceOrder("bank")}
-                      disabled={isProcessing}
-                      className="bg-card p-6 rounded-xl hover:bg-card/70 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 mb-4">
-                        <CreditCard className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          Bank Transfer
-                        </h4>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-text/60">Account Name</p>
-                          <p className="font-mono">
-                            SoundWave Crackers Pvt Ltd
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-text/60">Account Number</p>
-                          <p className="font-mono">1234 5678 9012 3456</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-text/60">IFSC Code</p>
-                          <p className="font-mono">ABCD0123456</p>
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  {isProcessing && (
-                    <div className="mt-6 flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-primary-orange" />
-                      <span className="ml-2">Processing your order...</span>
                     </div>
                   )}
                 </div>
@@ -1058,136 +1043,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   </div>
                 </div>
               )}
-
-              {orderSuccess && (
-                <div className="flex flex-col items-center justify-center min-h-[300px] gap-6">
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-6 max-w-lg w-full text-center shadow">
-                    <h2 className="text-2xl font-bold text-green-700 mb-2">
-                      🎉 Enquiry Submitted Successfully!
-                    </h2>
-                    <p className="text-base text-green-800 mb-4">
-                      Thank you for your order. Our team will contact you soon
-                      regarding order and payment confirmation.
-                      <br />
-                      <br />
-                      Meanwhile, you can use any of our payment options below to
-                      complete your payment and send us the screenshot with your
-                      contact details, or you can contact us directly.
-                    </p>
-                    <div className="mb-4">
-                      <a
-                        href="/payment"
-                        className="inline-block px-6 py-2 bg-primary-orange text-white rounded-lg font-semibold hover:bg-primary-orange/90 transition"
-                      >
-                        Go to Payment Page
-                      </a>
-                    </div>
-                    <div className="text-sm text-gray-700">
-                      <div className="font-semibold mb-1">Contact Us:</div>
-                      <div>
-                        📞{" "}
-                        <a href="tel:+919876543210" className="underline">
-                          +91 98765 43210
-                        </a>
-                      </div>
-                      <div>
-                        📱{" "}
-                        <a
-                          href="https://wa.me/919876543210"
-                          className="underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          WhatsApp
-                        </a>
-                      </div>
-                      <div>
-                        ✉️{" "}
-                        <a
-                          href="mailto:support@soundwavecrackers.com"
-                          className="underline"
-                        >
-                          support@soundwavecrackers.com
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="w-full max-w-lg">
-                    {/* Optionally, show payment options here as well */}
-                    <div className="bg-card/30 rounded-xl p-4 md:p-6 w-full">
-                      <h3 className="font-montserrat font-bold text-lg md:text-xl mb-4">
-                        Payment Options
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-card p-6 rounded-xl">
-                          <div className="flex items-center gap-3 mb-4">
-                            <QrCode className="w-6 h-6 text-primary-orange" />
-                            <h4 className="font-montserrat font-bold">
-                              Scan QR Code
-                            </h4>
-                          </div>
-                          <div className="bg-white p-4 rounded-lg mb-4">
-                            <img
-                              src="https://images.unsplash.com/photo-1614332287897-cdc485fa562d?w=800&auto=format&fit=crop"
-                              alt="QR Code"
-                              className="w-full aspect-square object-cover rounded"
-                            />
-                          </div>
-                          <p className="text-sm text-text/60 text-center">
-                            Scan to pay instantly
-                          </p>
-                        </div>
-                        <div className="bg-card p-6 rounded-xl">
-                          <div className="flex items-center gap-3 mb-4">
-                            <Wallet className="w-6 h-6 text-primary-orange" />
-                            <h4 className="font-montserrat font-bold">
-                              UPI Payment
-                            </h4>
-                          </div>
-                          <p className="text-sm text-text/60 mb-4">
-                            Pay using any UPI app
-                          </p>
-                          <div className="bg-background p-4 rounded-lg">
-                            <p className="font-mono text-center select-all">
-                              soundwavecrackers@upi
-                            </p>
-                          </div>
-                        </div>
-                        <div className="bg-card p-6 rounded-xl">
-                          <div className="flex items-center gap-3 mb-4">
-                            <CreditCard className="w-6 h-6 text-primary-orange" />
-                            <h4 className="font-montserrat font-bold">
-                              Bank Transfer
-                            </h4>
-                          </div>
-                          <div className="space-y-3">
-                            <div>
-                              <p className="text-sm text-text/60">
-                                Account Name
-                              </p>
-                              <p className="font-mono">
-                                SoundWave Crackers Pvt Ltd
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-text/60">
-                                Account Number
-                              </p>
-                              <p className="font-mono">1234 5678 9012 3456</p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-text/60">IFSC Code</p>
-                              <p className="font-mono">ABCD0123456</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
+
         </div>
       </div>
     </motion.div>

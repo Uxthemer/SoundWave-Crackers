@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 import { Order, OrderItem } from '../types';
+import { em } from 'framer-motion/client';
 
 type OrderDB = Database['public']['Tables']['orders']['Row'];
 type OrderItemDB = Database['public']['Tables']['order_items']['Row'];
@@ -67,6 +68,7 @@ export async function createOrder(order: {
       referred_by: order.delivery_details.referralPhone,
       full_name: order.delivery_details.customerName,
       phone: order.delivery_details.phone,
+      email: order.delivery_details.email,
       address: order.delivery_details.address,
       alternate_phone: order.delivery_details.alternatePhone,
       city: order.delivery_details.city,

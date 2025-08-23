@@ -35,6 +35,7 @@ export interface Database {
       products: {
         Row: {
           id: string
+          product_code: string
           category_id: string
           name: string
           description: string | null
