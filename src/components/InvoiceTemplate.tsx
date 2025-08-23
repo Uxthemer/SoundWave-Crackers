@@ -24,6 +24,7 @@ interface Order {
   alternate_phone: string;
   address: string;
   city: string;
+  district: string;
   state: string;
   pincode: string;
   total_amount: number;
@@ -125,7 +126,7 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
         <div class="section">
           <h3>Shipping Address:</h3>
           <p>${order.address}</p>
-          <p>${order.city}, ${order.state}</p>
+          <p>${order.city}, ${order.district}, ${order.state}</p>
           <p>PIN: ${order.pincode}</p>
         </div>
       </div>

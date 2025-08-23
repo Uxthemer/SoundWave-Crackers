@@ -199,7 +199,9 @@ export function StockManagement() {
           <td>${serial++}</td>
           <td>${product.name}</td>
           <td>${product.content || "-"}</td>
-          <td class="${product.stock <= 20 ? "text-red-500 font-bold" : ""}">${product.stock}</td>
+          <td class="${product.stock <= 20 ? "text-red-500 font-bold" : ""}">${
+          product.stock
+        }</td>
           <td><del>₹${product.actual_price}</del></td>
           <td>₹${product.offer_price}</td>
           <td>${product.apr || "-"}</td>
@@ -949,7 +951,9 @@ export function StockManagement() {
                         ))}
                     </span>
                   </th>
-                  <th className="py-4 px-6 text-center">Actions</th>
+                  {userRole?.name === "superadmin" && (
+                    <th className="py-4 px-6 text-center">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1001,16 +1005,18 @@ export function StockManagement() {
                           {product.is_active ? "Active" : "Inactive"}
                         </span>
                       </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center justify-center space-x-2">
-                          <button
-                            onClick={() => handleEdit(product)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
+                      {userRole?.name === "superadmin" && (
+                        <td className="py-4 px-6">
+                          <div className="flex items-center justify-center space-x-2">
+                            <button
+                              onClick={() => handleEdit(product)}
+                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))
                 )}

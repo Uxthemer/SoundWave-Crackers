@@ -86,6 +86,7 @@ export function useProducts() {
     try {
       const exportData = products.map(product => ({
         ID: product.id,
+        ProductCode: product.product_code,
         Name: product.name,
         Category: product.categories.name,
         'Actual Price': product.actual_price,

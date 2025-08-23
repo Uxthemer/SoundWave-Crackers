@@ -49,6 +49,7 @@ interface Order {
   items?: OrderItem[];
   discount_amt?: number;
   short_id?: string;
+  referred_by?: string;
 }
 
 const ORDER_STATUSES = [
@@ -78,11 +79,11 @@ export function Orders() {
   } | null>(null);
   const [lrNumber, setLRNumber] = useState("");
   const [lrError, setLRError] = useState("");
-  const [discountValue, setDiscountValue] = useState<number | string>('');
+  const [discountValue, setDiscountValue] = useState<number | string>("");
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountOrderId, setDiscountOrderId] = useState<string | null>(null);
-  const [discountInput, setDiscountInput] = useState<number | string>('');
+  const [discountInput, setDiscountInput] = useState<number | string>("");
 
   useEffect(() => {
     fetchOrders();
@@ -350,7 +351,9 @@ export function Orders() {
           <p><strong>Name:</strong> ${order.full_name}</p>
           <p><strong>Email:</strong> ${order.email}</p>
           <p><strong>Phone:</strong> ${order.phone}</p>
-          <p><strong>Alternate Phone:</strong> ${order.alternate_phone || "-"}</p>
+          <p><strong>Alternate Phone:</strong> ${
+            order.alternate_phone || "-"
+          }</p>
         </div>
         <div class="section">
           <h2>Shipping Address</h2>
@@ -386,15 +389,21 @@ export function Orders() {
                 .join("")}
               <tr>
                 <td colspan="4" style="text-align:right;font-weight:bold;">Total Amount:</td>
-                <td style="text-align:right;font-weight:bold;">₹${order.total_amount.toFixed(2)}</td>
+                <td style="text-align:right;font-weight:bold;">₹${order.total_amount.toFixed(
+                  2
+                )}</td>
               </tr>
               <tr>
                 <td colspan="4" style="text-align:right;font-weight:bold;">Discount:</td>
-                <td style="text-align:right;font-weight:bold;">-₹${order.discount_amt?.toFixed(2) || "0.00"}</td>
+                <td style="text-align:right;font-weight:bold;">-₹${
+                  order.discount_amt?.toFixed(2) || "0.00"
+                }</td>
               </tr>
               <tr>
                 <td colspan="4" style="text-align:right;font-weight:bold;">Grand Total:</td>
-                <td style="text-align:right;font-weight:bold;">₹${(order.total_amount - (order.discount_amt || 0)).toFixed(2)}</td>
+                <td style="text-align:right;font-weight:bold;">₹${(
+                  order.total_amount - (order.discount_amt || 0)
+                ).toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
@@ -474,7 +483,7 @@ export function Orders() {
 
   const handleOpenDiscountModal = (order: Order) => {
     setDiscountOrderId(order.id);
-    setDiscountInput(order.discount_amt ?? '');
+    setDiscountInput(order.discount_amt ?? "");
     setShowDiscountModal(true);
   };
 
@@ -750,7 +759,10 @@ export function Orders() {
                       </td>
                     </tr>
                     <tr className="border-t border-card-border/10 bg-card/50">
-                      <td colSpan={4} className="py-3 px-4 text-right font-bold">
+                      <td
+                        colSpan={4}
+                        className="py-3 px-4 text-right font-bold"
+                      >
                         Discount:
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-green-700">
@@ -758,11 +770,18 @@ export function Orders() {
                       </td>
                     </tr>
                     <tr className="border-t border-card-border/10 bg-card/50">
-                      <td colSpan={4} className="py-3 px-4 text-right font-bold">
+                      <td
+                        colSpan={4}
+                        className="py-3 px-4 text-right font-bold"
+                      >
                         Grand Total:
                       </td>
                       <td className="py-3 px-4 text-right font-bold">
-                        ₹{(selectedOrder.total_amount - (selectedOrder.discount_amt || 0)).toFixed(2)}
+                        ₹
+                        {(
+                          selectedOrder.total_amount -
+                          (selectedOrder.discount_amt || 0)
+                        ).toFixed(2)}
                       </td>
                     </tr>
                   </tbody>
@@ -786,7 +805,13 @@ export function Orders() {
                     </p>
                     <p>
                       <span className="text-text/60">Phone:</span>{" "}
-                      {selectedOrder.phone}
+                      {`${selectedOrder.phone}, ${
+                        selectedOrder.alternate_phone || ""
+                      }`}
+                    </p>
+                    <p>
+                      <span className="text-text/60">Referral:</span>{" "}
+                      {selectedOrder.referred_by || ""}
                     </p>
                   </div>
                 </div>
@@ -889,7 +914,7 @@ export function Orders() {
               min={0}
               step="0.01"
               value={discountInput}
-              onChange={e => setDiscountInput(e.target.value)}
+              onChange={(e) => setDiscountInput(e.target.value)}
               className="w-full px-4 py-2 border rounded-lg mb-6"
               placeholder="Enter discount amount"
               disabled={savingDiscount}
@@ -909,12 +934,12 @@ export function Orders() {
                   setSavingDiscount(true);
                   try {
                     const { error } = await supabase
-                      .from('orders')
+                      .from("orders")
                       .update({ discount_amt: Number(discountInput) || 0 })
-                      .eq('id', discountOrderId);
+                      .eq("id", discountOrderId);
                     if (error) throw error;
-                    setOrders(orders =>
-                      orders.map(o =>
+                    setOrders((orders) =>
+                      orders.map((o) =>
                         o.id === discountOrderId
                           ? { ...o, discount_amt: Number(discountInput) || 0 }
                           : o
@@ -929,9 +954,9 @@ export function Orders() {
                     }
                     setShowDiscountModal(false);
                     setDiscountOrderId(null);
-                    setDiscountInput('');
+                    setDiscountInput("");
                   } catch (err) {
-                    alert('Failed to update discount');
+                    alert("Failed to update discount");
                   } finally {
                     setSavingDiscount(false);
                   }
