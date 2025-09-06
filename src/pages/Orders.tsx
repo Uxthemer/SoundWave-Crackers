@@ -26,6 +26,7 @@ interface OrderItem {
   total_price: number;
   product: {
     name: string;
+    product_code?: string; // added product code
     categories: {
       name: string;
     };
@@ -110,6 +111,7 @@ export function Orders() {
             *,
             product:products (
               name,
+              product_code,
               categories:categories (
                 name
               )
@@ -165,6 +167,58 @@ export function Orders() {
         .eq("id", pendingStatus.orderId);
 
       if (error) throw error;
+
+      // If order is cancelled, restore stock for ordered items
+      if (pendingStatus.newStatus === "Cancelled") {
+        try {
+          // fetch order items
+          const { data: items, error: itemsError } = await supabase
+            .from("order_items")
+            .select("product_id, quantity")
+            .eq("order_id", pendingStatus.orderId);
+
+          if (itemsError) throw itemsError;
+
+          // aggregate quantities per product
+          const qtyMap: Record<string, number> = {};
+          (items || []).forEach((it: any) => {
+            qtyMap[it.product_id] =
+              (qtyMap[it.product_id] || 0) + (it.quantity || 0);
+          });
+
+          // update each product stock
+          for (const productId of Object.keys(qtyMap)) {
+            const addQty = qtyMap[productId];
+
+            const { data: prod, error: prodError } = await supabase
+              .from("products")
+              .select("stock")
+              .eq("id", productId)
+              .single();
+
+            if (prodError) {
+              console.error(
+                "Failed to fetch product for stock restore:",
+                prodError
+              );
+              continue;
+            }
+
+            const newStock = Math.max(0, (prod?.stock || 0) + addQty);
+
+            const { error: updateProdError } = await supabase
+              .from("products")
+              .update({ stock: newStock })
+              .eq("id", productId);
+
+            if (updateProdError) {
+              console.error("Failed to update product stock:", updateProdError);
+            }
+          }
+        } catch (stockErr) {
+          console.error("Error restoring stock for cancelled order:", stockErr);
+        }
+      }
 
       setOrders(
         orders.map((order) =>
@@ -233,7 +287,12 @@ export function Orders() {
 
     // Order items sheet
     const orderItems =
-      order.items?.map((item) => ({
+      order.items?.map((item, index) => ({
+        "S.No": index + 1,
+        "Product Code":
+          (item.product as any)?.product_code ||
+          (item.product as any)?.code ||
+          "-",
         Product: item.product.name,
         Category: item.product.categories.name,
         Quantity: item.quantity,
@@ -269,8 +328,13 @@ export function Orders() {
     // All order items sheet
     const allItems = orders.flatMap(
       (order) =>
-        order.items?.map((item) => ({
+        order.items?.map((item, idx) => ({
           "Order ID": order.id,
+          "S.No": idx + 1,
+          "Product Code":
+            (item.product as any)?.product_code ||
+            (item.product as any)?.code ||
+            "-",
           Product: item.product.name,
           Category: item.product.categories.name,
           Quantity: item.quantity,
@@ -295,6 +359,11 @@ export function Orders() {
   };
 
   const handlePrint = (order: Order) => {
+    // compute totals
+    const totalProducts = order.items?.length || 0;
+    const totalQuantity =
+      order.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0;
+
     // Create a new window for printing
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
@@ -306,34 +375,20 @@ export function Orders() {
       <head>
         <title>Order ${order.id}</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #FF5722;
-          }
-          .logo {
-            height: 100px;
-          }
-          .invoice-details {
-            text-align: right;
-          }
+          body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+          .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #FF5722; }
+          .cus-info{ display: flex; gap: 50px; justify-content: space-between; }
+          .logo { height: 100px; }
+          .invoice-details { text-align: right; }
           h1 { color: #FF5722; }
           .section { margin-bottom: 20px; }
+          .items-header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:8px; }
+          .totals { font-size: 0.95rem; color: #333; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; }
           th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
           th { background-color: #f5f5f5; }
-          .total {  text-align: right; font-size: 1.2em; margin-top: 20px; }
-          .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-            text-align: center;
-            color: #666;
-          }
+          .total { text-align: right; font-size: 1.2em; margin-top: 20px; }
+          .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; }
         </style>
       </head>
       <body>
@@ -347,26 +402,36 @@ export function Orders() {
             <p><strong>Payment Method:</strong> ${order.payment_method}</p>
           </div>
         </div>
-        <div class="section">
-          <h2>Customer Information</h2>
-          <p><strong>Name:</strong> ${order.full_name}</p>
-          <p><strong>Email:</strong> ${order.email}</p>
-          <p><strong>Phone:</strong> ${order.phone}</p>
-          <p><strong>Alternate Phone:</strong> ${
-            order.alternate_phone || "-"
-          }</p>
+        <div class="cus-info">
+          <div class="section">
+            <h2>Customer Information</h2>
+            <p><strong>Name:</strong> ${order.full_name}</p>
+            <p><strong>Email:</strong> ${order.email}</p>
+            <p><strong>Phone:</strong> ${order.phone}</p>
+            <p><strong>Alternate Phone:</strong> ${order.alternate_phone || "-"}</p>
+          </div>
+          <div class="section">
+            <h2>Shipping Address</h2>
+            <p>${order.address}</p>
+            <p>${order.city}, ${order.state}</p>
+            <p>PIN: ${order.pincode}</p>
+          </div>
         </div>
+
         <div class="section">
-          <h2>Shipping Address</h2>
-          <p>${order.address}</p>
-          <p>${order.city}, ${order.state}</p>
-          <p>PIN: ${order.pincode}</p>
-        </div>
-        <div class="section">
-          <h2>Order Items</h2>
+          <div class="items-header">
+            <h2>Order Items</h2>
+            <div class="totals">
+              <div><strong>Total Products:</strong> ${totalProducts}</div>
+              <div><strong>Total Quantity:</strong> ${totalQuantity}</div>
+            </div>
+          </div>
+
           <table>
             <thead>
               <tr>
+                <th>S.No</th>
+                <th>Product Code</th>
                 <th>Product</th>
                 <th>Category</th>
                 <th>Quantity</th>
@@ -377,8 +442,14 @@ export function Orders() {
             <tbody>
               ${order.items
                 ?.map(
-                  (item) => `
+                  (item, index) => `
                 <tr>
+                  <td>${index + 1}</td>
+                  <td>${
+                    (item.product as any)?.product_code ||
+                    (item.product as any)?.code ||
+                    "-"
+                  }</td>
                   <td>${item.product.name}</td>
                   <td>${item.product.categories.name}</td>
                   <td>${item.quantity}</td>
@@ -388,31 +459,38 @@ export function Orders() {
               `
                 )
                 .join("")}
+              ${
+                (order.discount_amt ?? 0) > 0
+                  ? ` 
+                <tr>
+                  <td colspan="6" style="text-align:right;font-weight:bold;">Total Amount:</td>
+                  <td style="text-align:right;font-weight:bold;">₹${order.total_amount.toFixed(
+                    2
+                  )}</td>
+                </tr>
+                <tr>
+                  <td colspan="6" style="text-align:right;font-weight:bold;">Discount:</td>
+                  <td style='text-align:right;font-weight:bold;'>-₹${
+                    order.discount_amt?.toFixed(2) || "0.00"
+                  }</td>
+                </tr>`
+                  : ""
+              }
               <tr>
-                <td colspan="4" style="text-align:right;font-weight:bold;">Total Amount:</td>
-                <td style="text-align:right;font-weight:bold;">₹${order.total_amount.toFixed(
-                  2
-                )}</td>
-              </tr>
-              <tr>
-                <td colspan="4" style="text-align:right;font-weight:bold;">Discount:</td>
-                <td style="text-align:right;font-weight:bold;">-₹${
-                  order.discount_amt?.toFixed(2) || "0.00"
-                }</td>
-              </tr>
-              <tr>
-                <td colspan="4" style="text-align:right;font-weight:bold;">Grand Total:</td>
+                <td colspan="6" style="text-align:right;font-weight:bold;">Grand Total:</td>
                 <td style="text-align:right;font-weight:bold;">₹${(
-                  order.total_amount - (order.discount_amt || 0)
+                  order.total_amount -
+                  (order.discount_amt || 0)
                 ).toFixed(2)}</td>
               </tr>
             </tbody>
           </table>
         </div>
+
         <div class="footer">
           <p>Thank you for shopping with SoundWave Crackers!</p>
           <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
-          <p>Phone: +91 9363515184, +91 9789794518</p>
+          <p>Phone: +91 9789794518, +91 9363515184</p>
         </div>
       </body>
       </html>
@@ -420,7 +498,20 @@ export function Orders() {
 
     printWindow.document.write(content);
     printWindow.document.close();
-    printWindow.print();
+
+    // print and close logic (left unchanged)
+    try {
+      printWindow.focus();
+      setTimeout(() => {
+        try {
+          printWindow.print();
+        } catch (e) {
+          console.error("Print failed:", e);
+        }
+      }, 300);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleStatusFilterClick = (status: string) => {
@@ -654,7 +745,7 @@ export function Orders() {
                           <button
                             onClick={() => setSelectedOrder(order)}
                             className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="View Details"
+                            title="View Order Details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -693,17 +784,23 @@ export function Orders() {
         </div>
       </div>
 
-      {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
-              <h2 className="font-heading text-2xl">Order Details</h2>
-              <div className="flex items-center gap-4">
+{/* Order Details Modal */}
+{selectedOrder && (
+  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
+        <div className="flex items-start sm:items-center gap-4">
+          <h2 className="font-heading text-2xl">Order Details</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
+            <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedOrder.items?.length || 0}</strong></span>
+            <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedOrder.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0}</strong></span>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
                 <button
                   onClick={() => handlePrint(selectedOrder)}
                   className="p-2 hover:bg-card/50 rounded-lg transition-colors"
-                  title="Print Order"
+                  title="Print Order Summary"
                 >
                   <Printer className="w-6 h-6" />
                 </button>
@@ -718,10 +815,12 @@ export function Orders() {
 
             <div className="p-6">
               {/* Order Items */}
-              <div className="bg-card/30 rounded-lg overflow-hidden mb-8">
+              <div className="bg-card/30 rounded-lg overflow-auto mb-8">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-card/50">
+                      <th className="py-3 px-4 text-left">S.No</th>
+                      <th className="py-3 px-4 text-left">Code</th>
                       <th className="py-3 px-4 text-left">Product</th>
                       <th className="py-3 px-4 text-left">Category</th>
                       <th className="py-3 px-4 text-center">Quantity</th>
@@ -730,11 +829,15 @@ export function Orders() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.items?.map((item) => (
+                    {selectedOrder.items?.map((item, index) => (
                       <tr
                         key={item.id}
                         className="border-t border-card-border/10"
                       >
+                        <td className="py-3 px-4">{index + 1}</td>
+                        <td className="py-3 px-4">
+                          {item.product?.product_code || "-"}
+                        </td>
                         <td className="py-3 px-4">{item.product.name}</td>
                         <td className="py-3 px-4">
                           {item.product.categories.name}
@@ -750,7 +853,7 @@ export function Orders() {
                     ))}
                     <tr className="border-t border-card-border/10 bg-card/50">
                       <td
-                        colSpan={4}
+                        colSpan={6}
                         className="py-3 px-4 text-right font-bold"
                       >
                         Total Amount:
@@ -759,20 +862,22 @@ export function Orders() {
                         ₹{selectedOrder.total_amount}
                       </td>
                     </tr>
+
                     <tr className="border-t border-card-border/10 bg-card/50">
                       <td
-                        colSpan={4}
+                        colSpan={6}
                         className="py-3 px-4 text-right font-bold"
                       >
                         Discount:
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-green-700">
-                        -₹{selectedOrder.discount_amt?.toFixed(2) || "0.00"}
+                        -₹{(selectedOrder.discount_amt ?? 0).toFixed(2)}
                       </td>
                     </tr>
+
                     <tr className="border-t border-card-border/10 bg-card/50">
                       <td
-                        colSpan={4}
+                        colSpan={6}
                         className="py-3 px-4 text-right font-bold"
                       >
                         Grand Total:
