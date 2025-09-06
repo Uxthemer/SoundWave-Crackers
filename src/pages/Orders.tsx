@@ -412,7 +412,7 @@ export function Orders() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Order ${order.id}</title>
+        <title>Order ${order.short_id}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
           .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #FF5722; }
