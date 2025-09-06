@@ -39,68 +39,29 @@ interface InvoiceTemplateProps {
 }
 
 export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
+  const totalProducts = order.items?.length || 0;
+  const totalQuantity = order.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
+
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Invoice - ${order.id}</title>
       <style>
-        body { 
-          font-family: Arial, sans-serif; 
-          margin: 20px;
-          color: #333;
-        }
-        .header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 30px;
-          padding-bottom: 20px;
-          border-bottom: 2px solid #FF5722;
-        }
-        .logo {
-          height: 100px;
-        }
-        .invoice-details {
-          text-align: right;
-        }
-        .section {
-          margin-bottom: 30px;
-        }
-        .grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
-        }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-top: 20px;
-        }
-        th, td {
-          border: 1px solid #ddd;
-          padding: 12px;
-          text-align: left;
-        }
-        th {
-          background-color: #f8f8f8;
-        }
-        .total {
-          text-align: right;
-          font-size: 1.2em;
-          margin-top: 20px;
-        }
-        .footer {
-          margin-top: 50px;
-          padding-top: 20px;
-          border-top: 1px solid #ddd;
-          text-align: center;
-          color: #666;
-        }
-        @media print {
-          body { margin: 0; }
-          .no-print { display: none; }
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #FF5722; }
+        .logo { height: 100px; }
+        .invoice-details { text-align: right; }
+        .section { margin-bottom: 30px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .items-header { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:8px; }
+        .totals { font-size: 0.95rem; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f8f8f8; }
+        .total { text-align: right; font-size: 1.2em; margin-top: 20px; }
+        .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; }
+        @media print { body { margin: 0; } .no-print { display: none; } }
       </style>
     </head>
     <body>
@@ -132,10 +93,18 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
       </div>
 
       <div class="section">
-        <h3>Order Items</h3>
+        <div class="items-header">
+          <h3>Order Items</h3>
+          <div class="totals">
+            <div><strong>Total Products:</strong> ${totalProducts}</div>
+            <div><strong>Total Quantity:</strong> ${totalQuantity}</div>
+          </div>
+        </div>
+
         <table>
           <thead>
             <tr>
+              <th>S.No.</th>
               <th>Product</th>
               <th>Category</th>
               <th>Quantity</th>
@@ -144,8 +113,9 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
             </tr>
           </thead>
           <tbody>
-            ${order.items?.map(item => `
+            ${order.items?.map((item, index) => `
               <tr>
+                <td>${index + 1}</td>
                 <td>${item.product.name}</td>
                 <td>${item.product.categories.name}</td>
                 <td>${item.quantity}</td>
@@ -157,8 +127,8 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
         </table>
 
         <div class="total">
-          <p><strong>Total Amount: ₹${order.total_amount.toFixed(2)}</strong></p>
-          <p><strong>Discount: -₹${order.discount_amt?.toFixed(2) || "0.00"}</strong></p>
+          ${(order.discount_amt ?? 0) > 0 ? `<p><strong>Total Amount: ₹${order.total_amount.toFixed(2)}</strong></p>
+          <p><strong>Discount: -₹${order.discount_amt?.toFixed(2) || "0.00"}</strong></p>`:""}
           <p><strong>Grand Total: ₹${(order.total_amount - (order.discount_amt || 0)).toFixed(2)}</strong></p>
           <p>Payment Method: ${order.payment_method}</p>
         </div>
@@ -167,7 +137,7 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
       <div class="footer">
         <p>Thank you for shopping with SoundWave Crackers!</p>
         <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
-        <p>Phone: +91 9363515184, +91 9789794518</p>
+        <p>Phone: +91 9789794518, +91 9363515184</p>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">

@@ -21,7 +21,7 @@ export function QuickPurchase() {
   const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
   const { products, loading } = useProducts();
   const { categories } = useCategories();
-  const { userProfile } = useAuth(); // Get user profile/role
+  const { userProfile, userRole } = useAuth(); // Get user profile/role
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [groupedProducts, setGroupedProducts] = useState<Record<string, any[]>>(
@@ -267,7 +267,7 @@ export function QuickPurchase() {
                           animate={{ opacity: 1 }}
                           className={`${
                             index % 2 === 0 ? "bg-card" : "bg-card/10"
-                          } rounded-lg p-3 shadow-sm hover:bg-card transition-colors`}
+                          } rounded-lg p-3 shadow-sm hover:bg-card transition-colors relative`}
                           whileHover={{ scale: 1.02 }}
                         >
                           <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -315,12 +315,14 @@ export function QuickPurchase() {
                                   <span className="text-xs text-text/60">
                                     {product.content}
                                   </span>
-                                  <span className="bg-primary-orange/10 text-primary-orange px-2 py-0.5 rounded-full text-xs">
-                                    {product.discount}% OFF
-                                  </span>
+                                  {product.discount > 0 && (
+                                    <span className="bg-primary-orange/10 text-primary-orange px-2 py-0.5 rounded-full text-xs">
+                                      {product.discount}% OFF
+                                    </span>
+                                  )}
                                   {/* Show stock only for admin/superadmin */}
-                                  {(userProfile?.role === "admin" ||
-                                    userProfile?.role === "superadmin") && (
+                                  {(userRole?.name === "admin" ||
+                                    userRole?.name === "superadmin") && (
                                     <div className="flex items-center gap-2">
                                       <span className="text-xs text-text/60">
                                         Stock :
@@ -366,8 +368,10 @@ export function QuickPurchase() {
                                     <Minus className="w-4 h-4" />
                                   </button>
                                   <input
+                                    disabled={!quantities[product.id]}
                                     type="number"
                                     min="0"
+                                    max={product.stock}
                                     value={quantities[product.id] || 0}
                                     onChange={(e) =>
                                       handleQuantityChange(
@@ -403,6 +407,14 @@ export function QuickPurchase() {
                               </div>
                             </div>
                           </div>
+                          {product.stock !== undefined &&
+                                  product.stock <= 0 && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                      <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
+                                        OUT OF STOCK
+                                      </div>
+                                    </div>
+                                  )}
                         </motion.div>
                       ))}
                     </motion.div>

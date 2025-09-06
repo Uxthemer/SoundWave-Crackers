@@ -47,7 +47,7 @@ ChartJS.register(
 export function Dashboard() {
   const navigate = useNavigate();
   const { userRole } = useAuth();
-  const [dateRange, setDateRange] = useState<'week' | 'month'>('week');
+  const [dateRange, setDateRange] = useState<'week' | 'month'>('month');
   const { stats, salesData, categoryData, loading, fetchDashboardData } = useDashboard();
   const { exportProductsToExcel, importProductsFromExcel } = useProducts();
   const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -261,7 +261,7 @@ export function Dashboard() {
                     responsive: true,
                     plugins: {
                       legend: {
-                        position: 'bottom'
+                        position: 'right'
                       }
                     }
                   }}

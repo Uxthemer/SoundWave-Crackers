@@ -206,7 +206,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       //   )
       // );
 
-      // // Check for out-of-stock items
+      // Check for out-of-stock items
       // for (let i = 0; i < items.length; i++) {
       //   const stock = stockResults[i].data?.stock ?? 0;
       //   if (items[i].quantity > stock) {

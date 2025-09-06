@@ -331,9 +331,9 @@ export function ExploreCrackers() {
                         />
                       )}
                     </Link>
-                    <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
+                    {product.discount > 0 && <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
                       {product.discount}% OFF
-                    </div>
+                    </div>}
                     {
                       product.yt_link && (
                         <button
