@@ -267,7 +267,7 @@ export function QuickPurchase() {
                           animate={{ opacity: 1 }}
                           className={`${
                             index % 2 === 0 ? "bg-card" : "bg-card/10"
-                          } rounded-lg p-3 shadow-sm hover:bg-card transition-colors`}
+                          } rounded-lg p-3 shadow-sm hover:bg-card transition-colors relative`}
                           whileHover={{ scale: 1.02 }}
                         >
                           <div className="flex flex-col md:flex-row md:items-center gap-3">
@@ -368,8 +368,10 @@ export function QuickPurchase() {
                                     <Minus className="w-4 h-4" />
                                   </button>
                                   <input
+                                    disabled={!quantities[product.id]}
                                     type="number"
                                     min="0"
+                                    max={product.stock}
                                     value={quantities[product.id] || 0}
                                     onChange={(e) =>
                                       handleQuantityChange(
@@ -405,6 +407,14 @@ export function QuickPurchase() {
                               </div>
                             </div>
                           </div>
+                          {product.stock !== undefined &&
+                                  product.stock <= 0 && (
+                                    <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                      <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
+                                        OUT OF STOCK
+                                      </div>
+                                    </div>
+                                  )}
                         </motion.div>
                       ))}
                     </motion.div>
