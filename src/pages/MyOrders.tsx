@@ -405,7 +405,7 @@ export function MyOrders() {
 
             <div className="p-6">
               {/* Order Items */}
-              <div className="bg-card/30 rounded-lg overflow-hidden mb-8">
+              <div className="bg-card/30 rounded-lg overflow-auto mb-8">
                 <table className="w-full">
                   <thead>
                     <tr className="bg-card/50">
