@@ -354,8 +354,47 @@ export function Orders() {
     if (!printWindow) return;
 
     const invoiceContent = InvoiceTemplate({ order });
+    printWindow.document.open();
     printWindow.document.write(invoiceContent);
     printWindow.document.close();
+
+    // cleanup function to close window and remove listeners/timeouts
+    const cleanup = () => {
+      try {
+        if (!printWindow.closed) printWindow.close();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+
+    // ensure window closes after print or if user cancels
+    try {
+      printWindow.onafterprint = cleanup;
+      printWindow.addEventListener?.("beforeunload", cleanup);
+      printWindow.addEventListener?.("afterprint", cleanup);
+    } catch (e) {
+      /* ignore */
+    }
+
+    const doPrint = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        console.error("Print failed:", e);
+      }
+    };
+
+    // Start printing after load, fallback to timeout
+    if (printWindow.document.readyState === "complete") {
+      doPrint();
+    } else {
+      printWindow.onload = doPrint;
+      setTimeout(doPrint, 800);
+    }
+
+    // Safety close in case afterprint doesn't fire
+    setTimeout(cleanup, 20000);
   };
 
   const handlePrint = (order: Order) => {
@@ -496,22 +535,45 @@ export function Orders() {
       </html>
     `;
 
+    printWindow.document.open();
     printWindow.document.write(content);
     printWindow.document.close();
 
-    // print and close logic (left unchanged)
+    // cleanup function to close window and remove listeners/timeouts
+    const cleanup = () => {
+      try {
+        if (!printWindow.closed) printWindow.close();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+
     try {
-      printWindow.focus();
-      setTimeout(() => {
-        try {
-          printWindow.print();
-        } catch (e) {
-          console.error("Print failed:", e);
-        }
-      }, 300);
+      printWindow.onafterprint = cleanup;
+      printWindow.addEventListener?.("beforeunload", cleanup);
+      printWindow.addEventListener?.("afterprint", cleanup);
     } catch (e) {
-      console.error(e);
+      /* ignore */
     }
+
+    const doPrint = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        console.error("Print failed:", e);
+      }
+    };
+
+    if (printWindow.document.readyState === "complete") {
+      doPrint();
+    } else {
+      printWindow.onload = doPrint;
+      setTimeout(doPrint, 800);
+    }
+
+    // Safety close in case afterprint doesn't fire
+    setTimeout(cleanup, 20000);
   };
 
   const handleStatusFilterClick = (status: string) => {
