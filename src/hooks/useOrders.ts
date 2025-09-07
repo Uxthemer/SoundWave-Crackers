@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
-import { Order, OrderItem } from '../types';
-import { em } from 'framer-motion/client';
+import { Order } from '../types';
 
 type OrderDB = Database['public']['Tables']['orders']['Row'];
 type OrderItemDB = Database['public']['Tables']['order_items']['Row'];
@@ -94,20 +93,20 @@ export async function createOrder(order: {
   if (itemsError) throw itemsError;
 
   // Update product stock
-  for (const item of order.items) {
-    const { data: product } = await supabase
-      .from('products')
-      .select('stock')
-      .eq('id', item.product_id)
-      .single();
-    if (product) {
-      const newStock = Math.max(0, (product.stock || 0) - item.quantity);
-      await supabase
-        .from('products')
-        .update({ stock: newStock })
-        .eq('id', item.product_id);
-    }
-  }
+  // for (const item of order.items) {
+  //   const { data: product } = await supabase
+  //     .from('products')
+  //     .select('stock')
+  //     .eq('id', item.product_id)
+  //     .single();
+  //   if (product) {
+  //     const newStock = Math.max(0, (product.stock || 0) - item.quantity);
+  //     await supabase
+  //       .from('products')
+  //       .update({ stock: newStock })
+  //       .eq('id', item.product_id);
+  //   }
+  // }
 
   return orderData;
 }

@@ -763,8 +763,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         Email
                       </label>
                       <input
-                        disabled
-                        readOnly
                         type="email"
                         name="email"
                         defaultValue={deliveryDetails.email}
