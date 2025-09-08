@@ -1,22 +1,11 @@
 import { useState, useEffect } from "react";
-import {
-  Search,
-  Filter,
-  ChevronDown,
-  ChevronUp,
-  X,
-  Download,
-  Eye,
-  Loader2,
-  Printer,
-  ReceiptText,
-  Percent,
-} from "lucide-react";
+import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { InvoiceTemplate } from "../components/InvoiceTemplate";
+import EditOrderModal from "../components/EditOrderModal";
 
 interface OrderItem {
   id: string;
@@ -81,11 +70,11 @@ export function Orders() {
   } | null>(null);
   const [lrNumber, setLRNumber] = useState("");
   const [lrError, setLRError] = useState("");
-  const [discountValue, setDiscountValue] = useState<number | string>("");
   const [savingDiscount, setSavingDiscount] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountOrderId, setDiscountOrderId] = useState<string | null>(null);
   const [discountInput, setDiscountInput] = useState<number | string>("");
+  const [editOrder, setEditOrder] = useState<Order | null>(null); // <-- added state
 
   useEffect(() => {
     fetchOrders();
@@ -811,6 +800,16 @@ export function Orders() {
                           >
                             <Eye className="w-4 h-4" />
                           </button>
+
+                          <button
+                            onClick={() => setEditOrder(order)}
+                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            title="Edit Order"
+                          >
+                            <span className="sr-only">Edit</span>
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/><path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          </button>
+                          
                           <button
                             onClick={() => exportOrder(order)}
                             className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
@@ -846,19 +845,19 @@ export function Orders() {
         </div>
       </div>
 
-{/* Order Details Modal */}
-{selectedOrder && (
-  <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-    <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-      <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
-        <div className="flex items-start sm:items-center gap-4">
-          <h2 className="font-heading text-2xl">Order Details</h2>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
-            <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedOrder.items?.length || 0}</strong></span>
-            <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedOrder.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0}</strong></span>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
+              <div className="flex items-start sm:items-center gap-4">
+                <h2 className="font-heading text-2xl">Order Details</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
+                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedOrder.items?.length || 0}</strong></span>
+                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedOrder.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0}</strong></span>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
                 <button
                   onClick={() => handlePrint(selectedOrder)}
                   className="p-2 hover:bg-card/50 rounded-lg transition-colors"
@@ -1136,6 +1135,24 @@ export function Orders() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Order Modal */}
+      {editOrder && (
+        <EditOrderModal
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onSaved={(updated) => {
+            // Cast the incoming updated object to Order to satisfy TS types
+            const newOrder = updated as unknown as Order;
+            // update local orders list and selectedOrder if necessary
+            setOrders((prev) => prev.map((o) => (o.id === newOrder.id ? { ...o, ...newOrder } : o)));
+            if (selectedOrder?.id === newOrder.id) {
+              setSelectedOrder((s) => (s ? { ...s, ...newOrder } : s));
+            }
+            setEditOrder(null);
+          }}
+        />
       )}
     </div>
   );

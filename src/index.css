@@ -234,4 +234,27 @@
   animation: glow1 1s ease-in-out infinite alternate;
 }
 
+.combo-list-table{
+  margin:10px 0;
+   table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 8px;
+            text-align: left;
+        }
+        thead {
+            background-color: #ff5722;
+            color: white;
+        }
+        tbody tr:nth-child(odd) {
+            background-color: #f2f2f2;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #ffffff;
+        }
+}
 
