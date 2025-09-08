@@ -650,6 +650,173 @@ export function StockManagement() {
     printWindow.document.close();
   };
 
+  const handlePriceListDownloadOld = async () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+
+    // Filter products based on active status
+    const filteredProducts = products.filter((product) => product.is_active);
+
+    // Group products by category and sort products by order inside each category
+    const grouped: { [cat: string]: Product[] } = {};
+    filteredProducts.forEach((product) => {
+      const catName = product.categories?.name || "Uncategorized";
+      if (!grouped[catName]) grouped[catName] = [];
+      grouped[catName].push(product);
+    });
+
+    // Sort products inside each category by product.order
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
+
+    // Get category order mapping from categories state
+    const categoryOrderMap: Record<string, number> = {};
+    categories.forEach((cat) => {
+      categoryOrderMap[cat.name] = cat.order ?? 0;
+    });
+
+    // Sort categories by category order
+    const sortedCategoryNames = Object.keys(grouped).sort(
+      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
+    );
+
+    // Generate table rows
+    let tableRows = "";
+    let serial = 1;
+    sortedCategoryNames.forEach((catName) => {
+      const products = grouped[catName];
+      // Category row
+      tableRows += `
+      <tr>
+        <td colspan="5" style="text-align:center; font-weight:bold; background:#f5f5f5; font-size:1.1rem;">
+          ${catName}
+        </td>
+      </tr>
+    `;
+      // Product rows
+      products.forEach((product) => {
+        tableRows += `
+        <tr>
+          <td>${serial++}</td>
+          <td class="text-align-left">${product.name}</td>
+          <td><del>₹${product.actual_price}</del></td>
+          <td>₹${product.offer_price}</td>
+          <td>${product.content || "-"}</td>
+        </tr>
+      `;
+      });
+    });
+
+    const content = `
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soundwave Crackers - Price List 2025</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif, "Segoe UI";
+      background-color: #fff0f5;
+      color: #333;
+    }
+    .header-image {
+      width: 100%;
+      max-height: 400px;
+      display: block;
+      margin: 0 auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    }
+    .table-overlay {
+      background-color: rgba(255, 255, 255, 0.88);
+      padding: 20px 6px;
+      border-radius: 12px;
+      margin: auto;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    table.product-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75rem;
+      font-weight: 400;
+    }
+    table.product-table th,
+    table.product-table td {
+      border: 1px solid #999;
+      padding: 5px 8px;
+      text-align: center;
+    }
+    table.product-table td.text-align-left {
+      text-align: left;
+    }
+    table.product-table th {
+      background-color: brown;
+      font-weight: bold;
+      color: wheat;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="/assets/img/banners/price-list-header.png" alt="Soundwave Crackers Banner" class="header-image" />
+  </header>
+  <section class="table-section">
+    <div class="table-overlay">
+      <table class="product-table">
+        <thead>
+          <tr>
+            <th>S.No</th>
+            <th>Product</th>
+            <th>Actual Price</th>
+            <th>Offer Price</th>
+            <th>Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <footer style="text-align: center; padding: 20px; font-size: 0.9rem; color: #666;">
+    <p><strong>Soundwave Crackers</strong> - Your premier destination for premium-quality crackers and fireworks, making your celebrations brighter and more memorable.</p>
+    <p>Thank you for choosing Soundwave Crackers! For inquiries, contact us</p>
+  </footer>
+  <script>
+    // Wait for all images and DOM to be loaded before printing
+    function readyToPrint() {
+      const img = document.querySelector('.header-image');
+      if (img && !img.complete) {
+        img.onload = function() {
+          setTimeout(function() {
+            window.print();
+            window.close();
+          }, 300);
+        };
+      } else {
+        setTimeout(function() {
+          window.print();
+          window.close();
+        }, 300);
+      }
+    }
+    if (document.readyState === "complete") {
+      readyToPrint();
+    } else {
+      window.onload = readyToPrint;
+    }
+  </script>
+</body>
+</html>
+  `;
+
+    printWindow.document.write(content);
+    printWindow.document.close();
+  };
+
   const filteredProducts = products.filter((product) => {
     const matchesSearch = product.name
       .toLowerCase()
@@ -659,6 +826,9 @@ export function StockManagement() {
     return matchesSearch && matchesCategory;
   });
 
+  // count of active products within current filtered list
+  const activeCount = filteredProducts.filter((p) => p.is_active).length;
+  
   // Add sorting handler
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -740,9 +910,14 @@ export function StockManagement() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-4xl">Stock Management</h1>
-            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
-              {filteredProducts.length} products
-            </span>
+            <div className="flex gap-2 items-center">
+              <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+                {filteredProducts.length} products
+              </span>
+              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                {activeCount} active
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-4 w-full md:w-auto">
             <div className="relative w-full sm:w-auto">
