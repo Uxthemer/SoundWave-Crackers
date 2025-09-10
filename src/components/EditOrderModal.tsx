@@ -262,6 +262,7 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
           state: updatedOrder.state,
           pincode: updatedOrder.pincode,
           total_amount: updatedOrder.total_amount,
+          referred_by: updatedOrder.referred_by || null,
         })
         .eq("id", updatedOrder.id);
       if (orderErr) throw orderErr;
@@ -434,6 +435,14 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
                     placeholder="PIN"
                   />
                 </div>
+                 <input
+                    value={form.referred_by || ""}
+                    onChange={(e) =>
+                      setForm({ ...form, referred_by: e.target.value })
+                    }
+                    className="p-2 border rounded"
+                    placeholder="Referred by phone"
+                  />
               </div>
             )}
           </div>
