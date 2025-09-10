@@ -659,6 +659,9 @@ export function StockManagement() {
     return matchesSearch && matchesCategory;
   });
 
+  // count of active products within current filtered list
+  const activeCount = filteredProducts.filter((p) => p.is_active).length;
+  
   // Add sorting handler
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -740,9 +743,14 @@ export function StockManagement() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-4xl">Stock Management</h1>
-            <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
-              {filteredProducts.length} products
-            </span>
+            <div className="flex gap-2 items-center">
+              <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
+                {filteredProducts.length} products
+              </span>
+              <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                {activeCount} active
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap gap-4 w-full md:w-auto">
             <div className="relative w-full sm:w-auto">

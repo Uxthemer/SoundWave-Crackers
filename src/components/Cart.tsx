@@ -63,7 +63,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const [otpError, setOtpError] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const navigate = useNavigate();
   const [statesList, setStatesList] = useState<{ id: number; name: string }[]>(
     []
@@ -134,8 +134,16 @@ export function Cart({ isOpen, onClose }: CartProps) {
       setOrderError(null);
 
       // verify all the mandatory fields
-      const { customerName, phone, address, city, state, district, pincode, email } =
-        deliveryDetails;
+      const {
+        customerName,
+        phone,
+        address,
+        city,
+        state,
+        district,
+        pincode,
+        email,
+      } = deliveryDetails;
       if (
         !customerName ||
         !phone ||
@@ -143,7 +151,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
         !city ||
         !state ||
         !district ||
-        !pincode || !email
+        !pincode ||
+        !email
       ) {
         throw new Error("Please fill all mandatory fields");
       }
@@ -247,7 +256,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         { duration: 10000 }
       );
       clearCart();
-      setOrderSuccess(true); 
+      setOrderSuccess(true);
       //onClose();
       fireworkConfetti();
     } catch (error) {
@@ -258,6 +267,131 @@ export function Cart({ isOpen, onClose }: CartProps) {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleEstimateReport = () => {
+    // Build HTML similar to order summary but for current cart  delivery details
+    const now = new Date();
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Unable to open print window");
+      return;
+    }
+
+    const itemsRows = items
+      .map(
+        (item, idx) => `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${item.name}</td>
+          <td style="text-align:center;">${item.quantity}</td>
+          <td style="text-align:right;">₹${item.offer_price.toFixed(2)}</td>
+          <td style="text-align:right;">₹${item.totalPrice.toFixed(2)}</td>
+        </tr>`
+      )
+      .join("");
+
+    const html = `<!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Estimate Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; color:#222; margin:20px; }
+          h1 { color:#FF5722; }
+          table { width:100%; border-collapse:collapse; margin-top:12px; }
+          th, td { border:1px solid #e6e6e6; padding:8px; }
+          th { background:#f7f7f7; text-align:left; }
+          .right { text-align:right; }
+          .center { text-align:center; }
+          .summary { margin-top:16px; width:100%; }
+          .small { font-size:0.9rem; color:#666; }
+        </style>
+      </head>
+      <body>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>  
+      <h1>Estimation</h1>
+        <div class="small">Date: ${now.toLocaleString()}</div>
+        <h3>Customer Details</h3>
+        <div class="small">
+          <div><strong>Name:</strong> ${
+            deliveryDetails.customerName || "-"
+          }</div>
+          <div><strong>Phone:</strong> ${deliveryDetails.phone || "-"}</div>
+          <div><strong>Email:</strong> ${deliveryDetails.email || "-"}</div>
+          <div><strong>Address:</strong> ${deliveryDetails.address || "-"}, ${
+      deliveryDetails.city || ""
+    } ${deliveryDetails.pincode || ""}</div>
+        </div>
+        </div>
+        <div style=""><img style="height:100px" src="/assets/img/logo/logo_2.png" alt="logo"/></div>
+     </div>
+        <h3 style="margin-top:14px;">Product Details</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>S.No</th>
+              <th>Product</th>
+              <th class="center">Qty</th>
+              <th class="right">Price</th>
+              <th class="right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsRows}
+            <tr>
+              <td colspan="4" class="right"><strong>Grand Total</strong></td>
+              <td class="right"><strong>₹${totalAmount.toFixed(2)}</strong></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="summary small">
+          <p>Note: This is an estimate. Final prices may vary.</p>
+        </div>
+      </body>
+      </html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    const cleanup = () => {
+      try {
+        if (!printWindow.closed) printWindow.close();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+
+    try {
+      printWindow.onafterprint = cleanup;
+      printWindow.addEventListener?.("beforeunload", cleanup);
+      printWindow.addEventListener?.("afterprint", cleanup);
+    } catch (e) {
+      /* ignore */
+    }
+
+    const doPrint = () => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (e) {
+        console.error("Print failed:", e);
+        cleanup();
+      }
+    };
+
+    if (printWindow.document.readyState === "complete") {
+      doPrint();
+    } else {
+      printWindow.onload = doPrint;
+      setTimeout(doPrint, 800);
+    }
+
+    // Safety close if afterprint doesn't fire
+    setTimeout(cleanup, 20000);
   };
 
   // Utility function for fireworks effect
@@ -430,22 +564,23 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     </a>
                   </div>
                 </div>
-                {// referral message like share it with your friends and family
-                //and earn 5% ref commission on their first order, provide shareable link and make that sharable like available on whatsapp and facebook
-                <div className="text-sm text-gray-700 mt-4 text-primary-orange font-semibold">
-                  Refer our website to your friends and family and earn <p className="font-bold">5%</p> referral commission on their first order!  
-                  Share the link:{" "}
-                  <a
-                    href="https://www.soundwavecrackers.com"
-                    className="underline"
-                    target="_blank"
-                    rel="noopener noreferrer" 
-                  >
-                    www.soundwavecrackers.com
-                  </a>  
-                </div>
+                {
+                  // referral message like share it with your friends and family
+                  //and earn 5% ref commission on their first order, provide shareable link and make that sharable like available on whatsapp and facebook
+                  <div className="text-sm text-gray-700 mt-4 text-primary-orange font-semibold">
+                    Refer our website to your friends and family and earn{" "}
+                    <p className="font-bold">5%</p> referral commission on their
+                    first order! Share the link:{" "}
+                    <a
+                      href="https://www.soundwavecrackers.com"
+                      className="underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      www.soundwavecrackers.com
+                    </a>
+                  </div>
                 }
-                
               </div>
               <div className="w-full">
                 <div className="bg-card/30 rounded-xl p-4 md:p-6 w-full">
@@ -497,9 +632,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <div className="space-y-3">
                         <div>
                           <p className="text-sm text-text/60">Account Name</p>
-                          <p className="font-mono">
-                            SoundWave Crackers
-                          </p>
+                          <p className="font-mono">SoundWave Crackers</p>
                         </div>
                         <div>
                           <p className="text-sm text-text/60">Account Number</p>
@@ -921,9 +1054,22 @@ export function Cart({ isOpen, onClose }: CartProps) {
                           Processing Order...
                         </button>
                       ) : (
-                        <button type="submit" className="btn-primary w-full">
-                          Place Order
-                        </button>
+                        <div className="flex gap-3">
+                          <button type="submit" className="btn-primary w-full">
+                            Place Order
+                          </button>
+                          {["admin", "superadmin"].includes(
+                            userRole?.name || ""
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={handleEstimateReport}
+                              className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                            >
+                              Estimate Report
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </form>
@@ -1043,7 +1189,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
               )}
             </div>
           )}
-
         </div>
       </div>
     </motion.div>
