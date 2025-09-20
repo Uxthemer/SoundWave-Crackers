@@ -597,7 +597,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       </div>
                       <div className="bg-white p-4 rounded-lg mb-4">
                         <img
-                          src="https://images.unsplash.com/photo-1614332287897-cdc485fa562d?w=800&auto=format&fit=crop"
+                          src="/assets/img/payment/QR-Code-payment.jpg"
                           alt="QR Code"
                           className="w-full aspect-square object-cover rounded"
                         />
@@ -618,7 +618,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       </p>
                       <div className="bg-background p-4 rounded-lg">
                         <p className="font-mono text-center select-all">
-                          soundwavecrackers@upi
+                          selvakumar541989@oksbi
                         </p>
                       </div>
                     </div>
@@ -632,7 +632,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <div className="space-y-3">
                         <div>
                           <p className="text-sm text-text/60">Account Name</p>
-                          <p className="font-mono">SoundWave Crackers</p>
+                          <p className="font-mono">Selvakumar</p>
                         </div>
                         <div>
                           <p className="text-sm text-text/60">Account Number</p>
@@ -640,7 +640,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         </div>
                         <div>
                           <p className="text-sm text-text/60">IFSC Code</p>
-                          <p className="font-mono">ABCD0123456</p>
+                          <p className="font-mono">SBIN0013833</p>
                         </div>
                       </div>
                     </div>
