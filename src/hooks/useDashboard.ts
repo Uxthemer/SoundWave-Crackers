@@ -80,24 +80,22 @@ export function useDashboard() {
           order_items:order_items (
             price,
             quantity,
-            product:product_id (
+            product:products (
               apr
             )
           )
         `
-        )
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+        );
 
       if (ordersError) throw ordersError;
 
-      // Calculate total revenue
+      // Calculate total revenue (ensure numeric)
       const revenue =
-        orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
+        (orders || []).reduce((sum, order) => sum + Number(order.total_amount || 0), 0) || 0;
 
       // Calculate total profit
       const profit =
-        orders?.reduce((sum, order) => {
+        (orders || []).reduce((sum, order) => {
           if (!order.order_items) return sum;
           const orderProfit = order.order_items.reduce(
             (itemSum: number, item: any) => {
@@ -108,7 +106,7 @@ export function useDashboard() {
             },
             0
           );
-          // Subtract discount_amt from this order's profit
+          // Subtract discount_amt from this order's profit (ensure numeric)
           const discount = Number(order.discount_amt) || 0;
           return sum + (orderProfit - discount);
         }, 0) || 0;

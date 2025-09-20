@@ -108,6 +108,14 @@ export function Orders() {
         .order("created_at", { ascending: false });
        if (error) throw error;
        setOrders(data || []);
+       // build status counts for the dashboard tiles
+       const stats: Record<string, number> = {};
+       ORDER_STATUSES.forEach((s) => (stats[s] = 0));
+       (data || []).forEach((o: any) => {
+         const st = o.status || "Unknown";
+         stats[st] = (stats[st] || 0) + 1;
+       });
+       setOrderStats(stats);
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
@@ -654,6 +662,18 @@ export function Orders() {
     setShowDiscountModal(true);
   };
 
+    // When a selectedOrder is opened, present its items ordered by product.order
+  const sortedSelectedItems = selectedOrder
+    ? (selectedOrder.items || []).slice().sort((a: any, b: any) =>
+        Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0)
+      )
+    : [];
+  const selectedTotalProducts = sortedSelectedItems.length;
+  const selectedTotalQuantity = sortedSelectedItems.reduce(
+    (s, it) => s + (it.quantity || 0),
+    0
+  );
+
   return (
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
@@ -893,8 +913,8 @@ export function Orders() {
               <div className="flex items-start sm:items-center gap-4">
                 <h2 className="font-heading text-2xl">Order Details</h2>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
-                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedOrder.items?.length || 0}</strong></span>
-                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedOrder.items?.reduce((sum, it) => sum + (it.quantity || 0), 0) || 0}</strong></span>
+                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedTotalProducts}</strong></span>
+                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedTotalQuantity}</strong></span>
                 </div>
               </div>
               <div className="flex items-center gap-4">
@@ -930,7 +950,7 @@ export function Orders() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.items?.map((item, index) => (
+                    {sortedSelectedItems?.map((item, index) => (
                       <tr
                         key={item.id}
                         className="border-t border-card-border/10"
