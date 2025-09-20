@@ -76,18 +76,14 @@ export function Orders() {
   const [discountInput, setDiscountInput] = useState<number | string>("");
   const [editOrder, setEditOrder] = useState<Order | null>(null); // <-- added state
 
+
+  // profit modal state (superadmin only)
+  const [profitModalOrder, setProfitModalOrder] = useState<Order | null>(null);
+  const [profitBreakdown, setProfitBreakdown] = useState<{ revenue: number; cost: number; discount: number; profit: number } | null>(null);
+
   useEffect(() => {
     fetchOrders();
   }, []);
-
-  useEffect(() => {
-    // Calculate order stats whenever orders change
-    const stats = orders.reduce((acc, order) => {
-      acc[order.status] = (acc[order.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    setOrderStats(stats);
-  }, [orders]);
 
   const fetchOrders = async () => {
     try {
@@ -99,24 +95,48 @@ export function Orders() {
           items:order_items (
             *,
             product:products (
+              id,
               name,
               product_code,
-              categories:categories (
-                name
-              )
+              "order",
+              apr,
+              categories:categories ( name )
             )
           )
         `
         )
         .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
+       if (error) throw error;
+       setOrders(data || []);
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // compute revenue/cost/discount/profit for an order
+  const computeProfitBreakdown = (order: Order) => {
+    const revenue = Number(order.total_amount || 0);
+    const discount = Number(order.discount_amt || 0);
+    const cost = (order.items || []).reduce((s, it) => {
+      const apr = Number((it.product as any)?.apr || 0);
+      const qty = Number(it.quantity || 0);
+      return s + apr * qty;
+    }, 0);
+    const profit = +(revenue - cost - discount);
+    return { revenue, cost, discount, profit };
+  };
+  
+  const handleShowProfit = (order: Order) => {
+    const breakdown = computeProfitBreakdown(order);
+    setProfitBreakdown(breakdown);
+    setProfitModalOrder(order);
+  };
+  
+  const handleCloseProfit = () => {
+    setProfitModalOrder(null);
+    setProfitBreakdown(null);
   };
 
   const handleSort = (field: keyof Order) => {
@@ -275,19 +295,24 @@ export function Orders() {
     XLSX.utils.book_append_sheet(wb, wsOrder, "Order Details");
 
     // Order items sheet
-    const orderItems =
-      order.items?.map((item, index) => ({
-        "S.No": index + 1,
-        "Product Code":
-          (item.product as any)?.product_code ||
-          (item.product as any)?.code ||
-          "-",
-        Product: item.product.name,
-        Category: item.product.categories.name,
-        Quantity: item.quantity,
-        Price: item.price,
-        Total: item.total_price,
-      })) || [];
+    // Order items sheet - ensure product listing is ordered by product.order column
+    const sortedOrderItems = (order.items || []).slice().sort((a: any, b: any) => {
+      const ao = Number(a.product?.order ?? 0);
+      const bo = Number(b.product?.order ?? 0);
+      return ao - bo;
+    });
+    const orderItems = sortedOrderItems.map((item: any, index: number) => ({
+      "S.No": index + 1,
+      "Product Code":
+        (item.product as any)?.product_code ||
+        (item.product as any)?.code ||
+        "-",
+      Product: item.product.name,
+      Category: item.product.categories.name,
+      Quantity: item.quantity,
+      Price: item.price,
+      Total: item.total_price,
+    })) || [];
     const wsItems = XLSX.utils.json_to_sheet(orderItems);
     XLSX.utils.book_append_sheet(wb, wsItems, "Order Items");
 
@@ -315,22 +340,24 @@ export function Orders() {
     XLSX.utils.book_append_sheet(wb, wsOrders, "Orders");
 
     // All order items sheet
-    const allItems = orders.flatMap(
-      (order) =>
-        order.items?.map((item, idx) => ({
-          "Order ID": order.id,
-          "S.No": idx + 1,
-          "Product Code":
-            (item.product as any)?.product_code ||
-            (item.product as any)?.code ||
-            "-",
-          Product: item.product.name,
-          Category: item.product.categories.name,
-          Quantity: item.quantity,
-          Price: item.price,
-          Total: item.total_price,
-        })) || []
-    );
+    const allItems = orders.flatMap((order) => {
+      const sorted = (order.items || []).slice().sort((a: any, b: any) => {
+        return Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0);
+      });
+      return sorted.map((item: any, idx: number) => ({
+        "Order ID": order.id,
+        "S.No": idx + 1,
+        "Product Code":
+          (item.product as any)?.product_code ||
+          (item.product as any)?.code ||
+          "-",
+        Product: item.product.name,
+        Category: item.product.categories.name,
+        Quantity: item.quantity,
+        Price: item.price,
+        Total: item.total_price,
+      }));
+    });
     const wsItems = XLSX.utils.json_to_sheet(allItems);
     XLSX.utils.book_append_sheet(wb, wsItems, "All Items");
 
@@ -397,6 +424,7 @@ export function Orders() {
     if (!printWindow) return;
 
     // Generate print content
+    const sortedItems = (order.items || []).slice().sort((a: any, b: any) => Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0));
     const content = `
       <!DOCTYPE html>
       <html>
@@ -468,16 +496,12 @@ export function Orders() {
               </tr>
             </thead>
             <tbody>
-              ${order.items
-                ?.map(
-                  (item, index) => `
+              ${sortedItems
+                .map(
+                  (item: any, index: number) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${
-                    (item.product as any)?.product_code ||
-                    (item.product as any)?.code ||
-                    "-"
-                  }</td>
+                  <td>${(item.product as any)?.product_code || (item.product as any)?.code || "-"}</td>
                   <td>${item.product.name}</td>
                   <td>${item.product.categories.name}</td>
                   <td>${item.quantity}</td>
@@ -717,6 +741,9 @@ export function Orders() {
                   <th className="py-4 px-6 text-left">Contact</th>
                   <th className="py-4 px-6 text-left">Status</th>
                   <th className="py-4 px-6 text-right">Amount</th>
+                  {userRole?.name === "superadmin" && (
+                    <th className="py-4 px-6 text-right">Profit</th>
+                  )}
                   <th className="py-4 px-6 text-right">Discounted Amount</th>
                   <th className="py-4 px-6 text-left">
                     <button
@@ -785,6 +812,17 @@ export function Orders() {
                       <td className="py-4 px-6 text-right">
                         ₹{order.total_amount.toFixed(2)}
                       </td>
+                      {userRole?.name === "superadmin" && (
+                        <td className="py-4 px-6 text-right">
+                          <button
+                            onClick={() => handleShowProfit(order)}
+                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            title="View Profit"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
                       <td className="py-4 px-6 text-right">
                         ₹{(order.discount_amt || 0).toFixed(2)}
                       </td>
@@ -1139,23 +1177,56 @@ export function Orders() {
         </div>
       )}
 
-      {/* Edit Order Modal */}
-      {editOrder && (
-        <EditOrderModal
-          order={editOrder}
-          onClose={() => setEditOrder(null)}
-          onSaved={(updated) => {
-            // Cast the incoming updated object to Order to satisfy TS types
-            const newOrder = updated as unknown as Order;
-            // update local orders list and selectedOrder if necessary
-            setOrders((prev) => prev.map((o) => (o.id === newOrder.id ? { ...o, ...newOrder } : o)));
-            if (selectedOrder?.id === newOrder.id) {
-              setSelectedOrder((s) => (s ? { ...s, ...newOrder } : s));
-            }
-            setEditOrder(null);
-          }}
-        />
+      {/* Profit Modal (Superadmin) */}
+      {profitModalOrder && profitBreakdown && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-sm relative">
+            <button
+              className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
+              onClick={handleCloseProfit}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-bold mb-4 text-center">Order Profit</h2>
+            <div className="space-y-3">
+              <p><strong>Order:</strong> {profitModalOrder.short_id || profitModalOrder.id}</p>
+              <p><strong>Revenue:</strong> ₹{profitBreakdown.revenue.toFixed(2)}</p>
+              <p><strong>Cost (APR):</strong> ₹{profitBreakdown.cost.toFixed(2)}</p>
+              <p><strong>Discount:</strong> ₹{profitBreakdown.discount.toFixed(2)}</p>
+              <p className="text-lg font-bold">Profit: ₹{profitBreakdown.profit.toFixed(2)}</p>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={handleCloseProfit}
+                className="px-4 py-2 rounded bg-primary-orange text-white hover:bg-primary-orange/90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
-  );
-}
+
+            {/* Edit Order Modal */}
+            {editOrder && (
+              <EditOrderModal
+                order={editOrder}
+                onClose={() => setEditOrder(null)}
+                onSaved={(updated) => {
+                  // Cast the incoming updated object to Order to satisfy TS
+                  const updatedOrder = updated as Order;
+                  setOrders((orders) =>
+                    orders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
+                  );
+                  if (selectedOrder?.id === updatedOrder.id) {
+                    setSelectedOrder(updatedOrder);
+                  }
+                  setEditOrder(null);
+                }}
+              />
+            )}
+      
+          </div>
+        );
+      }

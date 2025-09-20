@@ -269,27 +269,42 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   };
 
-  const handleEstimateReport = () => {
-    // Build HTML similar to order summary but for current cart  delivery details
+  const handleEstimateReport = async () => {
+    // Build HTML similar to order summary but for current cart + delivery details
     const now = new Date();
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      toast.error("Unable to open print window");
-      return;
+    // try to get product ordering from products table (if exists) and sort accordingly
+    let sortedItems = items.slice();
+    try {
+      const ids = items.map((it) => it.id).filter(Boolean);
+      if (ids.length > 0) {
+        const { data: prods } = await supabase
+          .from("products")
+          .select("id, \"order\"")
+          .in("id", ids);
+        const orderMap: Record<string, number> = {};
+        (prods || []).forEach((p: any) => {
+          orderMap[p.id] = Number(p.order ?? 0);
+        });
+        sortedItems = items.slice().sort((a, b) => {
+          return (orderMap[a.id] ?? 0) - (orderMap[b.id] ?? 0);
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch product order for estimate:", err);
     }
 
-    const itemsRows = items
-      .map(
-        (item, idx) => `
-        <tr>
-          <td>${idx + 1}</td>
-          <td>${item.name}</td>
-          <td style="text-align:center;">${item.quantity}</td>
-          <td style="text-align:right;">₹${item.offer_price.toFixed(2)}</td>
-          <td style="text-align:right;">₹${item.totalPrice.toFixed(2)}</td>
-        </tr>`
-      )
-      .join("");
+    const itemsRows = sortedItems
+        .map(
+          (item, idx) => `
+          <tr>
+            <td>${idx + 1}</td>
+            <td>${item.name}</td>
+            <td style="text-align:center;">${item.quantity}</td>
+            <td style="text-align:right;">₹${Number(item.offer_price ?? 0).toFixed(2)}</td>
+            <td style="text-align:right;">₹${Number(item.totalPrice ?? (item.quantity * Number(item.offer_price ?? 0))).toFixed(2)}</td>
+          </tr>`
+        )
+        .join("");
 
     const html = `<!doctype html>
       <html>
@@ -352,6 +367,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
         </div>
       </body>
       </html>`;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      toast.error("Unable to open print window");
+      return;
+    }
 
     printWindow.document.open();
     printWindow.document.write(html);
