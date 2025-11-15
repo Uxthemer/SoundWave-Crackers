@@ -47,6 +47,7 @@ export interface Database {
           stock: number
           created_at: string
           yt_link: string | null
+          product_type: string | null
         }
         Insert: {
           id?: string

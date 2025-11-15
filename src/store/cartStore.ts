@@ -1,8 +1,22 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware'; // <-- Add this import
+import create from "zustand";
+import { persist } from "zustand/middleware";
 import { CartItem, Product } from '../types';
 
-interface CartStore {
+export interface DeliveryDetailsState {
+  customerName: string;
+  email: string;
+  phone: string;
+  alternatePhone: string;
+  referralPhone: string;
+  address: string;
+  city: string;
+  state: string;
+  district: string;
+  pincode: string;
+  country: string;
+}
+
+type CartStore = {
   items: CartItem[];
   totalQuantity: number;
   totalAmount: number;
@@ -11,12 +25,17 @@ interface CartStore {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  // delivery state
+  delivery: DeliveryDetailsState;
+  setDelivery: (payload: Partial<DeliveryDetailsState>) => void;
+  setDeliveryField: <K extends keyof DeliveryDetailsState>(key: K, value: DeliveryDetailsState[K]) => void;
+  clearDelivery: () => void;
 }
 
 // Wrap your store with persist and use sessionStorage
 export const useCartStore = create<CartStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       items: [],
       totalQuantity: 0,
       totalAmount: 0,
@@ -102,6 +121,40 @@ export const useCartStore = create<CartStore>()(
           };
         }),
       clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0 }),
+      // delivery defaults
+      delivery: {
+        customerName: "",
+        email: "",
+        phone: "",
+        alternatePhone: "",
+        referralPhone: "",
+        address: "",
+        city: "",
+        state: "",
+        district: "",
+        pincode: "",
+        country: "India",
+      },
+      setDelivery: (payload) =>
+        set((state) => ({ delivery: { ...state.delivery, ...payload } })),
+      setDeliveryField: (key, value) =>
+        set((state) => ({ delivery: { ...state.delivery, [key]: value } })),
+      clearDelivery: () =>
+        set(() => ({
+          delivery: {
+            customerName: "",
+            email: "",
+            phone: "",
+            alternatePhone: "",
+            referralPhone: "",
+            address: "",
+            city: "",
+            state: "",
+            district: "",
+            pincode: "",
+            country: "India",
+          },
+        })),
     }),
     {
       name: "cart-storage",
@@ -113,6 +166,11 @@ export const useCartStore = create<CartStore>()(
         setItem: (name, value) => sessionStorage.setItem(name, JSON.stringify(value)),
         removeItem: (name) => sessionStorage.removeItem(name),
       },
+      partialize: (state) => ({
+        // persist cart items and delivery only (adjust as needed)
+        items: state.items,
+        delivery: state.delivery,
+      } as unknown as CartStore),
     }
   )
 );

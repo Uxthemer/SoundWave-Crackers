@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
   Package,
@@ -13,8 +13,8 @@ import {
   Download,
   Loader2,
   AlertCircle,
-  CheckCircle
-} from 'lucide-react';
+  CheckCircle,
+} from "lucide-react";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -26,11 +26,16 @@ import {
   Legend,
   ArcElement,
   BarElement,
-} from 'chart.js';
-import { Line, Doughnut } from 'react-chartjs-2';
-import { useDashboard } from '../hooks/useDashboard';
-import { useProducts } from '../hooks/useProducts';
-import { useAuth } from '../context/AuthContext';
+} from "chart.js";
+import { Line, Doughnut } from "react-chartjs-2";
+import { useDashboard } from "../hooks/useDashboard";
+import { useProducts } from "../hooks/useProducts";
+import { useAuth } from "../context/AuthContext";
+import {
+  DASHBOARD_RANGES,
+  DEFAULT_DASHBOARD_RANGE,
+  DashboardRange,
+} from "../config/dashboardConfig";
 
 ChartJS.register(
   CategoryScale,
@@ -47,13 +52,22 @@ ChartJS.register(
 export function Dashboard() {
   const navigate = useNavigate();
   const { userRole } = useAuth();
-  const [dateRange, setDateRange] = useState<'week' | 'month'>('month');
-  const { stats, salesData, categoryData, loading, fetchDashboardData } = useDashboard();
+  // configurable date range (values come from src/config/dashboardConfig.ts)
+  const [dateRange, setDateRange] = useState<DashboardRange>(
+    DEFAULT_DASHBOARD_RANGE
+  );
+  const { stats, salesData, categoryData, loading, fetchDashboardData } =
+    useDashboard();
   const { exportProductsToExcel, importProductsFromExcel } = useProducts();
-  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [importError, setImportError] = useState('');
-
-  const isAdmin = ['admin', 'superadmin'].includes(userRole?.name || '');
+  const [importStatus, setImportStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
+  const [importError, setImportError] = useState("");
+  // quick group switch state
+  const [quickTab, setQuickTab] = useState<
+    "dashboard" | "orders" | "stock" | "analytics" | "expenses" | null
+  >("dashboard");
+  const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
   if (!isAdmin) {
     return (
@@ -68,51 +82,128 @@ export function Dashboard() {
     );
   }
 
-  const handleDateRangeChange = (range: 'week' | 'month') => {
+  const handleDateRangeChange = (range: DashboardRange) => {
     setDateRange(range);
     fetchDashboardData(range);
   };
+
+  // Fetch initial data and when dateRange changes
+  useEffect(() => {
+    fetchDashboardData(dateRange);
+  }, [dateRange]);
+
+  // if you render buttons for ranges use DASHBOARD_RANGES to build them
+  // Example (where you currently render the week/month toggles):
+  // {DASHBOARD_RANGES.map(r => (
+  //   <button key={r} onClick={() => { setDateRange(r); fetchDashboardData(r); }}>{r}</button>
+  // ))}
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      setImportStatus('loading');
+      setImportStatus("loading");
       const success = await importProductsFromExcel(file);
-      
+
       if (success) {
-        setImportStatus('success');
-        setTimeout(() => setImportStatus('idle'), 3000);
+        setImportStatus("success");
+        setTimeout(() => setImportStatus("idle"), 3000);
       } else {
-        setImportStatus('error');
-        setImportError('Failed to import products');
+        setImportStatus("error");
+        setImportError("Failed to import products");
       }
     } catch (error) {
-      setImportStatus('error');
-      setImportError(error instanceof Error ? error.message : 'Import failed');
+      setImportStatus("error");
+      setImportError(error instanceof Error ? error.message : "Import failed");
     }
+  };
+
+  const rendergroupSwitch = () => {
+    const buttons = [
+      {
+        key: "dashboard",
+        label: "Dashboard",
+        to: "/dashboard",
+      },
+      {
+        key: "orders",
+        label: "Manage Orders",
+        to: "/orders",
+      },
+      {
+        key: "stock",
+        label: "Stock Management",
+        to: "/stock",
+      },
+      {
+        key: "analytics",
+        label: "Analytics",
+        to: "/analytics",
+      },
+      {
+        key: "expenses",
+        label: "Expense Tracking",
+        to: "/expenses",
+      },
+    ];
+    return buttons.map((btn: any) => {
+      const active = quickTab === btn.key;
+      return (
+        <button
+          key={btn.key}
+          onClick={() => {
+            setQuickTab(btn.key);
+            navigate(btn.to);
+          }}
+          className={`px-4 py-2 rounded-lg transition-colors ${
+            active ? "bg-primary-orange text-white" : "bg-card hover:bg-card/50"
+          }`}
+        >
+          {btn.label}
+        </button>
+      );
+    });
   };
 
   return (
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
+        <div className="mb-6">
+          <h1 className="font-heading text-4xl mb-2">Dashboard</h1>
+          <p className="text-text/60">
+            Welcome to your SoundWave Crackers dashboard
+          </p>
+
+          {/* Quick group switch (moved to top under title) */}
+          <div className="mt-4 flex flex-wrap gap-2">{rendergroupSwitch()}</div>
+          {/* end quick group switch */}
+        </div>
+
         <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="font-heading text-4xl mb-2">Dashboard</h1>
-            <p className="text-text/60">Welcome to your SoundWave Crackers dashboard</p>
-          </div>
-          
+          <div />
+
           <div className="flex flex-wrap gap-4">
             <select
               value={dateRange}
-              onChange={(e) => handleDateRangeChange(e.target.value as 'week' | 'month')}
+              onChange={(e) =>
+                handleDateRangeChange(e.target.value as DashboardRange)
+              }
               className="bg-card border border-card-border/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary-orange"
             >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
+              {DASHBOARD_RANGES.map((r) => (
+                <option key={r} value={r}>
+                  {r === "week"
+                    ? "This Week"
+                    : r === "month"
+                    ? "This Month"
+                    : r === "year"
+                    ? "This Year"
+                    : r}
+                </option>
+              ))}
             </select>
-            
+
             <div className="flex gap-2">
               <button
                 onClick={exportProductsToExcel}
@@ -121,14 +212,14 @@ export function Dashboard() {
                 <Download className="w-4 h-4" />
                 <span>Export Products</span>
               </button>
-              
+
               <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
                 <Upload className="w-4 h-4" />
                 <span>Import Products</span>
-                <input 
-                  type="file" 
-                  accept=".xlsx,.xls,.csv" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
                   onChange={handleFileUpload}
                 />
               </label>
@@ -138,8 +229,8 @@ export function Dashboard() {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <button 
-            onClick={() => navigate('/orders')}
+          <button
+            onClick={() => navigate("/orders")}
             className="card hover:border-primary-orange transition-colors"
           >
             <div className="flex items-center justify-between mb-4">
@@ -158,8 +249,8 @@ export function Dashboard() {
             </div> */}
           </button>
 
-          <button 
-            onClick={() => navigate('/users')}
+          <button
+            onClick={() => navigate("/users")}
             className="card hover:border-primary-orange transition-colors"
           >
             <div className="flex items-center justify-between mb-4">
@@ -178,14 +269,16 @@ export function Dashboard() {
             </div> */}
           </button>
 
-          <button 
-            onClick={() => navigate('/orders')}
+          <button
+            onClick={() => navigate("/orders")}
             className="card hover:border-primary-orange transition-colors"
           >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Revenue</p>
-                <h3 className="text-2xl font-bold">₹{stats.totalRevenue.toFixed(2)}</h3>
+                <h3 className="text-2xl font-bold">
+                  ₹{stats.totalRevenue.toFixed(2)}
+                </h3>
               </div>
               <div className="bg-primary-red/10 p-3 rounded-full">
                 <DollarSign className="w-6 h-6 text-primary-red" />
@@ -198,14 +291,16 @@ export function Dashboard() {
             </div> */}
           </button>
 
-          <button 
-            onClick={() => navigate('/orders')}
+          <button
+            onClick={() => navigate("/orders")}
             className="card hover:border-primary-orange transition-colors"
           >
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-text/60">Total Profit</p>
-                <h3 className="text-2xl font-bold">₹{stats.totalProfit.toFixed(2)}</h3>
+                <h3 className="text-2xl font-bold">
+                  ₹{stats.totalProfit.toFixed(2)}
+                </h3>
               </div>
               <div className="bg-green-500/10 p-3 rounded-full">
                 <TrendingUp className="w-6 h-6 text-green-500" />
@@ -222,7 +317,9 @@ export function Dashboard() {
         {/* Charts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           <div className="card">
-            <h3 className="font-montserrat font-bold text-xl mb-6">Sales Overview</h3>
+            <h3 className="font-montserrat font-bold text-xl mb-6">
+              Sales Overview
+            </h3>
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
@@ -234,21 +331,23 @@ export function Dashboard() {
                   responsive: true,
                   plugins: {
                     legend: {
-                      display: false
-                    }
+                      display: false,
+                    },
                   },
                   scales: {
                     y: {
-                      beginAtZero: true
-                    }
-                  }
+                      beginAtZero: true,
+                    },
+                  },
                 }}
               />
             )}
           </div>
 
           <div className="card">
-            <h3 className="font-montserrat font-bold text-xl mb-6">Category Distribution</h3>
+            <h3 className="font-montserrat font-bold text-xl mb-6">
+              Category Distribution
+            </h3>
             {loading ? (
               <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
@@ -261,65 +360,14 @@ export function Dashboard() {
                     responsive: true,
                     plugins: {
                       legend: {
-                        position: 'right'
-                      }
-                    }
+                        position: "right",
+                      },
+                    },
                   }}
                 />
               </div>
             )}
           </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Link to="/orders" className="card hover:border-primary-orange group">
-            <div className="flex items-center space-x-4">
-              <div className="bg-primary-orange/10 p-4 rounded-full group-hover:bg-primary-orange/20 transition-colors">
-                <ShoppingCart className="w-6 h-6 text-primary-orange" />
-              </div>
-              <div>
-                <h3 className="font-montserrat font-bold text-lg">Manage Orders</h3>
-                <p className="text-text/60">View and manage all orders</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link to="/stock" className="card hover:border-primary-orange group">
-            <div className="flex items-center space-x-4">
-              <div className="bg-primary-orange/10 p-4 rounded-full group-hover:bg-primary-orange/20 transition-colors">
-                <PackageIcon className="w-6 h-6 text-primary-orange" />
-              </div>
-              <div>
-                <h3 className="font-montserrat font-bold text-lg">Stock Management</h3>
-                <p className="text-text/60">Update product inventory</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link to="/analytics" className="card hover:border-primary-orange group">
-            <div className="flex items-center space-x-4">
-              <div className="bg-primary-orange/10 p-4 rounded-full group-hover:bg-primary-orange/20 transition-colors">
-                <TrendingUp className="w-6 h-6 text-primary-orange" />
-              </div>
-              <div>
-                <h3 className="font-montserrat font-bold text-lg">Analytics</h3>
-                <p className="text-text/60">View detailed analytics</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link to="/expenses" className="card hover:border-primary-orange group">
-            <div className="flex items-center space-x-4">
-              <div className="bg-primary-orange/10 p-4 rounded-full group-hover:bg-primary-orange/20 transition-colors">
-                <DollarSign className="w-6 h-6 text-primary-orange" />
-              </div>
-              <div>
-                <h3 className="font-montserrat font-bold text-lg">Expense Tracking</h3>
-                <p className="text-text/60">Manage and track expenses</p>
-              </div>
-            </div>
-          </Link>
         </div>
       </div>
     </div>

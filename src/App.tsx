@@ -199,7 +199,7 @@ function ScrollToTop() {
   return null;
 }
 
-function AppContent() {
+export function AppContent() {
   const { theme, toggleTheme } = useTheme();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -207,6 +207,32 @@ function AppContent() {
 
   const handleMenuItemClick = () => {
     setIsMobileMenuOpen(false);
+  };
+
+  const PRICE_LIST_URL =
+    "https://nqlhrwpgdaulwdzgmumv.supabase.co/storage/v1/object/sign/Price%20List/Soundwave%20Crackers%20-%20Price%20List%202025-2.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80NTY2MGYwMC1lNzc0LTRiYmItODdlNS1kYzk0YzFlMzIzMzkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJQcmljZSBMaXN0L1NvdW5kd2F2ZSBDcmFja2VycyAtIFByaWNlIExpc3QgMjAyNS0yLnBkZiIsImlhdCI6MTc2MzIxMTg4OCwiZXhwIjoxNzk0NzQ3ODg4fQ.NSE-742_GDzgMFP7A6CRg1wmIX-xLWqd58pBEo8Dr2E";
+
+  const handleDownloadPriceList = async () => {
+    try {
+      const res = await fetch(PRICE_LIST_URL, { method: "GET" });
+      if (!res.ok) {
+        // fallback: open in new tab
+        window.open(PRICE_LIST_URL, "_blank");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "Soundwave_Crackers_Price_List_2025.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // fallback open link
+      window.open(PRICE_LIST_URL, "_blank");
+    }
   };
 
   return (
@@ -281,6 +307,12 @@ function AppContent() {
             >
               Chit Scheme
             </NavLink>
+            <button
+              onClick={handleDownloadPriceList}
+              className="font-montserrat font-semibold transition-colors cursor-pointer px-3 py-1 rounded hover:bg-card/60 text-primary"
+            >
+              Price List
+            </button>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -359,6 +391,15 @@ function AppContent() {
               >
                 Chit Scheme
               </Link>
+              <button
+                onClick={() => {
+                  handleDownloadPriceList();
+                  setIsMobileMenuOpen(false);
+                }}
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange text-left"
+              >
+                Price List
+              </button>
             </div>
           </div>
         </div>

@@ -302,8 +302,7 @@ export function Orders() {
     const wsOrder = XLSX.utils.json_to_sheet([orderDetails]);
     XLSX.utils.book_append_sheet(wb, wsOrder, "Order Details");
 
-    // Order items sheet
-    // Order items sheet - ensure product listing is ordered by product.order column
+    // Order items sheet - now includes APR
     const sortedOrderItems = (order.items || []).slice().sort((a: any, b: any) => {
       const ao = Number(a.product?.order ?? 0);
       const bo = Number(b.product?.order ?? 0);
@@ -319,6 +318,7 @@ export function Orders() {
       Category: item.product.categories.name,
       Quantity: item.quantity,
       Price: item.price,
+      APR: (item.product as any)?.apr ?? "-", // <-- added APR column
       Total: item.total_price,
     })) || [];
     const wsItems = XLSX.utils.json_to_sheet(orderItems);
@@ -347,7 +347,7 @@ export function Orders() {
     const wsOrders = XLSX.utils.json_to_sheet(orderData);
     XLSX.utils.book_append_sheet(wb, wsOrders, "Orders");
 
-    // All order items sheet
+    // All order items sheet - now includes APR
     const allItems = orders.flatMap((order) => {
       const sorted = (order.items || []).slice().sort((a: any, b: any) => {
         return Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0);
@@ -363,6 +363,7 @@ export function Orders() {
         Category: item.product.categories.name,
         Quantity: item.quantity,
         Price: item.price,
+        APR: (item.product as any)?.apr ?? "-", // <-- added APR column
         Total: item.total_price,
       }));
     });
@@ -420,6 +421,7 @@ export function Orders() {
     // Safety close in case afterprint doesn't fire
     setTimeout(cleanup, 20000);
   };
+
 
   const handlePrint = (order: Order) => {
     // compute totals
@@ -500,6 +502,7 @@ export function Orders() {
                 <th>Category</th>
                 <th>Quantity</th>
                 <th>Price</th>
+           
                 <th>Total</th>
               </tr>
             </thead>
@@ -514,6 +517,7 @@ export function Orders() {
                   <td>${item.product.categories.name}</td>
                   <td>${item.quantity}</td>
                   <td>₹${item.price}</td>
+                 
                   <td>₹${item.total_price}</td>
                 </tr>
               `
@@ -706,12 +710,12 @@ export function Orders() {
         </div>
 
         {/* Order Status Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-4 sm:mb-8">
           {ORDER_STATUSES.map((status) => (
             <button
               key={status}
               onClick={() => handleStatusFilterClick(status)}
-              className={`p-4 rounded-lg transition-all ${
+              className={`p-2 sm:p-4 rounded-lg transition-all text-xs sm:text-base ${
                 statusFilter === status
                   ? "bg-primary-orange text-white scale-105"
                   : "bg-card hover:bg-card/70"
@@ -727,7 +731,7 @@ export function Orders() {
 
         <div className="bg-card/30 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[700px] sm:min-w-full text-xs sm:text-sm">
               <thead>
                 <tr className="bg-card/50">
                   <th className="py-4 px-6 text-left">
@@ -946,6 +950,7 @@ export function Orders() {
                       <th className="py-3 px-4 text-left">Category</th>
                       <th className="py-3 px-4 text-center">Quantity</th>
                       <th className="py-3 px-4 text-right">Price</th>
+                      {/* <th className="py-3 px-4 text-right">APR</th> */}
                       <th className="py-3 px-4 text-right">Total</th>
                     </tr>
                   </thead>
@@ -967,6 +972,7 @@ export function Orders() {
                           {item.quantity}
                         </td>
                         <td className="py-3 px-4 text-right">₹{item.price}</td>
+                        {/* <td className="py-3 px-4 text-right">₹{(item.product as any)?.apr}</td> */}
                         <td className="py-3 px-4 text-right">
                           ₹{item.total_price}
                         </td>

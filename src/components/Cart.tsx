@@ -1,32 +1,18 @@
 import { motion } from "framer-motion";
 import { X, QrCode, Wallet, CreditCard, Loader2, Trash2 } from "lucide-react";
-import { useCartStore } from "../store/cartStore";
+import { useAuth } from "../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
 import { createOrder } from "../hooks/useOrders";
 import { supabase } from "../lib/supabase";
-import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
+import { useCartStore } from "../store/cartStore";
 
 interface CartProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-interface DeliveryDetails {
-  customerName: string;
-  email: string;
-  phone: string;
-  alternatePhone: string;
-  referralPhone: string;
-  address: string;
-  city: string;
-  state: string;
-  district: string; // <-- add this
-  pincode: string;
-  country: string;
 }
 
 export function Cart({ isOpen, onClose }: CartProps) {
@@ -37,25 +23,17 @@ export function Cart({ isOpen, onClose }: CartProps) {
     removeFromCart,
     updateQuantity,
     clearCart,
+    delivery,
+    setDelivery,
+    setDeliveryField,
+    clearDelivery,
   } = useCartStore();
+
   const [showPayment, setShowPayment] = useState(false);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const { userProfile, signInWithPhone, verifyOTP } = useAuth();
   const cartAddressRef = useRef<HTMLDivElement>(null);
-  const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails>({
-    customerName: "",
-    email: "",
-    phone: "",
-    alternatePhone: "",
-    referralPhone: "",
-    address: "",
-    city: "",
-    state: "",
-    district: "", // <-- add this
-    pincode: "",
-    country: "India",
-  });
   const [showPhoneVerification, setShowPhoneVerification] = useState(false);
   const [verifyingPhone, setVerifyingPhone] = useState("");
   const [verificationId, setVerificationId] = useState("");
@@ -74,23 +52,52 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState(false); // <-- New state
 
+  // ensure when cart empties we clear delivery (optional)
   useEffect(() => {
-    setDeliveryDetails((prev) => ({
-      ...prev,
-      customerName: userProfile?.full_name || "",
-      email: userProfile?.email || "",
-      phone: userProfile?.phone || "",
-      address: userProfile?.address || "",
-      city: userProfile?.city || "",
-      state: userProfile?.state || "",
-      pincode: userProfile?.pincode || "",
-    }));
+    if ((items || []).length === 0) {
+      clearDelivery();
+    }
+  }, [items, clearDelivery]);
+
+  // Prefill delivery from profile on mount if empty
+  useEffect(() => {
+    if (delivery.customerName === "" && userProfile) {
+      setDelivery({
+        customerName: userProfile.full_name || "",
+        email: userProfile.email || "",
+        phone: userProfile.phone || "",
+        address: userProfile.address || "",
+        city: userProfile.city || "",
+        state: userProfile.state || "",
+        district: (userProfile as any).district || "",
+        pincode: userProfile.pincode || "",
+        country: userProfile.country || "India",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userProfile]);
 
   // Add this utility function to clear recaptcha (if you use a ref, adjust accordingly)
   function clearRecaptcha() {
     const recaptcha = document.getElementById("recaptcha-container");
     if (recaptcha) recaptcha.innerHTML = "";
+  }
+
+  // Update delivery fields from inputs or react-select; uses store updater setDeliveryField
+  function handleDeliveryDetailsChange(e: any) {
+    const name = e?.target?.name;
+    const value = e?.target?.value;
+    if (!name) return;
+
+    // If state changed, clear district selection and cached district list
+    if (name === "state") {
+      setDeliveryField("state", value);
+      setDeliveryField("district", "");
+      setDistrictsList([]);
+      return;
+    }
+
+    setDeliveryField(name, value);
   }
 
   useEffect(() => {
@@ -117,17 +124,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   }, [showPhoneVerification, verifyingPhone]);
 
-  const handleDeliveryDetailsChange = (e: {
-    target: { name: string; value: string };
-  }) => {
-    const { name, value } = e.target;
-    setDeliveryDetails((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === "state" ? { district: "" } : {}),
-    }));
-  };
-
   const handlePlaceOrder = async (paymentMethod: string) => {
     try {
       setIsProcessing(true);
@@ -143,7 +139,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         district,
         pincode,
         email,
-      } = deliveryDetails;
+      } = delivery;
       if (
         !customerName ||
         !phone ||
@@ -165,15 +161,15 @@ export function Cart({ isOpen, onClose }: CartProps) {
       if (!phoneRegex.test(phone)) {
         throw new Error("Please enter a valid 10-digit phone number");
       }
-      if (deliveryDetails.alternatePhone) {
-        if (!phoneRegex.test(deliveryDetails.alternatePhone)) {
+      if (delivery.alternatePhone) {
+        if (!phoneRegex.test(delivery.alternatePhone)) {
           throw new Error(
             "Please enter a valid 10-digit alternate phone number"
           );
         }
       }
-      if (deliveryDetails.referralPhone) {
-        if (!phoneRegex.test(deliveryDetails.referralPhone)) {
+      if (delivery.referralPhone) {
+        if (!phoneRegex.test(delivery.referralPhone)) {
           throw new Error(
             "Please enter a valid 10-digit referral phone number"
           );
@@ -238,7 +234,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         total_amount: totalAmount,
         payment_method: paymentMethod,
         items: orderItems,
-        delivery_details: deliveryDetails,
+        delivery_details: delivery,
       });
 
       setLastOrderId(orderData.id);
@@ -279,7 +275,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       if (ids.length > 0) {
         const { data: prods } = await supabase
           .from("products")
-          .select("id, \"order\"")
+          .select('id, "order"')
           .in("id", ids);
         const orderMap: Record<string, number> = {};
         (prods || []).forEach((p: any) => {
@@ -294,17 +290,21 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
 
     const itemsRows = sortedItems
-        .map(
-          (item, idx) => `
+      .map(
+        (item, idx) => `
           <tr>
             <td>${idx + 1}</td>
             <td>${item.name}</td>
             <td style="text-align:center;">${item.quantity}</td>
-            <td style="text-align:right;">₹${Number(item.offer_price ?? 0).toFixed(2)}</td>
-            <td style="text-align:right;">₹${Number(item.totalPrice ?? (item.quantity * Number(item.offer_price ?? 0))).toFixed(2)}</td>
+            <td style="text-align:right;">₹${Number(
+              item.offer_price ?? 0
+            ).toFixed(2)}</td>
+            <td style="text-align:right;">₹${Number(
+              item.totalPrice ?? item.quantity * Number(item.offer_price ?? 0)
+            ).toFixed(2)}</td>
           </tr>`
-        )
-        .join("");
+      )
+      .join("");
 
     const html = `<!doctype html>
       <html>
@@ -330,14 +330,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
         <div class="small">Date: ${now.toLocaleString()}</div>
         <h3>Customer Details</h3>
         <div class="small">
-          <div><strong>Name:</strong> ${
-            deliveryDetails.customerName || "-"
-          }</div>
-          <div><strong>Phone:</strong> ${deliveryDetails.phone || "-"}</div>
-          <div><strong>Email:</strong> ${deliveryDetails.email || "-"}</div>
-          <div><strong>Address:</strong> ${deliveryDetails.address || "-"}, ${
-      deliveryDetails.city || ""
-    } ${deliveryDetails.pincode || ""}</div>
+          <div><strong>Name:</strong> ${delivery.customerName || "-"}</div>
+          <div><strong>Phone:</strong> ${delivery.phone || "-"}</div>
+          <div><strong>Email:</strong> ${delivery.email || "-"}</div>
+          <div><strong>Address:</strong> ${delivery.address || "-"}, ${
+      delivery.city || ""
+    } ${delivery.pincode || ""}</div>
         </div>
         </div>
         <div style=""><img style="height:100px" src="/assets/img/logo/logo_2.png" alt="logo"/></div>
@@ -467,15 +465,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
   // Fetch districts when state changes
   useEffect(() => {
-    if (!deliveryDetails.state) {
+    if (!delivery.state) {
       setDistrictsList([]);
       return;
     }
     (async () => {
       // Find state id by name
-      const selectedState = statesList.find(
-        (s) => s.name === deliveryDetails.state
-      );
+      const selectedState = statesList.find((s) => s.name === delivery.state);
       if (!selectedState) return;
       const { data, error } = await supabase
         .from("districts")
@@ -485,7 +481,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         .order("name");
       if (!error && data) setDistrictsList(data);
     })();
-  }, [deliveryDetails.state, statesList]);
+  }, [delivery.state, statesList]);
 
   if (!isOpen) return null;
 
@@ -498,6 +494,21 @@ export function Cart({ isOpen, onClose }: CartProps) {
     value: district.name,
     label: district.name,
   }));
+
+  // helper to clear cart with confirmation
+  const handleClearCart = () => {
+    if (!items || items.length === 0) {
+      if (typeof window !== "undefined") window.alert("Cart is already empty.");
+      return;
+    }
+    const ok = window.confirm(
+      "Clear cart — This will permanently remove all items from your cart. Do you want to continue?"
+    );
+    if (!ok) return;
+    clearCart();
+    // optionally clear delivery as well
+    clearDelivery();
+  };
 
   return (
     <motion.div
@@ -525,6 +536,25 @@ export function Cart({ isOpen, onClose }: CartProps) {
             >
               <X className="w-6 h-6" />
             </button>
+          </div>
+        </div>
+
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {/* Informational message about payment */}
+            <div className="text-sm ml-2 text-center px-3 text-text/60 ">
+              No payment is required to place an order. Submit it now — our team will contact you within 24 hours to confirm stock and payment. For urgent help call +91 9789794518 or +91 9363515184.
+            </div>
+            {/* Clear Cart button (top) - only show when cart has items */}
+            {items && items.length > 0 && (
+              <button
+                onClick={handleClearCart}
+                className="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 text-sm"
+                title="Clear cart"
+              >
+                Clear Cart
+              </button>
+            )}
           </div>
         </div>
 
@@ -878,7 +908,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   }}
                   className="btn-primary w-full"
                 >
-                  Proceed to Checkout
+                  Shipping Details
                 </button>
               )}
 
@@ -906,7 +936,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="text"
                         name="customerName"
-                        value={deliveryDetails.customerName}
+                        value={delivery.customerName}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -919,7 +949,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="email"
                         name="email"
-                        defaultValue={deliveryDetails.email}
+                        defaultValue={delivery.email}
                         // value={deliveryDetails.email}
                         onChange={handleDeliveryDetailsChange}
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -932,7 +962,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="tel"
                         name="phone"
-                        value={deliveryDetails.phone}
+                        value={delivery.phone}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -945,7 +975,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="tel"
                         name="alternatePhone"
-                        value={deliveryDetails.alternatePhone}
+                        value={delivery.alternatePhone}
                         onChange={handleDeliveryDetailsChange}
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
@@ -957,7 +987,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="text"
                         name="address"
-                        value={deliveryDetails.address}
+                        value={delivery.address}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -971,7 +1001,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         options={stateOptions}
                         value={
                           stateOptions.find(
-                            (opt) => opt.value === deliveryDetails.state
+                            (opt) => opt.value === delivery.state
                           ) || null
                         }
                         onChange={(option) =>
@@ -996,7 +1026,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         options={districtOptions}
                         value={
                           districtOptions.find(
-                            (opt) => opt.value === deliveryDetails.district
+                            (opt) => opt.value === delivery.district
                           ) || null
                         }
                         onChange={(option) =>
@@ -1009,7 +1039,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         }
                         isClearable
                         placeholder="Select District"
-                        isDisabled={!deliveryDetails.state || isProcessing}
+                        isDisabled={!delivery.state || isProcessing}
                         classNamePrefix="react-select"
                       />
                     </div>
@@ -1020,7 +1050,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="text"
                         name="city"
-                        value={deliveryDetails.city}
+                        value={delivery.city}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -1033,7 +1063,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="text"
                         name="pincode"
-                        value={deliveryDetails.pincode}
+                        value={delivery.pincode}
                         onChange={handleDeliveryDetailsChange}
                         required
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
@@ -1047,7 +1077,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         readOnly
                         type="text"
                         name="country"
-                        value={deliveryDetails.country}
+                        value={delivery.country}
                         disabled
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { Download, Plus, Trash2, Edit2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
@@ -8,6 +8,7 @@ import { Bar } from "react-chartjs-2";
 import { Chart, BarElement, CategoryScale, LinearScale, Legend, Tooltip } from "chart.js";
 import { Pie } from "react-chartjs-2";
 import { EXPENSE_TYPE_COLORS, EXPENSE_TYPE_ORDER } from "../config/chartConfig";
+import { useAuth } from "../context/AuthContext";
 
 interface Expense {
   id: string;
@@ -18,23 +19,29 @@ interface Expense {
   reason: string;
   type: "credit" | "spend" | "purchase" | "rent"; // Added "rent"
   created_at: string;
+  image_path?: string | null;
 }
 
 Chart.register(BarElement, CategoryScale, LinearScale, Legend, Tooltip);
 
 export function Expenses() {
+  const { userRole } = useAuth();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
-  const [form, setForm] = useState<Omit<Expense, "id" | "created_at">>({
+  const [form, setForm] = useState<Omit<Expense, "id" | "created_at"> & { image?: string | null }>({
     date: "",
     details: "",
     spend_by: "",
     amount: 0,
     reason: "",
     type: "spend",
+    image: null,
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"all" | "spend" | "credit" | "purchase" | "rent">("all");
   const [sortField, setSortField] = useState<"date" | "amount" | "spend_by">("date");
@@ -54,6 +61,27 @@ export function Expenses() {
   useEffect(() => {
     fetchExpenses();
   }, []);
+
+  // Upload helper - stores file in Supabase storage 'expenses' bucket and returns public url + path
+  async function uploadDocument(file: File): Promise<{ publicUrl: string | null; path: string | null }> {
+    try {
+      const id = (crypto && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`);
+      const filename = `${id}_${file.name.replace(/\s+/g, "_")}`;
+      const path = `expenses/${filename}`;
+      const { error: uploadError } = await supabase.storage.from("expenses").upload(path, file, { upsert: true });
+      if (uploadError) {
+        console.error("Upload error", uploadError);
+        toast.error("File upload failed");
+        return { publicUrl: null, path: null };
+      }
+      const { data: urlData } = supabase.storage.from("expenses").getPublicUrl(path);
+      return { publicUrl: urlData.publicUrl || null, path };
+    } catch (err) {
+      console.error(err);
+      toast.error("File upload failed");
+      return { publicUrl: null, path: null };
+    }
+  }
 
   // Totals
   const totalSpend = expenses
@@ -84,24 +112,44 @@ export function Expenses() {
       toast.error("Please fill all required fields");
       return;
     }
+    // Prepare payload
+    const payload: any = {
+      date: form.date,
+      details: form.details,
+      spend_by: form.spend_by,
+      amount: form.amount,
+      reason: form.reason,
+      type: form.type,
+    };
+
+    // If a new file is selected upload it first and set image_path
+    if (imageFile) {
+      const { path } = await uploadDocument(imageFile);
+      if (path) payload.image_path = path;
+    } else if (form.image) {
+      // keep existing image path (when editing and not replacing)
+      payload.image_path = form.image;
+    }
+
     if (editing) {
       // Update
-      const { error } = await supabase
-        .from("expenses")
-        .update(form)
-        .eq("id", editing.id);
+      const { error } = await supabase.from("expenses").update(payload).eq("id", editing.id);
       if (!error) {
         toast.success("Expense updated");
         setShowForm(false);
         setEditing(null);
+        setImageFile(null);
+        setForm((f) => ({ ...f, image: null }));
         fetchExpenses();
       }
     } else {
       // Insert
-      const { error } = await supabase.from("expenses").insert(form);
+      const { error } = await supabase.from("expenses").insert(payload);
       if (!error) {
         toast.success("Expense added");
         setShowForm(false);
+        setImageFile(null);
+        setForm((f) => ({ ...f, image: null }));
         fetchExpenses();
       }
     }
@@ -251,6 +299,7 @@ export function Expenses() {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="bg-card/50">
+                  <th className="py-4 px-4 text-left">Doc</th>
                   <th className="py-4 px-4 text-left">Date</th>
                   <th className="py-4 px-4 text-left">Details</th>
                   <th className="py-4 px-4 text-left">Spend By</th>
@@ -263,6 +312,22 @@ export function Expenses() {
               <tbody>
                 {filteredExpenses.map((e) => (
                   <tr key={e.id} className="border-t border-card-border/10">
+                    <td className="py-3 px-4">
+                      {e.image_path ? (
+                        // build public url from storage path
+                        <img
+                          src={supabase.storage.from("expenses").getPublicUrl(e.image_path as string).data.publicUrl || ""}
+                          alt="doc"
+                          className="w-12 h-8 object-cover rounded cursor-pointer"
+                          onClick={() => {
+                            const url = supabase.storage.from("expenses").getPublicUrl(e.image_path as string).data.publicUrl;
+                            if (url) window.open(url, "_blank");
+                          }}
+                        />
+                      ) : (
+                        <span className="text-text/60">—</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4">{format(new Date(e.date), "yyyy-MM-dd")}</td>
                     <td className="py-3 px-4">{e.details}</td>
                     <td className="py-3 px-4">{e.spend_by}</td>
@@ -289,7 +354,9 @@ export function Expenses() {
                             amount: e.amount,
                             reason: e.reason,
                             type: e.type,
+                            image: e.image_path || null,
                           });
+                          setImageFile(null);
                           setShowForm(true);
                         }}
                       >
@@ -325,7 +392,9 @@ export function Expenses() {
                     amount: 0,
                     reason: "",
                     type: "spend",
+                    image: null,
                   });
+                  setImageFile(null);
                 }}
                 aria-label="Close"
               >
@@ -401,6 +470,30 @@ export function Expenses() {
                       </option>
                     ))}
                   </select>
+
+                  {form.image ? (
+                    <div className="mb-2">
+                      <img
+                        src={supabase.storage.from("expenses").getPublicUrl(form.image as string).data.publicUrl || ""}
+                        alt="preview"
+                        className="w-32 h-20 object-cover rounded mb-2"
+                      />
+                      <div className="text-sm text-text/60">Current document. Upload new to replace.</div>
+                    </div>
+                  ) : null}
+
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(ev) => {
+                      const f = ev.target.files?.[0] || null;
+                      setImageFile(f);
+                    }}
+                    className="w-full"
+                    // only admins/superadmins can upload
+                    disabled={!["admin", "superadmin"].includes(userRole?.name || "")}
+                  />
                 </div>
                 <div className="flex justify-end gap-4 mt-4">
                   <button
@@ -415,7 +508,9 @@ export function Expenses() {
                         amount: 0,
                         reason: "",
                         type: "spend",
+                        image: null,
                       });
+                      setImageFile(null);
                     }}
                     className="px-6 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
                   >
