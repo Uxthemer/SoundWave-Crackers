@@ -58,7 +58,7 @@ export function Dashboard() {
   );
   const { stats, salesData, categoryData, loading, fetchDashboardData } =
     useDashboard();
-  const { exportProductsToExcel, importProductsFromExcel } = useProducts();
+  const { importProductsFromExcel } = useProducts();
   const [importStatus, setImportStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
@@ -176,43 +176,30 @@ export function Dashboard() {
           </p>
 
           {/* Quick group switch (moved to top under title) */}
-          <div className="mt-4 flex flex-wrap gap-2">{rendergroupSwitch()}</div>
-          {/* end quick group switch */}
-        </div>
-
-        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div />
-
-          <div className="flex flex-wrap gap-4">
-            <select
-              value={dateRange}
-              onChange={(e) =>
-                handleDateRangeChange(e.target.value as DashboardRange)
-              }
-              className="bg-card border border-card-border/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary-orange"
-            >
-              {DASHBOARD_RANGES.map((r) => (
-                <option key={r} value={r}>
-                  {r === "week"
-                    ? "This Week"
-                    : r === "month"
-                    ? "This Month"
-                    : r === "year"
-                    ? "This Year"
-                    : r}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex gap-2">
-              <button
-                onClick={exportProductsToExcel}
-                className="flex items-center gap-2 bg-card border border-card-border/10 rounded-lg px-4 py-2 hover:bg-card/70 transition-colors"
+          <div className="mt-4 flex flex-wrap gap-2">
+            {rendergroupSwitch()}
+            <div style={{ marginLeft: "auto" }} className="flex items-center gap-4">
+              <select
+                value={dateRange}
+                onChange={(e) =>
+                  handleDateRangeChange(e.target.value as DashboardRange)
+                }
+                className="bg-card border border-card-border/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary-orange"
               >
-                <Download className="w-4 h-4" />
-                <span>Export Products</span>
-              </button>
+                {DASHBOARD_RANGES.map((r) => (
+                  <option key={r} value={r}>
+                    {r === "week"
+                      ? "This Week"
+                      : r === "month"
+                      ? "This Month"
+                      : r === "year"
+                      ? "This Year"
+                      : r}
+                  </option>
+                ))}
+              </select>
 
+              {/* <div className="flex gap-2">
               <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
                 <Upload className="w-4 h-4" />
                 <span>Import Products</span>
@@ -223,8 +210,14 @@ export function Dashboard() {
                   onChange={handleFileUpload}
                 />
               </label>
+            </div> */}
             </div>
           </div>
+          {/* end quick group switch */}
+        </div>
+
+        <div className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div />
         </div>
 
         {/* Stats Grid */}
