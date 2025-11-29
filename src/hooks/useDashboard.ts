@@ -6,8 +6,11 @@ import {
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  startOfYear,
+  endOfYear,
 } from "date-fns";
 import { DashboardStats } from "../types";
+import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, DashboardRange } from "../config/dashboardConfig";
 
 export function useDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -59,19 +62,29 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboardData = async (dateRange: "week" | "month" = "week") => {
+  const fetchDashboardData = async (dateRange: DashboardRange = DEFAULT_DASHBOARD_RANGE) => {
     try {
       setLoading(true);
 
       // Get date range
-      const startDate =
-        dateRange === "week"
-          ? startOfWeek(new Date())
-          : startOfMonth(new Date());
-      const endDate =
-        dateRange === "week" ? endOfWeek(new Date()) : endOfMonth(new Date());
+      let startDate: Date;
+      let endDate: Date;
+      if (dateRange === "week") {
+        startDate = startOfWeek(new Date());
+        endDate = endOfWeek(new Date());
+      } else if (dateRange === "month") {
+        startDate = startOfMonth(new Date());
+        endDate = endOfMonth(new Date());
+      } else {
+        // year
+        startDate = startOfYear(new Date());
+        endDate = endOfYear(new Date());
+      }
 
-      // Fetch all orders
+      // consider only completed orders for revenue/profit/sales
+      const COMPLETED_STATUSES = ["shipped", "dispatched", "delivered"];
+
+      // Fetch orders within date range and include order_items -> product.apr
       const { data: orders, error: ordersError } = await supabase
         .from("orders")
         .select(
@@ -80,7 +93,7 @@ export function useDashboard() {
           order_items:order_items (
             price,
             quantity,
-            product:product_id (
+            product:products (
               apr
             )
           )
@@ -91,13 +104,18 @@ export function useDashboard() {
 
       if (ordersError) throw ordersError;
 
-      // Calculate total revenue
-      const revenue =
-        orders?.reduce((sum, order) => sum + order.total_amount, 0) || 0;
+      // completed orders (case-insensitive)
+      const completedOrders = (orders || []).filter((o: any) =>
+        COMPLETED_STATUSES.includes((o.status || "").toString().toLowerCase())
+      );
 
-      // Calculate total profit
+      // Calculate total revenue from completed orders
+      const revenue =
+        (completedOrders || []).reduce((sum, order) => sum + Number(order.total_amount || 0), 0) || 0;
+
+      // Calculate total profit based on APR, price, qty and discount (completed orders)
       const profit =
-        orders?.reduce((sum, order) => {
+        (completedOrders || []).reduce((sum, order) => {
           if (!order.order_items) return sum;
           const orderProfit = order.order_items.reduce(
             (itemSum: number, item: any) => {
@@ -108,7 +126,6 @@ export function useDashboard() {
             },
             0
           );
-          // Subtract discount_amt from this order's profit
           const discount = Number(order.discount_amt) || 0;
           return sum + (orderProfit - discount);
         }, 0) || 0;
@@ -133,25 +150,31 @@ export function useDashboard() {
       if (usersError) throw usersError;
 
       setStats({
+        // keep totalOrders as total fetched orders in range (matches analytics)
         totalOrders: orders?.length || 0,
         totalUsers: userCount || 0,
         totalRevenue: revenue,
         totalProfit: profit,
       });
 
-      // Prepare sales data
-      const salesByDate = orders?.reduce((acc, order) => {
-        const date = format(new Date(order.created_at), "MMM dd");
-        acc[date] = (acc[date] || 0) + order.total_amount;
+      // Prepare sales data (use completed orders)
+      // Key by ISO date so we can sort chronologically, then format labels for display
+      const salesByIsoDate = (completedOrders || []).reduce((acc, order) => {
+        const iso = format(new Date(order.created_at), "yyyy-MM-dd");
+        acc[iso] = (acc[iso] || 0) + Number(order.total_amount || 0);
         return acc;
       }, {} as Record<string, number>);
 
+      const sortedDates = Object.keys(salesByIsoDate).sort(); // ISO strings sort chronologically
+      const labels = sortedDates.map((d) => format(new Date(d), "MMM dd"));
+      const dataPoints = sortedDates.map((d) => salesByIsoDate[d]);
+
       setSalesData({
-        labels: Object.keys(salesByDate || {}),
+        labels,
         datasets: [
           {
             label: "Sales",
-            data: Object.values(salesByDate || {}),
+            data: dataPoints,
             borderColor: "#FF5722",
             tension: 0.4,
           },
@@ -210,21 +233,21 @@ export function useDashboard() {
     const subscription = supabase
       .channel("dashboard-changes")
       .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
+         "postgres_changes",
+         {
+           event: "*",
+           schema: "public",
+           table: "orders",
+         },
         () => {
-          // Refresh dashboard data when orders change
-          fetchDashboardData("week");
+          // Refresh dashboard data when orders change (use configured default)
+          fetchDashboardData();
         }
-      )
-      .subscribe();
+       )
+       .subscribe();
 
-    // Initial fetch
-    fetchDashboardData("week");
+    // Initial fetch using configured default
+    fetchDashboardData();
 
     return () => {
       supabase.removeChannel(subscription);

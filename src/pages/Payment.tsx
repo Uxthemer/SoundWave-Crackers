@@ -22,8 +22,8 @@ export function Payment() {
             >
               <div className='mb-2'>
                 <img
-                  src={products[0].image}
-                  alt={products[0].name}
+                  src='/assets/img/payment/QR-Code-payment.jpg'
+                  alt='QR Code Payment'
                   className="w-full h-auto object-cover rounded-lg"
                 />
               </div>
@@ -37,7 +37,8 @@ export function Payment() {
               className={`card`}
             >
               <div className='mb-2'>
-                
+                <p>Google Pay UPI ID:</p>
+                <p>selvakumar541989@oksbi</p>
               </div>
              
             </motion.div>
@@ -49,7 +50,10 @@ export function Payment() {
               className={`card`}
             >
               <div className='mb-2'>
-                
+                <p>Account Name: Selvakumar</p>
+                <p>Account No: </p>
+                <p>Bank Name: State Bank Of India</p>
+                <p>IFSC Code: SBIN0013833</p>
               </div>
              
             </motion.div>

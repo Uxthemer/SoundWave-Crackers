@@ -26,7 +26,7 @@ export function TrendingCrackers() {
   useEffect(() => {
     if (products.length > 0) {
       // Get first 4 products for trending section
-      const trending = products.slice(0, 4);
+      const trending = products.filter((product)=>{return product.product_type === 'trending'}).slice(0, 4);
       setTrendingProducts(trending);
 
       // Initialize quantities

@@ -38,9 +38,14 @@ interface InvoiceTemplateProps {
   order: Order;
 }
 
-export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
+export function InvoiceTemplate({ order }: { order: any }) {
+  // ensure items are rendered ordered by product.order column
+  const items = (order.items || []).slice().sort((a: any, b: any) => {
+    return Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0);
+  });
+
   const totalProducts = order.items?.length || 0;
-  const totalQuantity = order.items?.reduce((s, it) => s + (it.quantity || 0), 0) || 0;
+  const totalQuantity = order.items?.reduce((s: number, it: OrderItem) => s + (it.quantity || 0), 0) || 0;
 
   return `
     <!DOCTYPE html>
@@ -113,16 +118,16 @@ export function InvoiceTemplate({ order }: InvoiceTemplateProps) {
             </tr>
           </thead>
           <tbody>
-            ${order.items?.map((item, index) => `
+            ${items?.map((it: any, idx: any) => `
               <tr>
-                <td>${index + 1}</td>
-                <td>${item.product.name}</td>
-                <td>${item.product.categories.name}</td>
-                <td>${item.quantity}</td>
-                <td>₹${item.price}</td>
-                <td>₹${item.total_price}</td>
+                <td>${idx + 1}</td>
+                <td>${(it.product as any)?.product_code || "-"}</td>
+                <td>${it.product.name}</td>
+                <td>${it.quantity}</td>
+                <td>₹${it.price}</td>
+                <td>₹${it.total_price}</td>
               </tr>
-            `).join('')}
+            `).join("")}
           </tbody>
         </table>
 
