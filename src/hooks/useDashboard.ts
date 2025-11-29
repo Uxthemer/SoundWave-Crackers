@@ -62,6 +62,20 @@ export function useDashboard() {
     ],
   });
 
+  // Inventory / SKUs charts state
+  const [topSkusChart, setTopSkusChart] = useState({
+    labels: [] as string[],
+    datasets: [{ label: "Revenue", data: [] as number[], backgroundColor: "#FF5722" }],
+  });
+  const [lowStockChart, setLowStockChart] = useState({
+    labels: [] as string[],
+    datasets: [{ label: "Stock", data: [] as number[], backgroundColor: "#E53E3E" }],
+  });
+  const [inventorySummary, setInventorySummary] = useState({
+    lowStockList: [] as any[],
+    outOfStockCount: 0,
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -240,6 +254,64 @@ export function useDashboard() {
           ],
         });
       }
+
+      // --- Inventory & Top SKUs (charts)
+      try {
+        // low stock products (fetch a small set)
+        const { data: products } = await supabase
+          .from("products")
+          .select("id,name,product_code,stock,reorder_level")
+          .order("stock", { ascending: true })
+          .limit(20);
+
+        const lowStockList = (products || []).filter((p: any) => {
+          const rl = Number(p.reorder_level ?? p.reorder ?? p.min_stock ?? 5);
+          const st = Number(p.stock ?? 0);
+          return st <= Math.max(rl, 5);
+        });
+
+        const { count: outOfStockCount } = await supabase
+          .from("products")
+          .select("id", { count: "exact", head: true })
+          .eq("stock", 0);
+
+        // build low stock chart (top 8 lowest stock)
+        const lowForChart = (products || [])
+          .slice(0, 8)
+          .map((p: any) => ({ name: p.name || `#${p.id}`, stock: Number(p.stock ?? 0) }));
+
+        setLowStockChart({
+          labels: lowForChart.map((l) => l.name),
+          datasets: [{ label: "Stock", data: lowForChart.map((l) => l.stock), backgroundColor: "#E53E3E" }],
+        });
+
+        // top SKUs by revenue in the selected date range
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("price,quantity,product:products(id,name,product_code)")
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
+
+        const revMap: Record<string, { name: string; revenue: number }> = {};
+        (orderItems || []).forEach((it: any) => {
+          const pid = it.product?.id ?? "unknown";
+          const name = it.product?.name ?? `#${pid}`;
+          const amount = (Number(it.price) || 0) * (Number(it.quantity) || 0);
+          if (!revMap[pid]) revMap[pid] = { name, revenue: 0 };
+          revMap[pid].revenue += amount;
+        });
+
+        const topSkus = Object.values(revMap).sort((a, b) => b.revenue - a.revenue);
+        setTopSkusChart({
+          labels: topSkus.map((s) => s.name),
+          datasets: [{ label: "Revenue", data: topSkus.map((s) => Math.round(s.revenue)), backgroundColor: "#FF8A65" }],
+        });
+
+        setInventorySummary({ lowStockList, outOfStockCount: Number(outOfStockCount || 0) });
+      } catch (e) {
+        console.warn("inventory/topSkus calculation failed", e);
+        // keep charts empty but don't throw
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -277,6 +349,9 @@ export function useDashboard() {
     stats,
     salesData,
     categoryData,
+    topSkusChart,
+    lowStockChart,
+    inventorySummary,
     loading,
     error,
     fetchDashboardData,

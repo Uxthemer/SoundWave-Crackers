@@ -668,7 +668,7 @@ export function StockManagement() {
 
   // count of active products within current filtered list
   const activeCount = filteredProducts.filter((p) => p.is_active).length;
-  
+
   // Add sorting handler
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -747,19 +747,6 @@ export function StockManagement() {
   return (
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <h1 className="font-heading text-2xl">Stock Management</h1>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={exportProductsToExcel}
-              className="flex items-center gap-2 bg-card border border-card-border/10 rounded-lg px-4 py-2 hover:bg-card/70 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export Products</span>
-            </button>
-          </div>
-        </div>
-
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
             <h1 className="font-heading text-4xl">Stock Management</h1>
@@ -830,6 +817,13 @@ export function StockManagement() {
               <span>Add Product</span>
             </button>
           )}
+          <button
+            onClick={exportProductsToExcel}
+            className="flex items-center gap-2 bg-card border border-card-border/10 rounded-lg px-4 py-2 hover:bg-card/70 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Products</span>
+          </button>
         </div>
 
         <div className="bg-card/30 rounded-xl overflow-hidden">
