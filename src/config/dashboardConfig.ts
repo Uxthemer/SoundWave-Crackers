@@ -1,6 +1,13 @@
-export type DashboardRange = "week" | "month" | "year";
+export type DashboardRange = "today" | "last90" | "week" | "month" | "year" | "custom";
 
-export const DASHBOARD_RANGES: DashboardRange[] = ["week", "month", "year"];
+export const DASHBOARD_RANGES: DashboardRange[] = [
+  "today",
+  "last90",
+  "week",
+  "month",
+  "year",
+  "custom",
+];
 
-// change this default to switch which ranges the app shows
+// default range (change this to switch default)
 export const DEFAULT_DASHBOARD_RANGE: DashboardRange = "year";

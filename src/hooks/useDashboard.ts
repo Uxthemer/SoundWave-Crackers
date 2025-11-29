@@ -8,6 +8,9 @@ import {
   endOfMonth,
   startOfYear,
   endOfYear,
+  startOfDay,
+  endOfDay,
+  subDays,
 } from "date-fns";
 import { DashboardStats } from "../types";
 import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, DashboardRange } from "../config/dashboardConfig";
@@ -62,23 +65,39 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboardData = async (dateRange: DashboardRange = DEFAULT_DASHBOARD_RANGE) => {
+  // Accept preset ranges or a custom object { startDate, endDate }
+  const fetchDashboardData = async (
+    range: DashboardRange | { startDate: Date; endDate: Date } = DEFAULT_DASHBOARD_RANGE
+  ) => {
     try {
       setLoading(true);
 
-      // Get date range
+      // Resolve start/end based on preset or custom range
       let startDate: Date;
       let endDate: Date;
-      if (dateRange === "week") {
-        startDate = startOfWeek(new Date());
-        endDate = endOfWeek(new Date());
-      } else if (dateRange === "month") {
-        startDate = startOfMonth(new Date());
-        endDate = endOfMonth(new Date());
+      if (typeof range === "object" && range.startDate && range.endDate) {
+        startDate = startOfDay(range.startDate);
+        endDate = endOfDay(range.endDate);
       } else {
-        // year
-        startDate = startOfYear(new Date());
-        endDate = endOfYear(new Date());
+        const preset = range as DashboardRange;
+        const now = new Date();
+        if (preset === "today") {
+          startDate = startOfDay(now);
+          endDate = endOfDay(now);
+        } else if (preset === "last90") {
+          endDate = endOfDay(now);
+          startDate = startOfDay(subDays(now, 89)); // include today => 90 days
+        } else if (preset === "week") {
+          startDate = startOfWeek(now);
+          endDate = endOfWeek(now);
+        } else if (preset === "month") {
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+        } else {
+          // year
+          startDate = startOfYear(now);
+          endDate = endOfYear(now);
+        }
       }
 
       // consider only completed orders for revenue/profit/sales

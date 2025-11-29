@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Users,
@@ -31,11 +30,8 @@ import { Line, Doughnut } from "react-chartjs-2";
 import { useDashboard } from "../hooks/useDashboard";
 import { useProducts } from "../hooks/useProducts";
 import { useAuth } from "../context/AuthContext";
-import {
-  DASHBOARD_RANGES,
-  DEFAULT_DASHBOARD_RANGE,
-  DashboardRange,
-} from "../config/dashboardConfig";
+import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, type DashboardRange } from "../config/dashboardConfig";
+import { useEffect, useState } from "react";
 
 ChartJS.register(
   CategoryScale,
@@ -53,9 +49,10 @@ export function Dashboard() {
   const navigate = useNavigate();
   const { userRole } = useAuth();
   // configurable date range (values come from src/config/dashboardConfig.ts)
-  const [dateRange, setDateRange] = useState<DashboardRange>(
-    DEFAULT_DASHBOARD_RANGE
-  );
+  const [dateRange, setDateRange] = useState<DashboardRange>(DEFAULT_DASHBOARD_RANGE);
+  const [customStart, setCustomStart] = useState<string>("");
+  const [customEnd, setCustomEnd] = useState<string>("");
+  const [isApplyingCustom, setIsApplyingCustom] = useState(false);
   const { stats, salesData, categoryData, loading, fetchDashboardData } =
     useDashboard();
   const { importProductsFromExcel } = useProducts();
@@ -87,16 +84,24 @@ export function Dashboard() {
     fetchDashboardData(range);
   };
 
-  // Fetch initial data and when dateRange changes
+  // Fetch initial data and whenever dateRange changes
   useEffect(() => {
-    fetchDashboardData(dateRange);
+    // for presets just call with the preset string
+    if (dateRange !== "custom") {
+      fetchDashboardData(dateRange);
+      return;
+    }
+    // for custom we wait for explicit Apply (see Apply button)
   }, [dateRange]);
 
-  // if you render buttons for ranges use DASHBOARD_RANGES to build them
-  // Example (where you currently render the week/month toggles):
-  // {DASHBOARD_RANGES.map(r => (
-  //   <button key={r} onClick={() => { setDateRange(r); fetchDashboardData(r); }}>{r}</button>
-  // ))}
+  // Apply custom range (start/end) when user clicks Apply
+  const applyCustomRange = () => {
+    if (!customStart || !customEnd) return;
+    const s = new Date(customStart);
+    const e = new Date(customEnd);
+    setIsApplyingCustom(true);
+    fetchDashboardData({ startDate: s, endDate: e }).finally(() => setIsApplyingCustom(false));
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -179,25 +184,57 @@ export function Dashboard() {
           <div className="mt-4 flex flex-wrap gap-2">
             {rendergroupSwitch()}
             <div style={{ marginLeft: "auto" }} className="flex items-center gap-4">
-              <select
-                value={dateRange}
-                onChange={(e) =>
-                  handleDateRangeChange(e.target.value as DashboardRange)
-                }
-                className="bg-card border border-card-border/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary-orange"
-              >
-                {DASHBOARD_RANGES.map((r) => (
-                  <option key={r} value={r}>
-                    {r === "week"
-                      ? "This Week"
-                      : r === "month"
-                      ? "This Month"
-                      : r === "year"
-                      ? "This Year"
-                      : r}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={dateRange}
+                  onChange={(e) => {
+                    const v = e.target.value as DashboardRange;
+                    setDateRange(v);
+                  }}
+                  className="bg-card border border-card-border/10 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-orange"
+                >
+                  {DASHBOARD_RANGES.map((r) => (
+                    <option key={r} value={r}>
+                      {r === "today"
+                        ? "Today"
+                        : r === "last90"
+                        ? "Last 90 Days"
+                        : r === "week"
+                        ? "This Week"
+                        : r === "month"
+                        ? "This Month"
+                        : r === "year"
+                        ? "This Year"
+                        : "Custom"}
+                    </option>
+                  ))}
+                </select>
+
+                {dateRange === "custom" && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={customStart}
+                      onChange={(e) => setCustomStart(e.target.value)}
+                      className="bg-card border border-card-border/10 rounded-lg px-3 py-2"
+                    />
+                    <span className="text-text/60">to</span>
+                    <input
+                      type="date"
+                      value={customEnd}
+                      onChange={(e) => setCustomEnd(e.target.value)}
+                      className="bg-card border border-card-border/10 rounded-lg px-3 py-2"
+                    />
+                    <button
+                      onClick={applyCustomRange}
+                      disabled={!customStart || !customEnd || isApplyingCustom}
+                      className="bg-primary-orange text-white rounded-lg px-3 py-2 disabled:opacity-60"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* <div className="flex gap-2">
               <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
