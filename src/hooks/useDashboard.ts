@@ -8,6 +8,9 @@ import {
   endOfMonth,
   startOfYear,
   endOfYear,
+  startOfDay,
+  endOfDay,
+  subDays,
 } from "date-fns";
 import { DashboardStats } from "../types";
 import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, DashboardRange } from "../config/dashboardConfig";
@@ -59,26 +62,56 @@ export function useDashboard() {
     ],
   });
 
+  // Inventory / SKUs charts state
+  const [topSkusChart, setTopSkusChart] = useState({
+    labels: [] as string[],
+    datasets: [{ label: "Revenue", data: [] as number[], backgroundColor: "#FF5722" }],
+  });
+  const [lowStockChart, setLowStockChart] = useState({
+    labels: [] as string[],
+    datasets: [{ label: "Stock", data: [] as number[], backgroundColor: "#E53E3E" }],
+  });
+  const [inventorySummary, setInventorySummary] = useState({
+    lowStockList: [] as any[],
+    outOfStockCount: 0,
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDashboardData = async (dateRange: DashboardRange = DEFAULT_DASHBOARD_RANGE) => {
+  // Accept preset ranges or a custom object { startDate, endDate }
+  const fetchDashboardData = async (
+    range: DashboardRange | { startDate: Date; endDate: Date } = DEFAULT_DASHBOARD_RANGE
+  ) => {
     try {
       setLoading(true);
 
-      // Get date range
+      // Resolve start/end based on preset or custom range
       let startDate: Date;
       let endDate: Date;
-      if (dateRange === "week") {
-        startDate = startOfWeek(new Date());
-        endDate = endOfWeek(new Date());
-      } else if (dateRange === "month") {
-        startDate = startOfMonth(new Date());
-        endDate = endOfMonth(new Date());
+      if (typeof range === "object" && range.startDate && range.endDate) {
+        startDate = startOfDay(range.startDate);
+        endDate = endOfDay(range.endDate);
       } else {
-        // year
-        startDate = startOfYear(new Date());
-        endDate = endOfYear(new Date());
+        const preset = range as DashboardRange;
+        const now = new Date();
+        if (preset === "today") {
+          startDate = startOfDay(now);
+          endDate = endOfDay(now);
+        } else if (preset === "last90") {
+          endDate = endOfDay(now);
+          startDate = startOfDay(subDays(now, 89)); // include today => 90 days
+        } else if (preset === "week") {
+          startDate = startOfWeek(now);
+          endDate = endOfWeek(now);
+        } else if (preset === "month") {
+          startDate = startOfMonth(now);
+          endDate = endOfMonth(now);
+        } else {
+          // year
+          startDate = startOfYear(now);
+          endDate = endOfYear(now);
+        }
       }
 
       // consider only completed orders for revenue/profit/sales
@@ -221,6 +254,64 @@ export function useDashboard() {
           ],
         });
       }
+
+      // --- Inventory & Top SKUs (charts)
+      try {
+        // low stock products (fetch a small set)
+        const { data: products } = await supabase
+          .from("products")
+          .select("id,name,product_code,stock,reorder_level")
+          .order("stock", { ascending: true })
+          .limit(20);
+
+        const lowStockList = (products || []).filter((p: any) => {
+          const rl = Number(p.reorder_level ?? p.reorder ?? p.min_stock ?? 5);
+          const st = Number(p.stock ?? 0);
+          return st <= Math.max(rl, 5);
+        });
+
+        const { count: outOfStockCount } = await supabase
+          .from("products")
+          .select("id", { count: "exact", head: true })
+          .eq("stock", 0);
+
+        // build low stock chart (top 8 lowest stock)
+        const lowForChart = (products || [])
+          .slice(0, 8)
+          .map((p: any) => ({ name: p.name || `#${p.id}`, stock: Number(p.stock ?? 0) }));
+
+        setLowStockChart({
+          labels: lowForChart.map((l) => l.name),
+          datasets: [{ label: "Stock", data: lowForChart.map((l) => l.stock), backgroundColor: "#E53E3E" }],
+        });
+
+        // top SKUs by revenue in the selected date range
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("price,quantity,product:products(id,name,product_code)")
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
+
+        const revMap: Record<string, { name: string; revenue: number }> = {};
+        (orderItems || []).forEach((it: any) => {
+          const pid = it.product?.id ?? "unknown";
+          const name = it.product?.name ?? `#${pid}`;
+          const amount = (Number(it.price) || 0) * (Number(it.quantity) || 0);
+          if (!revMap[pid]) revMap[pid] = { name, revenue: 0 };
+          revMap[pid].revenue += amount;
+        });
+
+        const topSkus = Object.values(revMap).sort((a, b) => b.revenue - a.revenue);
+        setTopSkusChart({
+          labels: topSkus.map((s) => s.name),
+          datasets: [{ label: "Revenue", data: topSkus.map((s) => Math.round(s.revenue)), backgroundColor: "#FF8A65" }],
+        });
+
+        setInventorySummary({ lowStockList, outOfStockCount: Number(outOfStockCount || 0) });
+      } catch (e) {
+        console.warn("inventory/topSkus calculation failed", e);
+        // keep charts empty but don't throw
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -258,6 +349,9 @@ export function useDashboard() {
     stats,
     salesData,
     categoryData,
+    topSkusChart,
+    lowStockChart,
+    inventorySummary,
     loading,
     error,
     fetchDashboardData,
