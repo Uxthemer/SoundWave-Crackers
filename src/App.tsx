@@ -199,7 +199,10 @@ function ScrollToTop() {
   return null;
 }
 
+import { usePageTracking } from "./hooks/usePageTracking";
+
 export function AppContent() {
+  usePageTracking();
   const { theme, toggleTheme } = useTheme();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

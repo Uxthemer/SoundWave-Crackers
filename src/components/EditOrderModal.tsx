@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import toast from "react-hot-toast";
 
 type ProductOption = {
   id: string;
@@ -42,6 +43,7 @@ export type OrderForEdit = {
   payment_method?: string;
   items?: OrderItemLocal[];
   discount_amt?: number;
+  discount_percentage?: string;
   short_id?: string;
   referred_by?: string;
 };
@@ -70,6 +72,21 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
   const [addingQty, setAddingQty] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>("");
+
+  // Discount State
+  const [discountType, setDiscountType] = useState<"amount" | "percentage">("amount");
+  const [discountInput, setDiscountInput] = useState<string>("");
+
+  useEffect(() => {
+    // Initialize discount state from props
+    if (order.discount_percentage && Number(order.discount_percentage) > 0) {
+      setDiscountType("percentage");
+      setDiscountInput(order.discount_percentage);
+    } else {
+      setDiscountType("amount");
+      setDiscountInput(order.discount_amt ? String(order.discount_amt) : "");
+    }
+  }, [order]);
 
   useEffect(() => {
     setForm({ ...order });
@@ -163,7 +180,10 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
       "state",
       "pincode",
       "status",
+      "status",
       "payment_method",
+      "discount_amt",
+      "discount_percentage"
     ];
     keysToCheck.forEach((k) => {
       if ((original as any)[k] !== (updated as any)[k]) {
@@ -196,6 +216,8 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
   const handleSave = async () => {
     setError("");
     setSaving(true);
+    let itemsDeleted = false;
+
     try {
       // compute updated order object
       const updatedOrder: OrderForEdit = {
@@ -206,7 +228,22 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         })),
       };
       const totals = computeTotals();
-      updatedOrder.total_amount = totals.total;
+      
+      // Calculate Discount
+      let finalAmt = 0;
+      let finalPercent = null;
+      if (discountType === "percentage") {
+        const pct = Number(discountInput) || 0;
+        finalPercent = pct.toString();
+        finalAmt = (totals.total * pct) / 100;
+      } else {
+        finalAmt = Number(discountInput) || 0;
+        finalPercent = null;
+      }
+
+      updatedOrder.total_amount = totals.total; // Gross Total
+      updatedOrder.discount_amt = finalAmt;
+      updatedOrder.discount_percentage = finalPercent as any;
 
       // build audit object
       const changes = buildChangesAudit(order, updatedOrder);
@@ -262,6 +299,8 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
           state: updatedOrder.state,
           pincode: updatedOrder.pincode,
           total_amount: updatedOrder.total_amount,
+          discount_amt: updatedOrder.discount_amt,
+          discount_percentage: updatedOrder.discount_percentage,
           referred_by: updatedOrder.referred_by || null,
         })
         .eq("id", updatedOrder.id);
@@ -273,6 +312,7 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         .delete()
         .eq("order_id", updatedOrder.id);
       if (delErr) throw delErr;
+      itemsDeleted = true;
 
       const itemsToInsert = (updatedOrder.items || []).map((it) => ({
         order_id: updatedOrder.id,
@@ -330,9 +370,39 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
       // return updated structure to caller
       onSaved(updatedOrder);
       onClose();
+      toast.success("Order updated successfully");
     } catch (e: any) {
       console.error("Failed to save order edits:", e);
       setError(e?.message || "Failed to save changes");
+
+      // Rollback: Restore original items if they were deleted but new ones failed to insert
+      if (itemsDeleted) {
+        toast.error("Error occurred. Attempting to rollback...");
+        try {
+          const originalItemsToInsert = (order.items || []).map((it) => ({
+            order_id: order.id,
+            product_id: it.product_id,
+            quantity: it.quantity,
+            price: it.price,
+            total_price: it.total_price,
+          }));
+
+          if (originalItemsToInsert.length > 0) {
+            const { error: rollbackError } = await supabase
+              .from("order_items")
+              .insert(originalItemsToInsert);
+            if (rollbackError) throw rollbackError;
+          }
+          console.log("Rollback successful: Original items restored.");
+          toast.success("Rollback successful. No data was lost.");
+        } catch (rollbackError) {
+          console.error("CRITICAL: Rollback failed", rollbackError);
+          setError(
+            "Failed to save changes AND failed to restore original items. Please contact support immediately."
+          );
+          toast.error("Critical Error: Rollback failed!");
+        }
+      }
     } finally {
       setSaving(false);
     }
@@ -564,8 +634,64 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
 
                 <div className="text-right pt-2">
                   <div className="font-semibold">
-                    Total: ₹{computeTotals().total.toFixed(2)}
+                    Subtotal: ₹{computeTotals().total.toFixed(2)}
                   </div>
+                </div>
+
+                {/* Discount Section */}
+                <div className="border-t pt-2 mt-2">
+                   <h4 className="font-semibold mb-2">Discount</h4>
+                   <div className="flex items-center gap-4 mb-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setDiscountType("amount")}
+                          className={`px-3 py-1 rounded text-sm border ${
+                            discountType === "amount"
+                              ? "bg-primary-orange text-white border-primary-orange"
+                              : "bg-gray-100 text-gray-700 border-gray-300"
+                          }`}
+                        >
+                          ₹ Amount
+                        </button>
+                        <button
+                          onClick={() => setDiscountType("percentage")}
+                          className={`px-3 py-1 rounded text-sm border ${
+                            discountType === "percentage"
+                              ? "bg-primary-orange text-white border-primary-orange"
+                              : "bg-gray-100 text-gray-700 border-gray-300"
+                          }`}
+                        >
+                          % Percentage
+                        </button>
+                      </div>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder={discountType === "amount" ? "Amount" : "Percentage"}
+                        value={discountInput}
+                        onChange={(e) => setDiscountInput(e.target.value)}
+                        className="p-1 border rounded w-28"
+                      />
+                   </div>
+                   <div className="text-right space-y-1">
+                      <div>
+                        Discount: -₹
+                        {discountType === "percentage"
+                          ? ((computeTotals().total * (Number(discountInput) || 0)) / 100).toFixed(2)
+                          : (Number(discountInput) || 0).toFixed(2)
+                        }
+                      </div>
+                      <div className="font-bold text-lg text-primary-orange">
+                         Grand Total: ₹
+                         {(
+                           computeTotals().total - 
+                           (discountType === "percentage"
+                             ? (computeTotals().total * (Number(discountInput) || 0)) / 100
+                             : Number(discountInput) || 0)
+                         ).toFixed(2)}
+                      </div>
+                   </div>
                 </div>
               </div>
             )}
