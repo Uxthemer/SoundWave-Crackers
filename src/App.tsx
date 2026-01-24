@@ -64,6 +64,8 @@ import { TrackOrder } from "./pages/TrackOrder";
 import { Payment } from "./pages/Payment";
 import { Expenses } from "./pages/Expenses";
 import { UpdatePassword } from "./pages/UpdatePassword";
+import { Vendors } from "./pages/Vendors";
+import { VendorDetails } from "./pages/VendorDetails";
 
 const ProtectedRoute = ({
   children,
@@ -515,6 +517,22 @@ export function AppContent() {
           element={
             <ProtectedRoute requiredRole="admin">
               <Expenses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Vendors />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vendors/:id"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <VendorDetails />
             </ProtectedRoute>
           }
         />
