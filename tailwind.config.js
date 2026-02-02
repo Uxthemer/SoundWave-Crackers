@@ -14,13 +14,13 @@ export default {
       },
       colors: {
         primary: {
-          red: '#FF0000',
-          yellow: '#FFC107',
-          orange: '#FF5722',
+          red: 'rgb(var(--primary-red) / <alpha-value>)',
+          yellow: 'rgb(var(--primary-yellow) / <alpha-value>)',
+          orange: 'rgb(var(--primary-orange) / <alpha-value>)',
         },
         secondary: {
-          blue: '#0D1B2A',
-          purple: '#8A2BE2',
+          blue: 'rgb(var(--secondary-blue) / <alpha-value>)',
+          purple: 'rgb(var(--secondary-purple) / <alpha-value>)',
           dark: '#1E1E1E',
         },
         background: 'rgb(var(--background) / <alpha-value>)',

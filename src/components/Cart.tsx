@@ -738,9 +738,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                   ? Array.isArray(item.image)
                                     ? item.image[0]
                                     : item.image?.split(",")[0]
-                                  : `/assets/img/crackers/${
-                                      item.image_url?.split(",")[0]
-                                    }` || "/assets/img/logo/logo-product.png"
+                                  : item.image_url
+                                  ? `/assets/img/crackers/${
+                                      item.image_url.split(",")[0]
+                                    }`
+                                  : "/assets/img/logo/logo-product.png"
                               }
                               alt={item.name}
                               className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
@@ -803,9 +805,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
                             ? Array.isArray(item.image)
                               ? item.image[0]
                               : item.image?.split(",")[0]
-                            : `/assets/img/crackers/${
-                                item.image_url?.split(",")[0]
-                              }` || "/assets/img/logo/logo-product.png"
+                            : item.image_url
+                            ? `/assets/img/crackers/${
+                                item.image_url.split(",")[0]
+                              }`
+                            : "/assets/img/logo/logo-product.png"
                         }
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-lg"

@@ -292,18 +292,20 @@ export function useDashboard() {
           .gte("created_at", startDate.toISOString())
           .lte("created_at", endDate.toISOString());
 
-        const revMap: Record<string, { name: string; revenue: number }> = {};
+        const revMap: Record<string, { name: string; revenue: number; qty: number }> = {};
         (orderItems || []).forEach((it: any) => {
           const pid = it.product?.id ?? "unknown";
           const name = it.product?.name ?? `#${pid}`;
-          const amount = (Number(it.price) || 0) * (Number(it.quantity) || 0);
-          if (!revMap[pid]) revMap[pid] = { name, revenue: 0 };
+          const qty = Number(it.quantity) || 0;
+          const amount = (Number(it.price) || 0) * qty;
+          if (!revMap[pid]) revMap[pid] = { name, revenue: 0, qty: 0 };
           revMap[pid].revenue += amount;
+          revMap[pid].qty += qty;
         });
 
         const topSkus = Object.values(revMap).sort((a, b) => b.revenue - a.revenue);
         setTopSkusChart({
-          labels: topSkus.map((s) => s.name),
+          labels: topSkus.map((s) => `${s.name} (Sold: ${s.qty})`),
           datasets: [{ label: "Revenue", data: topSkus.map((s) => Math.round(s.revenue)), backgroundColor: "#FF8A65" }],
         });
 

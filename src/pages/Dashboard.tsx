@@ -87,6 +87,46 @@ export function Dashboard() {
   >("overview");
   const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
+  // recent lists
+  const [recentSales, setRecentSales] = useState<any[]>([]);
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchRecent = async () => {
+      setRecentLoading(true);
+      try {
+        // last 5 orders
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("id, short_id, full_name, email, total_amount, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        // last 5 users (include phone)
+        const { data: users } = await supabase
+          .from("user_profiles")
+          .select("id, full_name, email, phone, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5);
+
+        if (!mounted) return;
+        setRecentSales(orders || []);
+        setRecentUsers(users || []);
+      } catch (e) {
+        console.error("Failed to fetch recent items", e);
+      } finally {
+        if (mounted) setRecentLoading(false);
+      }
+    };
+
+    fetchRecent();
+    return () => {
+      mounted = false;
+    };
+  }, []); // run once; keep light to avoid interfering with other dashboard fetches
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -189,45 +229,7 @@ export function Dashboard() {
     });
   };
 
-  // recent lists
-  const [recentSales, setRecentSales] = useState<any[]>([]);
-  const [recentUsers, setRecentUsers] = useState<any[]>([]);
-  const [recentLoading, setRecentLoading] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchRecent = async () => {
-      setRecentLoading(true);
-      try {
-        // last 5 orders
-        const { data: orders } = await supabase
-          .from("orders")
-          .select("id, short_id, full_name, email, total_amount, created_at")
-          .order("created_at", { ascending: false })
-          .limit(5);
-
-        // last 5 users (include phone)
-        const { data: users } = await supabase
-          .from("user_profiles")
-          .select("id, full_name, email, phone, created_at")
-          .order("created_at", { ascending: false })
-          .limit(5);
-
-        if (!mounted) return;
-        setRecentSales(orders || []);
-        setRecentUsers(users || []);
-      } catch (e) {
-        console.error("Failed to fetch recent items", e);
-      } finally {
-        if (mounted) setRecentLoading(false);
-      }
-    };
-
-    fetchRecent();
-    return () => {
-      mounted = false;
-    };
-  }, []); // run once; keep light to avoid interfering with other dashboard fetches
 
   return (
     <div className="min-h-screen pt-8 pb-12">
@@ -249,8 +251,8 @@ export function Dashboard() {
             </div>
             {/* date range / import area - keep existing controls intact */}
             {activeTab === "overview" && (
-              <div className="flex items-center gap-4 ml-auto">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 ml-auto w-full sm:w-auto mt-4 sm:mt-0">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
                   <select
                     value={dateRange}
                     onChange={(e) => {

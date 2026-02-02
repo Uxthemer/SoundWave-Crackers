@@ -24,9 +24,11 @@ import {
 import { motion } from "framer-motion";
 import { useTheme } from "./context/ThemeContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AppSettingsProvider, useAppSettings } from "./context/AppSettingsContext";
 import { AnnouncementBar } from "./components/AnnouncementBar";
 import { MarqueeText } from "./components/MarqueeText";
 import { HeroSlider } from "./components/HeroSlider";
+
 import { AboutSection } from "./components/AboutSection";
 import { HowItWorks } from "./components/HowItWorks";
 import { CrackerCategories } from "./components/CrackerCategories";
@@ -57,6 +59,7 @@ import { FAQSection } from "./components/FAQSection";
 import { BlogPost } from "./pages/BlogPost";
 import { Users } from "./pages/Users";
 import { Analytics } from "./pages/Analytics";
+import { AdminSettings } from "./pages/AdminSettings";
 import { Sitemap } from "./pages/Sitemap";
 import { NotFound } from "./pages/NotFound";
 import QuickPurchaseButton from "./components/QuickButton";
@@ -209,6 +212,7 @@ export function AppContent() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalQuantity, items } = useCartStore();
+  const { settings } = useAppSettings();
 
   const handleMenuItemClick = () => {
     setIsMobileMenuOpen(false);
@@ -250,13 +254,13 @@ export function AppContent() {
         <div className="container mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center -ml-3">
             <img
-              src="/assets/img/logo/logo_2.png"
-              alt="SoundWave Crackers"
+              src={settings?.logo_url || "/assets/img/logo/logo_2.png"}
+              alt={settings?.site_title || "SoundWave Crackers"}
               className="hidden dark:block h-20 w-auto dark:invert"
             />
             <img
-              src="/assets/img/logo/logo_2.png"
-              alt="SoundWave Crackers"
+              src={settings?.logo_url || "/assets/img/logo/logo_2.png"}
+              alt={settings?.site_title || "SoundWave Crackers"}
               className="block dark:hidden h-20 w-auto light:invert"
             />
           </Link>
@@ -489,6 +493,14 @@ export function AppContent() {
           }
         />
         <Route
+          path="/settings"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/users"
           element={
             <ProtectedRoute requiredRole="admin">
@@ -551,7 +563,10 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <AppSettingsProvider>
+          <AppContent />
+          {/* <DebugSettings /> Uncomment if needed for troubleshooting */}
+        </AppSettingsProvider>
       </AuthProvider>
     </Router>
   );

@@ -115,6 +115,17 @@ export function UserMenu() {
               </Link>
             )}
 
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
+              <Link
+                to="/settings"
+                className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <Settings className="w-4 h-4 mr-3 text-primary-orange" />
+                <span>Global Settings</span>
+              </Link>
+            )}
+
             {userRole?.name === 'superadmin' && (
               <Link
                 to="/dashboard"
