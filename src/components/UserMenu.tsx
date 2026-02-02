@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package } from 'lucide-react';
+import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package, Building2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../hooks/useRoles';
 
@@ -101,6 +101,17 @@ export function UserMenu() {
               >
                 <Package className="w-4 h-4 mr-3 text-primary-orange" />
                 <span>Stock Management</span>
+              </Link>
+            )}
+
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
+              <Link
+                to="/vendors"
+                className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <Building2 className="w-4 h-4 mr-3 text-primary-orange" />
+                <span>Vendor Management</span>
               </Link>
             )}
 

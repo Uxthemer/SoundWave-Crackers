@@ -39,6 +39,7 @@ interface Order {
   payment_method: string;
   items?: OrderItem[];
   discount_amt?: number;
+  discount_percentage?: string;
   short_id?: string;
   referred_by?: string;
 }
@@ -74,7 +75,8 @@ export function Orders() {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [discountOrderId, setDiscountOrderId] = useState<string | null>(null);
   const [discountInput, setDiscountInput] = useState<number | string>("");
-  const [editOrder, setEditOrder] = useState<Order | null>(null); // <-- added state
+  const [discountType, setDiscountType] = useState<"amount" | "percentage">("amount");
+  const [editOrder, setEditOrder] = useState<Order | null>(null);
 
 
   // profit modal state (superadmin only)
@@ -662,7 +664,16 @@ export function Orders() {
 
   const handleOpenDiscountModal = (order: Order) => {
     setDiscountOrderId(order.id);
-    setDiscountInput(order.discount_amt ?? "");
+    // Initialize logic:
+    // If we have a percentage string (e.g. "10"), use it.
+    // Else use amount.
+    if (order.discount_percentage && Number(order.discount_percentage) > 0) {
+      setDiscountType("percentage");
+      setDiscountInput(order.discount_percentage);
+    } else {
+      setDiscountType("amount");
+      setDiscountInput(order.discount_amt ?? "");
+    }
     setShowDiscountModal(true);
   };
 
@@ -1140,19 +1151,89 @@ export function Orders() {
               ×
             </button>
             <h2 className="text-xl font-bold mb-4 text-center">
-              Set Discount Amount
+              Set Discount
             </h2>
+
+            {/* Toggle Amount / Percentage */}
+            <div className="flex justify-center mb-4 space-x-4">
+              <button
+                onClick={() => setDiscountType("amount")}
+                className={`px-3 py-1 rounded-full text-sm border ${
+                  discountType === "amount"
+                    ? "bg-primary-orange text-white border-primary-orange"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+              >
+                ₹ Amount
+              </button>
+              <button
+                onClick={() => setDiscountType("percentage")}
+                className={`px-3 py-1 rounded-full text-sm border ${
+                  discountType === "percentage"
+                    ? "bg-primary-orange text-white border-primary-orange"
+                    : "bg-white text-gray-700 border-gray-300"
+                }`}
+              >
+                % Percentage
+              </button>
+            </div>
+
             <input
               type="number"
               min={0}
               step="0.01"
               value={discountInput}
               onChange={(e) => setDiscountInput(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg mb-6"
-              placeholder="Enter discount amount"
+              className="w-full px-4 py-2 border rounded-lg mb-2"
+              placeholder={
+                discountType === "amount"
+                  ? "Enter calculated amount"
+                  : "Enter percentage (e.g. 10)"
+              }
               disabled={savingDiscount}
             />
-            <div className="flex justify-end gap-3">
+
+            {/* Calculated Preview */}
+            <div className="mb-4 text-sm text-center text-gray-600 bg-gray-50 p-3 rounded">
+              <p>
+                Order Total: ₹
+                {orders
+                  .find((o) => o.id === discountOrderId)
+                  ?.total_amount.toFixed(2) || "0.00"}
+              </p>
+              <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+                <span>Discount Value:</span>
+                <span className="font-bold text-primary-orange">
+                  -₹
+                  {discountType === "percentage"
+                    ? (
+                        ((orders.find((o) => o.id === discountOrderId)
+                          ?.total_amount || 0) *
+                          (Number(discountInput) || 0)) /
+                        100
+                      ).toFixed(2)
+                    : (Number(discountInput) || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mt-1">
+                <span>New Total:</span>
+                <span className="font-bold">
+                  ₹
+                  {(
+                    (orders.find((o) => o.id === discountOrderId)
+                      ?.total_amount || 0) -
+                    (discountType === "percentage"
+                      ? ((orders.find((o) => o.id === discountOrderId)
+                          ?.total_amount || 0) *
+                          (Number(discountInput) || 0)) /
+                        100
+                      : Number(discountInput) || 0)
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-4">
               <button
                 className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
                 onClick={() => setShowDiscountModal(false)}
@@ -1166,25 +1247,53 @@ export function Orders() {
                   if (!discountOrderId) return;
                   setSavingDiscount(true);
                   try {
+                    const currentOrder = orders.find(
+                      (o) => o.id === discountOrderId
+                    );
+                    if (!currentOrder) throw new Error("Order not found");
+
+                    let finalAmt = 0;
+                    let finalPercent = null;
+
+                    if (discountType === "percentage") {
+                      const pct = Number(discountInput) || 0;
+                      finalPercent = pct.toString(); // store string
+                      finalAmt = (currentOrder.total_amount * pct) / 100;
+                    } else {
+                      finalAmt = Number(discountInput) || 0;
+                      finalPercent = null; 
+                    }
+
                     const { error } = await supabase
                       .from("orders")
-                      .update({ discount_amt: Number(discountInput) || 0 })
+                      .update({
+                        discount_amt: finalAmt,
+                        discount_percentage: finalPercent,
+                      })
                       .eq("id", discountOrderId);
                     if (error) throw error;
+
+                    // Update UI
                     setOrders((orders) =>
                       orders.map((o) =>
                         o.id === discountOrderId
-                          ? { ...o, discount_amt: Number(discountInput) || 0 }
+                          ? {
+                              ...o,
+                              discount_amt: finalAmt,
+                              // Add this if your Order type interface has this field, else just ignore
+                              discount_percentage: finalPercent as any,
+                            }
                           : o
                       )
                     );
-                    // If the selected order is the one being updated, update it too
                     if (selectedOrder?.id === discountOrderId) {
                       setSelectedOrder({
                         ...selectedOrder,
-                        discount_amt: Number(discountInput) || 0,
+                        discount_amt: finalAmt,
+                        discount_percentage: finalPercent as any,
                       });
                     }
+
                     setShowDiscountModal(false);
                     setDiscountOrderId(null);
                     setDiscountInput("");
@@ -1239,15 +1348,48 @@ export function Orders() {
               <EditOrderModal
                 order={editOrder}
                 onClose={() => setEditOrder(null)}
-                onSaved={(updated) => {
-                  // Cast the incoming updated object to Order to satisfy TS
-                  const updatedOrder = updated as Order;
-                  setOrders((orders) =>
-                    orders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
-                  );
-                  if (selectedOrder?.id === updatedOrder.id) {
-                    setSelectedOrder(updatedOrder);
+                onSaved={async (updated) => {
+                  try {
+                    // Refetch the single order to get full relation data (products, categories, etc.)
+                    const { data: freshOrder, error } = await supabase
+                      .from("orders")
+                      .select(
+                        `
+                      *,
+                      items:order_items (
+                        *,
+                        product:products (
+                          id,
+                          name,
+                          product_code,
+                          "order",
+                          apr,
+                          categories:categories ( name )
+                        )
+                      )
+                    `
+                      )
+                      .eq("id", updated.id)
+                      .single();
+
+                    if (error) throw error;
+                    if (freshOrder) {
+                       setOrders((orders) =>
+                        orders.map((o) => (o.id === freshOrder.id ? freshOrder : o))
+                      );
+                      if (selectedOrder?.id === freshOrder.id) {
+                        setSelectedOrder(freshOrder);
+                      }
+                    }
+                  } catch (e) {
+                    console.error("Failed to refresh order after edit:", e);
+                    // Fallback to local update if fetch fails
+                     const updatedOrder = updated as Order;
+                     setOrders((orders) =>
+                       orders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o))
+                     );
                   }
+                  
                   setEditOrder(null);
                 }}
               />
