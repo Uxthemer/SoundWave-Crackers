@@ -311,11 +311,11 @@ export function Analytics() {
     );
   }
 
-  // Build chart payloads (sorted, top 12)
-  const stateChart = buildChartFromMap(data.stateSales.labels, data.stateSales.data, 12);
-  const districtChart = buildChartFromMap(data.districtSales.labels, data.districtSales.data, 12);
-  const cityChart = buildChartFromMap(data.citySales.labels, data.citySales.data, 12);
-  const topProducts = buildChartFromMap(data.productSales.labels, data.productSales.quantities, 12);
+  // Build chart payloads (sorted, top 100)
+  const stateChart = buildChartFromMap(data.stateSales.labels, data.stateSales.data, 100);
+  const districtChart = buildChartFromMap(data.districtSales.labels, data.districtSales.data, 100);
+  const cityChart = buildChartFromMap(data.citySales.labels, data.citySales.data, 100);
+  const topProducts = buildChartFromMap(data.productSales.labels, data.productSales.quantities, 100);
 
   return (
     <div className="min-h-screen pt-8 pb-12">

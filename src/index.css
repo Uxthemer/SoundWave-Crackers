@@ -9,64 +9,71 @@
     --card: 243 244 246;
     --card-border: 229 231 235;
   }
+}
 
-  :root.dark {
-    --background: 30 30 30;
-    --text: 255 255 255;
-    --card: 13 27 42;
-    --card-border: 255 255 255;
-  }
+:root {
+  /* Theme Colors (Global Defaults) */
+  --primary-red: 255 0 0;
+  --primary-yellow: 255 193 7;
+  --primary-orange: 255 87 34;
 
-  body {
-    @apply bg-background text-text font-body transition-colors duration-300;
-  }
+  --secondary-blue: 13 27 42;
+  --secondary-purple: 138 43 226;
+}
 
-  /* Prevent text selection on headings and labels */
-  h1, h2, h3, h4, h5, h6, label {
-    @apply select-none cursor-default;
-  }
+:root.dark {
+  --background: 30 30 30;
+  --text: 255 255 255;
+  --card: 13 27 42;
+  --card-border: 255 255 255;
+}
 
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="number"],
-  input[type="tel"],
-  input[type="search"],
-  textarea {
-    @apply border-2 border-card-border/50 focus:border-primary-orange cursor-text select-text;
-  }
+body {
+  @apply bg-background text-text font-body transition-colors duration-300;
+}
+
+/* Prevent text selection on headings and labels */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+label {
+  @apply select-none cursor-default;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="tel"],
+input[type="search"],
+textarea {
+  @apply border-2 border-card-border/50 focus:border-primary-orange cursor-text select-text;
 }
 
 @layer components {
   .btn-primary {
-    @apply px-6 py-3 bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow
-           text-white font-montserrat font-bold rounded-lg
-           transform transition-all duration-300
-           hover:scale-95 hover:shadow-lg hover:shadow-primary-red/20
-           border border-white/10 select-none cursor-pointer;
+    @apply px-6 py-3 bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow text-white font-montserrat font-bold transform transition-all duration-300 hover:scale-95 hover:shadow-lg hover:shadow-primary-red/20 border border-white/10 select-none cursor-pointer;
+    border-radius: var(--btn-radius, 0.5rem);
   }
 
   .card {
-    @apply bg-card backdrop-blur-md rounded-xl p-6
-           border border-card-border/10 shadow-xl
-           hover:border-primary-orange/30 transition-all duration-300
-           hover:shadow-primary-orange/20;
+    @apply bg-card backdrop-blur-md p-6 border border-card-border/10 shadow-xl hover:border-primary-orange/30 transition-all duration-300 hover:shadow-primary-orange/20;
+    border-radius: var(--card-radius, 0.75rem);
   }
 
   .glass-effect {
-    @apply bg-card/20 backdrop-blur-lg border-t border-card-border/10
-           hover:bg-card/30 transition-all duration-300;
+    @apply bg-card/20 backdrop-blur-lg border-t border-card-border/10 hover:bg-card/30 transition-all duration-300;
   }
 
   .theme-toggle {
-    @apply p-2 rounded-full transition-colors duration-300
-           hover:bg-card/50 focus:outline-none focus:ring-2
-           focus:ring-primary-orange focus:ring-opacity-50 select-none cursor-pointer;
+    @apply p-2 rounded-full transition-colors duration-300 hover:bg-card/50 focus:outline-none focus:ring-2 focus:ring-primary-orange focus:ring-opacity-50 select-none cursor-pointer;
   }
 
   .quantity-input {
-    @apply w-20 px-3 py-2 text-center rounded-lg bg-background 
-           border-2 border-card-border/50 focus:outline-none focus:border-primary-orange;
+    @apply w-20 px-3 py-2 text-center rounded-lg bg-background border-2 border-card-border/50 focus:outline-none focus:border-primary-orange;
   }
 }
 
@@ -95,8 +102,7 @@
 }
 
 .hero-gradient {
-  @apply dark:bg-gradient-to-r dark:from-primary-red/15 dark:via-secondary-purple/15 dark:to-secondary-blue/15
-         bg-gradient-to-r from-primary-yellow/10 via-primary-orange/10 to-primary-red/10;
+  @apply dark:bg-gradient-to-r dark:from-primary-red/15 dark:via-secondary-purple/15 dark:to-secondary-blue/15 bg-gradient-to-r from-primary-yellow/10 via-primary-orange/10 to-primary-red/10;
 }
 
 .text-glow {
@@ -106,7 +112,7 @@
 @layer utilities {
   .text-shadow-glow {
     text-shadow: 0 0 15px rgba(255, 87, 34, 0.7),
-                 0 0 30px rgba(255, 87, 34, 0.4);
+      0 0 30px rgba(255, 87, 34, 0.4);
   }
 }
 
@@ -114,6 +120,7 @@
   0% {
     transform: translateX(0);
   }
+
   100% {
     transform: translateX(-50%);
   }
@@ -127,6 +134,7 @@
   0% {
     transform: translateX(100%);
   }
+
   100% {
     transform: translateX(-100%);
   }
@@ -138,9 +146,17 @@
 }
 
 @keyframes glow {
-  0% { text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107; }
-  50% { text-shadow: 0 0 20px #ff6347, 0 0 30px #ffd700; }
-  100% { text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107; }
+  0% {
+    text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107;
+  }
+
+  50% {
+    text-shadow: 0 0 20px #ff6347, 0 0 30px #ffd700;
+  }
+
+  100% {
+    text-shadow: 0 0 10px #ff4500, 0 0 20px #ffc107;
+  }
 }
 
 .animate-glow {
@@ -151,6 +167,7 @@
   from {
     width: 0;
   }
+
   to {
     width: 100%;
   }
@@ -172,12 +189,10 @@
 
 .shiny-text {
   color: #ff6200a4;
-  background: linear-gradient(
-    120deg,
-    rgba(246, 255, 0, 0) 40%,
-    rgba(253, 148, 1, 0.8) 50%,
-    rgba(255, 0, 0, 0) 60%
-  );
+  background: linear-gradient(120deg,
+      rgba(246, 255, 0, 0) 40%,
+      rgba(253, 148, 1, 0.8) 50%,
+      rgba(255, 0, 0, 0) 60%);
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -189,6 +204,7 @@
   0% {
     background-position: 100%;
   }
+
   100% {
     background-position: -100%;
   }
@@ -213,6 +229,7 @@
   0% {
     background-position: 200% center;
   }
+
   100% {
     background-position: 0% center;
   }
@@ -222,6 +239,7 @@
   from {
     text-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 30px #0dbaf9, 0 0 40px #0dbaf9, 0 0 50px #0dbaf9, 0 0 60px #0dbaf9, 0 0 70px #0dbaf9;
   }
+
   to {
     text-shadow: 0 0 10px #fff, 0 0 15px #3b38fc, 0 0 40px #3b38fc, 0 0 50px #3b38fc, 0 0 60px #3b38fc, 0 0 70px #3b38fc, 0 0 80px #3b38fc;
   }
@@ -234,27 +252,32 @@
   animation: glow1 1s ease-in-out infinite alternate;
 }
 
-.combo-list-table{
-  margin:10px 0;
-   table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-        }
-        th, td {
-            border: 1px solid #333;
-            padding: 8px;
-            text-align: left;
-        }
-        thead {
-            background-color: #ff5722;
-            color: white;
-        }
-        tbody tr:nth-child(odd) {
-            background-color: #f2f2f2;
-        }
-        tbody tr:nth-child(even) {
-            background-color: #ffffff;
-        }
-}
+.combo-list-table {
+  margin: 10px 0;
 
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+  }
+
+  th,
+  td {
+    border: 1px solid #333;
+    padding: 8px;
+    text-align: left;
+  }
+
+  thead {
+    background-color: #ff5722;
+    color: white;
+  }
+
+  tbody tr:nth-child(odd) {
+    background-color: #f2f2f2;
+  }
+
+  tbody tr:nth-child(even) {
+    background-color: #ffffff;
+  }
+}

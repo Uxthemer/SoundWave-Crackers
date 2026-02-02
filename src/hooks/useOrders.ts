@@ -14,6 +14,7 @@ interface DeliveryDetails {
   referralPhone: string;
   address: string;
   city: string;
+  district: string;
   state: string;
   pincode: string;
   country: string;
@@ -71,6 +72,7 @@ export async function createOrder(order: {
       address: order.delivery_details.address,
       alternate_phone: order.delivery_details.alternatePhone,
       city: order.delivery_details.city,
+      district: order.delivery_details.district,
       state: order.delivery_details.state,
       pincode: order.delivery_details.pincode,
       country: order.delivery_details.country,
