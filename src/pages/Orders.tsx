@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
-import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, Filter, ChevronDown, ChevronUp } from "lucide-react";
+import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { InvoiceTemplate } from "../components/InvoiceTemplate";
-import EditOrderModal from "../components/EditOrderModal";
+import EditOrderModal, { OrderForEdit } from "../components/EditOrderModal";
+import { useDateRange } from "../hooks/useDateRange";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 
 interface OrderItem {
   id: string;
@@ -77,19 +79,37 @@ export function Orders() {
   const [discountInput, setDiscountInput] = useState<number | string>("");
   const [discountType, setDiscountType] = useState<"amount" | "percentage">("amount");
   const [editOrder, setEditOrder] = useState<Order | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
 
   // profit modal state (superadmin only)
   const [profitModalOrder, setProfitModalOrder] = useState<Order | null>(null);
   const [profitBreakdown, setProfitBreakdown] = useState<{ revenue: number; cost: number; discount: number; profit: number } | null>(null);
+  
+  // Date range filter logic
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (range !== "custom") {
+      handleFetch();
+    }
+  }, [range]);
 
-  const fetchOrders = async () => {
+  const handleFetch = async () => {
+    const { startDate, endDate } = getDateRange();
+    await fetchOrders(startDate, endDate);
+  };
+
+  const handleApplyCustom = async () => {
+    setIsApplying(true);
+    await handleFetch();
+    setIsApplying(false);
+  };
+
+  const fetchOrders = async (startDate?: Date, endDate?: Date) => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("orders")
         .select(
           `
@@ -108,6 +128,14 @@ export function Orders() {
         `
         )
         .order("created_at", { ascending: false });
+
+       if (startDate && endDate) {
+         query = query
+           .gte("created_at", startDate.toISOString())
+           .lte("created_at", endDate.toISOString());
+       }
+
+      const { data, error } = await query;
        if (error) throw error;
        setOrders(data || []);
        // build status counts for the dashboard tiles
@@ -649,6 +677,15 @@ export function Orders() {
     }
   };
 
+
+  if (!userRole) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
   if (!["admin", "superadmin"].includes(userRole?.name || "")) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -711,14 +748,37 @@ export function Orders() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
             </div>
             <button
-              onClick={() => exportAllOrders()}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-orange text-white rounded-lg hover:bg-primary-orange/80 transition-colors"
+              onClick={() => {
+                setEditOrder(null);
+                setShowEditModal(true);
+              }}
+              className="btn-primary flex items-center gap-2 whitespace-nowrap"
             >
-              <Download className="w-4 h-4" />
-              <span>Export All</span>
+              <Plus className="w-4 h-4" /> New Order
             </button>
+            <button
+              onClick={() => exportAllOrders()}
+              className="group flex items-center gap-2 px-4 py-2 bg-card border border-card-border/10 rounded-lg hover:bg-card/80 transition-all hover:border-primary-orange/30 shadow-sm hover:shadow-md"
+              title="Download Excel Report"
+            >
+              <Download className="w-4 h-4 text-primary-orange group-hover:scale-110 transition-transform" />
+              <span className="hidden sm:inline font-medium text-text/80 group-hover:text-primary-orange">Export</span>
+            </button>
+            <DateRangeFilter
+              range={range}
+              setRange={setRange}
+              customStart={customStart}
+              setCustomStart={setCustomStart}
+              customEnd={customEnd}
+              setCustomEnd={setCustomEnd}
+              onApply={handleApplyCustom}
+              isApplying={isApplying}
+            />
           </div>
         </div>
+
+
+
 
         {/* Order Status Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-4 sm:mb-8">
@@ -728,7 +788,7 @@ export function Orders() {
               onClick={() => handleStatusFilterClick(status)}
               className={`p-2 sm:p-4 rounded-lg transition-all text-xs sm:text-base ${
                 statusFilter === status
-                  ? "bg-primary-orange text-white scale-105"
+                  ? "bg-primary-orange text-white shadow-lg ring-2 ring-primary-orange/50"
                   : "bg-card hover:bg-card/70"
               }`}
             >
@@ -1344,10 +1404,26 @@ export function Orders() {
       )}
 
             {/* Edit Order Modal */}
-            {editOrder && (
+            {(editOrder || showEditModal) && (
               <EditOrderModal
-                order={editOrder}
-                onClose={() => setEditOrder(null)}
+                order={editOrder || {
+                  id: "",
+                  created_at: new Date().toISOString(),
+                  full_name: "",
+                  email: "",
+                  phone: "",
+                  address: "",
+                  city: "",
+                  state: "",
+                  pincode: "",
+                  total_amount: 0,
+                  status: "Enquiry Received",
+                  items: [],
+                } as OrderForEdit}
+                onClose={() => {
+                  setEditOrder(null);
+                  setShowEditModal(false);
+                }}
                 onSaved={async (updated) => {
                   try {
                     // Refetch the single order to get full relation data (products, categories, etc.)
@@ -1391,6 +1467,7 @@ export function Orders() {
                   }
                   
                   setEditOrder(null);
+                  setShowEditModal(false);
                 }}
               />
             )}

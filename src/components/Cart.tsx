@@ -190,18 +190,14 @@ export function Cart({ isOpen, onClose }: CartProps) {
         throw new Error("Please sign in to place an order");
       }
 
-      // check minimum order amount >= 2000
-      if (totalAmount < 2000) {
-        throw new Error("Minimum order amount is ₹2000");
+      // check minimum order amount
+      const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
+      
+      if (!isAdmin) {
+        if (totalAmount < 3000) {
+          throw new Error("Minimum order amount is ₹3000");
+        }
       }
-
-      // check minumum order amount should be 2000 and above for tamilnadu state and 5000 and above for other states
-      // if (state.toLowerCase() === "tamil nadu" && totalAmount < 2000) {
-      //   throw new Error("Minimum order amount is ₹2000");
-      // }
-      // else if (state.toLowerCase() !== "tamilnadu" && totalAmount < 5000) {
-      //   throw new Error("Minimum order amount is ₹5000 for your state");
-      // }
 
       // --- PARALLEL STOCK CHECKS ---
       // Fire all stock queries in parallel

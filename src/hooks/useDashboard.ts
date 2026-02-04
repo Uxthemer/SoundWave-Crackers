@@ -107,6 +107,15 @@ export function useDashboard() {
         } else if (preset === "month") {
           startDate = startOfMonth(now);
           endDate = endOfMonth(now);
+        } else if (preset === "all") {
+           startDate = startOfDay(new Date(2020, 0, 1));
+           endDate = endOfDay(new Date(2100, 11, 31));
+        } else if (String(preset).startsWith("season-")) {
+          // parse year from season-YYYY
+          const year = parseInt(String(preset).split("-")[1], 10);
+          // Season 2025 = April 1, 2025 to March 31, 2026
+          startDate = startOfDay(new Date(year, 3, 1)); // month is 0-indexed: 3 = April
+          endDate = endOfDay(new Date(year + 1, 2, 31)); // 2 = March
         } else {
           // year
           startDate = startOfYear(now);

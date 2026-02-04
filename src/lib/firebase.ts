@@ -22,4 +22,15 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.error('Error setting auth persistence:', error);
 });
 
-export { auth };
+let messaging: any = null;
+try {
+  // Only import/init messaging if in browser context
+  if (typeof window !== 'undefined') {
+    const { getMessaging } = await import('firebase/messaging');
+    messaging = getMessaging(app);
+  }
+} catch (e) {
+  console.error('Firebase Messaging failed to init', e);
+}
+
+export { auth, messaging };

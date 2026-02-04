@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound } from "lucide-react";
+import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
@@ -123,6 +123,7 @@ export function Login() {
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [phone, setPhone] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showOTPVerification, setShowOTPVerification] = useState(false);
@@ -334,14 +335,25 @@ export function Login() {
                   </label>
                   <div className="relative">
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
+                      className="w-full pl-10 pr-10 py-2 rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                       placeholder="Enter your password"
                       disabled={isLoading}
                     />
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-text/40 hover:text-text/60 focus:outline-none"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-5 h-5" />
+                      ) : (
+                        <Eye className="w-5 h-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 

@@ -20,6 +20,9 @@ import {
   DollarSign,
   Info,
 } from "lucide-react";
+import { ExpandableChart } from "../components/ExpandableChart";
+import { useDateRange } from "../hooks/useDateRange";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -75,7 +78,10 @@ export function Analytics() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const { userRole } = useAuth();
-  const [dateRange, setDateRange] = useState<"week" | "month" | "year">("month");
+  
+  // Use shared date range logic
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const [isApplying, setIsApplying] = useState(false);
 
   // UI state for Stock & Referral tables
   const [stockSearch, setStockSearch] = useState("");
@@ -88,11 +94,24 @@ export function Analytics() {
   const [refSortDir, setRefSortDir] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    fetchAnalyticsData();
+    if (range !== "custom") {
+      handleFetch();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange]);
+  }, [range]);
 
-  const fetchAnalyticsData = async () => {
+  const handleFetch = async () => {
+    const { startDate, endDate } = getDateRange();
+    await fetchAnalyticsData(startDate, endDate);
+  };
+
+  const handleApplyCustom = async () => {
+    setIsApplying(true);
+    await handleFetch();
+    setIsApplying(false);
+  };
+
+  const fetchAnalyticsData = async (startDate: Date, endDate: Date) => {
     try {
       setLoading(true);
 
@@ -108,7 +127,9 @@ export function Analytics() {
             )
           )
         `
-        );
+        )
+        .gte("created_at", startDate.toISOString())
+        .lte("created_at", endDate.toISOString());
       if (ordersError) throw ordersError;
 
       // fetch product_type and is_active so we can exclude group products and inactive ones
@@ -290,6 +311,14 @@ export function Analytics() {
     return sorted;
   }, [data?.referralList, refSearch, refSortField, refSortDir]);
 
+  if (!userRole) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
   if (!["admin", "superadmin"].includes(userRole?.name || "")) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -322,15 +351,16 @@ export function Analytics() {
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <h1 className="font-heading text-4xl">Analytics Dashboard</h1>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value as "week" | "month" | "year")}
-            className="px-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-          >
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
-          </select>
+          <DateRangeFilter 
+            range={range}
+            setRange={setRange}
+            customStart={customStart}
+            setCustomStart={setCustomStart}
+            customEnd={customEnd}
+            setCustomEnd={setCustomEnd}
+            onApply={handleApplyCustom}
+            isApplying={isApplying}
+          />
         </div>
 
         {/* Stats Cards */}
@@ -637,52 +667,52 @@ export function Analytics() {
           </motion.div>
 
           {/* State-wise Sales */}
-          <motion.div className="bg-card rounded-xl p-6">
-            <h3 className="font-montserrat font-bold text-xl mb-6">State-wise Sales</h3>
+          {/* State-wise Sales */}
+          <ExpandableChart title="State-wise Sales">
             <Bar
               data={{
                 labels: stateChart.labels,
                 datasets: [{ label: "Sales (₹)", data: stateChart.data, backgroundColor: "#FF5722" }],
               }}
-              options={{ responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
+              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
             />
-          </motion.div>
+          </ExpandableChart>
 
           {/* District-wise Sales */}
-          <motion.div className="bg-card rounded-xl p-6">
-            <h3 className="font-montserrat font-bold text-xl mb-6">District-wise Sales</h3>
+          {/* District-wise Sales */}
+          <ExpandableChart title="District-wise Sales">
             <Bar
               data={{
                 labels: districtChart.labels,
                 datasets: [{ label: "Sales (₹)", data: districtChart.data, backgroundColor: "#2196F3" }],
               }}
-              options={{ responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
+              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
             />
-          </motion.div>
+          </ExpandableChart>
 
           {/* City-wise Sales */}
-          <motion.div className="bg-card rounded-xl p-6">
-            <h3 className="font-montserrat font-bold text-xl mb-6">City-wise Sales</h3>
+          {/* City-wise Sales */}
+          <ExpandableChart title="City-wise Sales">
             <Bar
               data={{
                 labels: cityChart.labels,
                 datasets: [{ label: "Sales (₹)", data: cityChart.data, backgroundColor: "#4CAF50" }],
               }}
-              options={{ responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
+              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
             />
-          </motion.div>
+          </ExpandableChart>
 
           {/* Top Products (Quantity Sold) */}
-          <motion.div className="bg-card rounded-xl p-6">
-            <h3 className="font-montserrat font-bold text-xl mb-6">Top Products (Quantity Sold)</h3>
+          {/* Top Products (Quantity Sold) */}
+          <ExpandableChart title="Top Products (Quantity Sold)">
             <Bar
               data={{
                 labels: topProducts.labels,
                 datasets: [{ label: "Quantity Sold", data: topProducts.data, backgroundColor: "#FFC107" }],
               }}
-              options={{ responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { beginAtZero: true } } }}
+              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { beginAtZero: true } } }}
             />
-          </motion.div>
+          </ExpandableChart>
         </div>
       </div>
     </div>

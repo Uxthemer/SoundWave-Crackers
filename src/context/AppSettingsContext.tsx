@@ -14,6 +14,9 @@ interface AppSettings {
   button_style: string;
   card_style: string;
   hero_banners: string[] | null;
+  enable_email_notifications?: boolean;
+  enable_whatsapp_notifications?: boolean;
+  enable_push_notifications?: boolean;
 }
 
 interface AppSettingsContextType {

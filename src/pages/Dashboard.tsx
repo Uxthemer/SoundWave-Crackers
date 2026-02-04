@@ -30,11 +30,7 @@ import { Line, Doughnut, Bar } from "react-chartjs-2";
 import { useDashboard } from "../hooks/useDashboard";
 import { useProducts } from "../hooks/useProducts";
 import { useAuth } from "../context/AuthContext";
-import {
-  DASHBOARD_RANGES,
-  DEFAULT_DASHBOARD_RANGE,
-  type DashboardRange,
-} from "../config/dashboardConfig";
+
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { format } from "date-fns";
@@ -43,6 +39,10 @@ import { Orders } from "./Orders";
 import { StockManagement } from "./StockManagement";
 import { Expenses } from "./Expenses";
 import { Users as UserList } from "./Users";
+import { Vendors } from "./Vendors";
+import { ExpandableChart } from "../components/ExpandableChart";
+import { useDateRange } from "../hooks/useDateRange";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 
 ChartJS.register(
   CategoryScale,
@@ -57,14 +57,13 @@ ChartJS.register(
 );
 
 export function Dashboard() {
+
+  // configurable date range (values come from src/config/dashboardConfig.ts)
   const navigate = useNavigate();
   const { userRole } = useAuth();
+  
   // configurable date range (values come from src/config/dashboardConfig.ts)
-  const [dateRange, setDateRange] = useState<DashboardRange>(
-    DEFAULT_DASHBOARD_RANGE
-  );
-  const [customStart, setCustomStart] = useState<string>("");
-  const [customEnd, setCustomEnd] = useState<string>("");
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
   const [isApplyingCustom, setIsApplyingCustom] = useState(false);
   const {
     stats,
@@ -83,7 +82,7 @@ export function Dashboard() {
   const [importError, setImportError] = useState("");
   // active in-page tab: overview (dashboard), analytics, orders, stock, expenses
   const [activeTab, setActiveTab] = useState<
-    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses"
+    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors"
   >("overview");
   const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
@@ -127,6 +126,14 @@ export function Dashboard() {
     };
   }, []); // run once; keep light to avoid interfering with other dashboard fetches
 
+  if (!userRole) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
   if (!isAdmin) {
     return (
       <div className="min-h-screen pt-24 pb-12">
@@ -140,28 +147,35 @@ export function Dashboard() {
     );
   }
 
-  const handleDateRangeChange = (range: DashboardRange) => {
-    setDateRange(range);
-    fetchDashboardData(range);
-  };
+
 
   // Fetch initial data and whenever dateRange changes
+  // Fetch initial data and whenever dateRange changes
   useEffect(() => {
-    // for presets just call with the preset string
-    if (dateRange !== "custom") {
-      fetchDashboardData(dateRange);
-      return;
+    if (range !== "custom") {
+       // if preset, pass string directly as before, OR explicitly compute dates
+       // The original fetchDashboardData supported both mode. 
+       // but wait, useDateRange computes dates for us. 
+       // Let's rely on computed dates to be unified. 
+       // But useDashboard actually supports 'range: DashboardRange | {startDate, endDate}'.
+       // If we pass range string, it handles it inside. 
+       // If we pass object, it expects startDate/endDate.
+       // Let's pass range string if not custom to let it handle "today", etc consistently?
+       // Actually useDateRange logic handles seasons. useDashboard logic ALSO handles seasons (I added it).
+       // To avoid duplicate logic maintenance, let's prefer passing the string if not custom, 
+       // BUT useDateRange is where I put the season logic recently. 
+       // I also added season logic to useDashboard.ts in step 81!
+       // So both have it. 
+       // Let's just pass `range` string.
+       fetchDashboardData(range);
     }
-    // for custom we wait for explicit Apply (see Apply button)
-  }, [dateRange]);
+  }, [range]);
 
   // Apply custom range (start/end) when user clicks Apply
   const applyCustomRange = () => {
-    if (!customStart || !customEnd) return;
-    const s = new Date(customStart);
-    const e = new Date(customEnd);
     setIsApplyingCustom(true);
-    fetchDashboardData({ startDate: s, endDate: e }).finally(() =>
+    const { startDate, endDate } = getDateRange();
+    fetchDashboardData({ startDate, endDate }).finally(() =>
       setIsApplyingCustom(false)
     );
   };
@@ -210,6 +224,10 @@ export function Dashboard() {
         key: "expenses",
         label: "Expenses",
       },
+      {
+        key: "vendors",
+        label: "Vendors",
+      },
     ];
     return tabList.map((t) => {
       const active = activeTab === (t.key as any);
@@ -252,59 +270,16 @@ export function Dashboard() {
             {/* date range / import area - keep existing controls intact */}
             {activeTab === "overview" && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 ml-auto w-full sm:w-auto mt-4 sm:mt-0">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
-                  <select
-                    value={dateRange}
-                    onChange={(e) => {
-                      const v = e.target.value as DashboardRange;
-                      setDateRange(v);
-                    }}
-                    className="bg-card border border-card-border/10 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-orange"
-                  >
-                    {DASHBOARD_RANGES.map((r) => (
-                      <option key={r} value={r}>
-                        {r === "today"
-                          ? "Today"
-                          : r === "last90"
-                          ? "Last 90 Days"
-                          : r === "week"
-                          ? "This Week"
-                          : r === "month"
-                          ? "This Month"
-                          : r === "year"
-                          ? "This Year"
-                          : "Custom"}
-                      </option>
-                    ))}
-                  </select>
-
-                  {dateRange === "custom" && (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="date"
-                        value={customStart}
-                        onChange={(e) => setCustomStart(e.target.value)}
-                        className="bg-card border border-card-border/10 rounded-lg px-3 py-2"
-                      />
-                      <span className="text-text/60">to</span>
-                      <input
-                        type="date"
-                        value={customEnd}
-                        onChange={(e) => setCustomEnd(e.target.value)}
-                        className="bg-card border border-card-border/10 rounded-lg px-3 py-2"
-                      />
-                      <button
-                        onClick={applyCustomRange}
-                        disabled={
-                          !customStart || !customEnd || isApplyingCustom
-                        }
-                        className="bg-primary-orange text-white rounded-lg px-3 py-2 disabled:opacity-60"
-                      >
-                        Apply
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  <DateRangeFilter
+                    range={range}
+                    setRange={setRange}
+                    customStart={customStart}
+                    setCustomStart={setCustomStart}
+                    customEnd={customEnd}
+                    setCustomEnd={setCustomEnd}
+                    onApply={applyCustomRange}
+                    isApplying={isApplyingCustom}
+                  />
 
                 {/* <div className="flex gap-2">
               <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
@@ -421,23 +396,22 @@ export function Dashboard() {
               {/* Charts + Recent / Users column */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
                 {/* Sales Overview (wide) */}
-                <div className="card lg:col-span-2">
-                  <h3 className="font-montserrat font-bold text-xl mb-6">
-                    Sales Overview
-                  </h3>
+                <div className="lg:col-span-2 flex flex-col">
                   {loading ? (
                     <div className="flex items-center justify-center h-64">
                       <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
                     </div>
                   ) : (
-                    <Line
-                      data={salesData}
-                      options={{
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true } },
-                      }}
-                    />
+                    <ExpandableChart title="Sales Overview" containerHeight="flex-1 min-h-[300px]">
+                      <Line
+                        data={salesData}
+                        options={{
+                          responsive: true,
+                          plugins: { legend: { display: false } },
+                          scales: { y: { beginAtZero: true } },
+                        }}
+                      />
+                    </ExpandableChart>
                   )}
                 </div>
 
@@ -537,30 +511,22 @@ export function Dashboard() {
                   </div>
                 </div>
                 {/* Top SKUs by Revenue */}
-                <div className="card lg:col-span-3 mt-8">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="font-montserrat font-bold text-lg">
-                        Top SKUs by Revenue
-                      </h3>
-                      <p className="text-text/60 text-sm">
-                        Top products this period
-                      </p>
-                    </div>
-                  </div>
+                <div className="lg:col-span-3 mt-8">
                   {topSkusChart.labels.length === 0 ? (
                     <div className="text-text/60 text-sm">
                       No sales data for selected range
                     </div>
                   ) : (
-                    <Bar
-                      data={topSkusChart}
-                      options={{
-                        responsive: true,
-                        plugins: { legend: { display: false } },
-                        scales: { y: { beginAtZero: true } },
-                      }}
-                    />
+                    <ExpandableChart title="Top SKUs by Revenue">
+                      <Bar
+                        data={topSkusChart}
+                        options={{
+                          responsive: true,
+                          plugins: { legend: { display: false } },
+                          scales: { y: { beginAtZero: true } },
+                        }}
+                      />
+                    </ExpandableChart>
                   )}
                 </div>
               </div>
@@ -594,10 +560,17 @@ export function Dashboard() {
               <Expenses />
             </div>
           )}
-          {/* Expenses tab */}
+          {/* Users tab */}
           {activeTab === "users" && (
             <div className="pt-2">
               <UserList />
+            </div>
+          )}
+
+          {/* Vendors tab */}
+          {activeTab === "vendors" && (
+            <div className="pt-2">
+              <Vendors />
             </div>
           )}
         </div>
