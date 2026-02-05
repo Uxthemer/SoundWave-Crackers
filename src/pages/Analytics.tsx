@@ -508,29 +508,31 @@ export function Analytics() {
           <motion.div className="bg-card rounded-xl p-6 col-span-1 lg:col-span-1">
             <h3 className="font-montserrat font-bold text-xl mb-4">Available Stock</h3>
 
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
                 type="text"
                 placeholder="Search product or code..."
                 value={stockSearch}
                 onChange={(e) => setStockSearch(e.target.value)}
-                className="flex-1 p-2 border rounded bg-white"
+                className="w-full sm:flex-1 p-2 border rounded bg-white"
               />
-              <select
-                value={stockSortField}
-                onChange={(e) => setStockSortField(e.target.value as any)}
-                className="p-2 border rounded"
-              >
-                <option value="name">Name</option>
-                <option value="stock">Available Qty</option>
-                <option value="value">Value</option>
-              </select>
-              <button
-                onClick={() => setStockSortDir((s) => (s === "asc" ? "desc" : "asc"))}
-                className="px-3 py-2 border rounded"
-              >
-                {stockSortDir === "asc" ? "Asc" : "Desc"}
-              </button>
+              <div className="flex gap-2">
+                <select
+                  value={stockSortField}
+                  onChange={(e) => setStockSortField(e.target.value as any)}
+                  className="flex-1 sm:flex-none p-2 border rounded"
+                >
+                  <option value="name">Name</option>
+                  <option value="stock">Available Qty</option>
+                  <option value="value">Value</option>
+                </select>
+                <button
+                  onClick={() => setStockSortDir((s) => (s === "asc" ? "desc" : "asc"))}
+                  className="px-3 py-2 border rounded whitespace-nowrap"
+                >
+                  {stockSortDir === "asc" ? "Asc" : "Desc"}
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -592,29 +594,31 @@ export function Analytics() {
           <motion.div className="bg-card rounded-xl p-6 col-span-1 lg:col-span-1">
             <h3 className="font-montserrat font-bold text-xl mb-4">Referral Bonuses</h3>
 
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
                 type="text"
                 placeholder="Search name / phone / address..."
                 value={refSearch}
                 onChange={(e) => setRefSearch(e.target.value)}
-                className="flex-1 p-2 border rounded bg-white"
+                className="w-full sm:flex-1 p-2 border rounded bg-white"
               />
-              <select
-                value={refSortField}
-                onChange={(e) => setRefSortField(e.target.value as any)}
-                className="p-2 border rounded"
-              >
-                <option value="ordersCount">Orders Referred</option>
-                <option value="bonus">Referral Bonus</option>
-                <option value="name">Name</option>
-              </select>
-              <button
-                onClick={() => setRefSortDir((s) => (s === "asc" ? "desc" : "asc"))}
-                className="px-3 py-2 border rounded"
-              >
-                {refSortDir === "asc" ? "Asc" : "Desc"}
-              </button>
+              <div className="flex gap-2">
+                <select
+                  value={refSortField}
+                  onChange={(e) => setRefSortField(e.target.value as any)}
+                  className="flex-1 sm:flex-none p-2 border rounded"
+                >
+                  <option value="ordersCount">Orders Referred</option>
+                  <option value="bonus">Referral Bonus</option>
+                  <option value="name">Name</option>
+                </select>
+                <button
+                  onClick={() => setRefSortDir((s) => (s === "asc" ? "desc" : "asc"))}
+                  className="px-3 py-2 border rounded whitespace-nowrap"
+                >
+                  {refSortDir === "asc" ? "Asc" : "Desc"}
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">

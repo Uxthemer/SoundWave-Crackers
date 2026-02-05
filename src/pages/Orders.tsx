@@ -736,8 +736,8 @@ export function Orders() {
               {filteredOrders.length} orders
             </span>
           </div>
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative">
+          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+            <div className="relative w-full md:w-64">
               <input
                 type="text"
                 placeholder="Search orders..."
@@ -800,8 +800,8 @@ export function Orders() {
           ))}
         </div>
 
-        <div className="bg-card/30 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-card/30 rounded-xl overflow-hidden w-full max-w-full">
+          <div className="overflow-x-auto w-full">
             <table className="w-full min-w-[700px] sm:min-w-full text-xs sm:text-sm">
               <thead>
                 <tr className="bg-card/50">
