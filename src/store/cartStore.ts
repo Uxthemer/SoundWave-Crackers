@@ -1,6 +1,7 @@
 import create from "zustand";
 import { persist } from "zustand/middleware";
 import { CartItem, Product } from '../types';
+import { QuotationWithItems } from '../types/quotation';
 
 export interface DeliveryDetailsState {
   customerName: string;
@@ -21,15 +22,23 @@ type CartStore = {
   totalQuantity: number;
   totalAmount: number;
   totalActualAmount: number;
+  editingQuotationId: string | null; // Track if we are editing a quotation
   addToCart: (product: Product, quantity: number) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  loadQuotation: (quotation: QuotationWithItems) => void;
+  clearQuotationMode: () => void;
   // delivery state
   delivery: DeliveryDetailsState;
   setDelivery: (payload: Partial<DeliveryDetailsState>) => void;
   setDeliveryField: <K extends keyof DeliveryDetailsState>(key: K, value: DeliveryDetailsState[K]) => void;
   clearDelivery: () => void;
+  // UI State
+  isCartOpen: boolean;
+  openCart: () => void;
+  closeCart: () => void;
+  toggleCart: () => void;
 }
 
 // Wrap your store with persist and use sessionStorage
@@ -40,6 +49,7 @@ export const useCartStore = create<CartStore>()(
       totalQuantity: 0,
       totalAmount: 0,
       totalActualAmount: 0,
+      editingQuotationId: null,
       addToCart: (product, quantity) =>
         set((state) => {
           const existingItem = state.items.find((item) => item.id === product.id);
@@ -120,7 +130,47 @@ export const useCartStore = create<CartStore>()(
             totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
           };
         }),
-      clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0 }),
+      clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0, editingQuotationId: null }),
+      loadQuotation: (quotation) => {
+        // Map items from quotation using the joined 'product' data
+        const cartItems: CartItem[] = quotation.items.map((qItem: any) => {
+           // qItem.product is the joined product object
+           // We need to construct a CartItem which is Product & { quantity, totalPrice }
+           const product = qItem.product; 
+           if (!product) return null; // Should not happen if data integrity is good
+
+           return {
+             ...product,
+             quantity: qItem.quantity,
+             // Use stored prices from quotation item to respect the quote
+             offer_price: qItem.price,
+             totalPrice: qItem.total_price
+           };
+        }).filter(item => item !== null) as CartItem[];
+
+        set({
+          editingQuotationId: quotation.id,
+          items: cartItems,
+          totalQuantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
+          totalAmount: quotation.total_amount,
+          totalActualAmount: cartItems.reduce((sum, item) => sum + ((item.actual_price || item.price) * item.quantity), 0),
+          delivery: {
+            customerName: quotation.customer_name || "",
+            email: quotation.email || "",
+            phone: quotation.phone || "",
+            alternatePhone: "",
+            referralPhone: "",
+            address: quotation.address || "",
+            city: quotation.city || "",
+            state: quotation.state || "",
+            district: "",
+            pincode: quotation.pincode || "",
+            country: "India",
+          },
+          isCartOpen: true
+        });
+      },
+      clearQuotationMode: () => set({ editingQuotationId: null }),
       // delivery defaults
       delivery: {
         customerName: "",
@@ -155,6 +205,11 @@ export const useCartStore = create<CartStore>()(
             country: "India",
           },
         })),
+        
+      isCartOpen: false,
+      openCart: () => set({ isCartOpen: true }),
+      closeCart: () => set({ isCartOpen: false }),
+      toggleCart: () => set((state) => ({ isCartOpen: !state.isCartOpen })),
     }),
     {
       name: "cart-storage",
@@ -170,6 +225,8 @@ export const useCartStore = create<CartStore>()(
         // persist cart items and delivery only (adjust as needed)
         items: state.items,
         delivery: state.delivery,
+        editingQuotationId: state.editingQuotationId
+        // Do NOT persist isCartOpen
       } as unknown as CartStore),
     }
   )

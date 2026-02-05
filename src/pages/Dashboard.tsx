@@ -43,6 +43,7 @@ import { Vendors } from "./Vendors";
 import { ExpandableChart } from "../components/ExpandableChart";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { QuotationsList } from "../components/QuotationsList";
 
 ChartJS.register(
   CategoryScale,
@@ -82,7 +83,7 @@ export function Dashboard() {
   const [importError, setImportError] = useState("");
   // active in-page tab: overview (dashboard), analytics, orders, stock, expenses
   const [activeTab, setActiveTab] = useState<
-    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors"
+    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors" | "quotations"
   >("overview");
   const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
@@ -227,6 +228,10 @@ export function Dashboard() {
       {
         key: "vendors",
         label: "Vendors",
+      },
+      {
+        key: "quotations",
+        label: "Quotations",
       },
     ];
     return tabList.map((t) => {
@@ -571,6 +576,13 @@ export function Dashboard() {
           {activeTab === "vendors" && (
             <div className="pt-2">
               <Vendors />
+            </div>
+          )}
+
+          {/* Quotations tab */}
+          {activeTab === "quotations" && (
+            <div className="pt-2">
+              <QuotationsList />
             </div>
           )}
         </div>
