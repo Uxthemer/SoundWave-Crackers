@@ -26,58 +26,72 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     );
 
-    const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
+    // Fetch App Settings
+    const { data: settings } = await supabase
+      .from('app_settings')
+      .select('enable_email_notifications, enable_whatsapp_notifications')
+      .single();
+
+    const enableEmail = settings?.enable_email_notifications ?? true;
+    const enableWhatsApp = settings?.enable_whatsapp_notifications ?? false;
+
+    const resendApiKey = Deno.env.get('RESEND_API_KEY');
     const whatsappToken = Deno.env.get('WHATSAPP_TOKEN');
     const whatsappPhoneId = Deno.env.get('WHATSAPP_PHONE_ID');
 
     const { orderId, status, customerName, customerEmail, customerPhone }: OrderNotification = await req.json();
 
     // Send email notification
-    await resend.emails.send({
-      from: 'orders@soundwavecrackers.com',
-      to: customerEmail,
-      subject: `Order Status Update - ${orderId}`,
-      html: `
-        <h2>Order Status Update</h2>
-        <p>Dear ${customerName},</p>
-        <p>Your order (${orderId}) status has been updated to: <strong>${status}</strong></p>
-        <p>Thank you for shopping with SoundWave Crackers!</p>
-      `
-    });
+    if (enableEmail && resendApiKey) {
+      const resend = new Resend(resendApiKey);
+      await resend.emails.send({
+        from: 'orders@soundwavecrackers.com',
+        to: customerEmail,
+        subject: `Order Status Update - ${orderId}`,
+        html: `
+          <h2>Order Status Update</h2>
+          <p>Dear ${customerName},</p>
+          <p>Your order (${orderId}) status has been updated to: <strong>${status}</strong></p>
+          <p>Thank you for shopping with SoundWave Crackers!</p>
+        `
+      });
+    }
 
     // Send WhatsApp notification
-    const whatsappMessage = {
-      messaging_product: 'whatsapp',
-      to: customerPhone,
-      type: 'template',
-      template: {
-        name: 'order_status_update',
-        language: {
-          code: 'en'
-        },
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              { type: 'text', text: orderId },
-              { type: 'text', text: status }
+    if (enableWhatsApp && whatsappToken && whatsappPhoneId && customerPhone) {
+        const whatsappMessage = {
+          messaging_product: 'whatsapp',
+          to: customerPhone,
+          type: 'template',
+          template: {
+            name: 'order_status_update',
+            language: {
+              code: 'en'
+            },
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: orderId },
+                  { type: 'text', text: status }
+                ]
+              }
             ]
           }
-        ]
-      }
-    };
+        };
 
-    await fetch(`https://graph.facebook.com/v17.0/${whatsappPhoneId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${whatsappToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(whatsappMessage)
-    });
+        await fetch(`https://graph.facebook.com/v17.0/${whatsappPhoneId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${whatsappToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(whatsappMessage)
+        });
+    }
 
     return new Response(
-      JSON.stringify({ message: 'Notifications sent successfully' }),
+      JSON.stringify({ message: 'Notifications processed' }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200 

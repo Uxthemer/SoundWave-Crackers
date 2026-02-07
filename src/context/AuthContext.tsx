@@ -21,7 +21,7 @@ import { Database } from "../types/supabase";
 import { v4 as uuidv4 } from "uuid";
 import toast from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
-import { nav } from "framer-motion/client";
+
 
 type UserProfile = Database["public"]["Tables"]["user_profiles"]["Row"];
 type Role = Database["public"]["Tables"]["roles"]["Row"];
@@ -129,14 +129,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Set up Supabase auth listener
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        setTimeout(() => {
-          fetchUserProfile(session.user.id);
-        }, 0);
+        // Wait for profile fetch but max 2 seconds to prevent hanging
+        const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 2000));
+        try {
+           await Promise.race([
+             fetchUserProfile(session.user.id),
+             timeoutPromise
+           ]);
+        } catch (e) {
+           console.error("Profile fetch race error", e);
+        }
       } else {
         setUserProfile(null);
         setUserRole(null);

@@ -9,6 +9,7 @@ import confetti from "canvas-confetti";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import { useCartStore } from "../store/cartStore";
+import { useQuotations } from "../hooks/useQuotations";
 
 interface CartProps {
   isOpen: boolean;
@@ -27,7 +28,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
     setDelivery,
     setDeliveryField,
     clearDelivery,
+
+    editingQuotationId,
+    clearQuotationMode
   } = useCartStore();
+
+  const { saveQuotation, deleteQuotation } = useQuotations();
+  const [isQuotationSaving, setIsQuotationSaving] = useState(false);
 
   const [showPayment, setShowPayment] = useState(false);
   const [showDeliveryForm, setShowDeliveryForm] = useState(false);
@@ -124,7 +131,52 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   }, [showPhoneVerification, verifyingPhone]);
 
-  const handlePlaceOrder = async (paymentMethod: string) => {
+
+  const handleSaveQuotation = async () => {
+    if ((items || []).length === 0) {
+      toast.error("Cart is empty");
+      return;
+    }
+
+    if (!delivery.customerName || !delivery.phone) {
+      toast.error("Please enter customer details (Name & Phone)");
+      return;
+    }
+    
+    setIsQuotationSaving(true);
+    try {
+      const quotationData = {
+        customer_name: delivery.customerName,
+        email: delivery.email,
+        phone: delivery.phone,
+        address: delivery.address,
+        city: delivery.city,
+        state: delivery.state,
+        pincode: delivery.pincode,
+        total_amount: totalAmount
+      };
+      
+      const quotationItems = items.map(item => ({
+        product_id: item.id,
+        quantity: item.quantity,
+        price: item.offer_price,
+        total_price: item.totalPrice
+      }));
+
+      await saveQuotation(quotationData, quotationItems, editingQuotationId || undefined);
+      
+      clearCart(); 
+      // clearQuotationMode is handled by clearCart if implemented, but let's be safe or if clearCart logic changes
+      // In store I added editingQuotationId: null to clearCart, so it's fine.
+      onClose();
+    } catch (error) {
+       console.error(error);
+    } finally {
+      setIsQuotationSaving(false);
+    }
+  };
+
+  const handlePlaceOrder = async (paymentMethod: string) => { // Reverted to original signature to maintain syntactical correctness
     try {
       setIsProcessing(true);
       setOrderError(null);
@@ -190,18 +242,14 @@ export function Cart({ isOpen, onClose }: CartProps) {
         throw new Error("Please sign in to place an order");
       }
 
-      // check minimum order amount >= 2000
-      if (totalAmount < 2000) {
-        throw new Error("Minimum order amount is ₹2000");
+      // check minimum order amount
+      const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
+      
+      if (!isAdmin) {
+        if (totalAmount < 3000) {
+          throw new Error("Minimum order amount is ₹3000");
+        }
       }
-
-      // check minumum order amount should be 2000 and above for tamilnadu state and 5000 and above for other states
-      // if (state.toLowerCase() === "tamil nadu" && totalAmount < 2000) {
-      //   throw new Error("Minimum order amount is ₹2000");
-      // }
-      // else if (state.toLowerCase() !== "tamilnadu" && totalAmount < 5000) {
-      //   throw new Error("Minimum order amount is ₹5000 for your state");
-      // }
 
       // --- PARALLEL STOCK CHECKS ---
       // Fire all stock queries in parallel
@@ -253,6 +301,15 @@ export function Cart({ isOpen, onClose }: CartProps) {
       );
       clearCart();
       setOrderSuccess(true);
+      
+      // If we are converting a quotation, delete the original quotation
+      if (editingQuotationId) {
+          await deleteQuotation(editingQuotationId);
+          clearQuotationMode();
+      }
+
+      // clear cart
+      clearCart();
       //onClose();
       fireworkConfetti();
     } catch (error) {
@@ -1122,6 +1179,16 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
                             >
                               Estimate Report
+                            </button>
+                          )}
+                           {["admin", "superadmin"].includes(userRole?.name || "") && (
+                             <button
+                              type="button"
+                              onClick={handleSaveQuotation}
+                              disabled={isQuotationSaving || isProcessing}
+                              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                            >
+                              {isQuotationSaving ? "Saving..." : (editingQuotationId ? "Update Quote" : "Save Quote")}
                             </button>
                           )}
                         </div>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useAppSettings } from "../context/AppSettingsContext";
 import toast from "react-hot-toast";
+import { PushNotificationManager } from "../components/PushNotificationManager";
 
 export function AdminSettings() {
   const { settings, updateSettings, refreshSettings } = useAppSettings();
@@ -226,6 +227,89 @@ export function AdminSettings() {
             </div>
           </div>
         </div>
+
+        {/* Notification Channels Section */}
+        <div className="bg-card p-6 rounded-xl shadow border border-card-border/10">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            📢 Notification Channels
+          </h2>
+          <div className="space-y-4">
+             {/* Email */}
+             <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                <div>
+                   <label className="font-semibold block">Email Notifications</label>
+                   <p className="text-xs text-text/60">Receive order updates via Email (via Resend)</p>
+                </div>
+                <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                    <input
+                        type="checkbox"
+                        name="enable_email_notifications"
+                        id="toggle-email"
+                        className="peer absolute opacity-0 w-0 h-0"
+                        checked={formData.enable_email_notifications ?? true}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, enable_email_notifications: e.target.checked }))}
+                    />
+                    <label 
+                        htmlFor="toggle-email"
+                        className="block cursor-pointer overflow-hidden h-6 rounded-full bg-gray-300 dark:bg-zinc-700 peer-checked:bg-green-500 transition-colors"
+                    >
+                        <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
+                    </label>
+                </div>
+             </div>
+
+             {/* WhatsApp */}
+             <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                <div>
+                   <label className="font-semibold block">WhatsApp Notifications</label>
+                   <p className="text-xs text-text/60">Send updates via WhatsApp Cloud API</p>
+                </div>
+                <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                    <input
+                        type="checkbox"
+                        name="enable_whatsapp_notifications"
+                        id="toggle-whatsapp"
+                        className="peer absolute opacity-0 w-0 h-0"
+                        checked={formData.enable_whatsapp_notifications ?? false}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, enable_whatsapp_notifications: e.target.checked }))}
+                    />
+                    <label 
+                        htmlFor="toggle-whatsapp"
+                        className="block cursor-pointer overflow-hidden h-6 rounded-full bg-gray-300 dark:bg-zinc-700 peer-checked:bg-green-500 transition-colors"
+                    >
+                        <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
+                    </label>
+                </div>
+             </div>
+
+              {/* Push Config (Global Switch) */}
+             <div className="flex items-center justify-between p-3 border rounded-lg bg-background">
+                <div>
+                   <label className="font-semibold block">Push Notifications (Admin)</label>
+                   <p className="text-xs text-text/60">Enable sending Push Notifications for new orders</p>
+                </div>
+                <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                    <input
+                        type="checkbox"
+                        name="enable_push_notifications"
+                        id="toggle-push"
+                        className="peer absolute opacity-0 w-0 h-0"
+                        checked={formData.enable_push_notifications ?? false}
+                        onChange={(e) => setFormData((prev: any) => ({ ...prev, enable_push_notifications: e.target.checked }))}
+                    />
+                    <label 
+                        htmlFor="toggle-push"
+                        className="block cursor-pointer overflow-hidden h-6 rounded-full bg-gray-300 dark:bg-zinc-700 peer-checked:bg-green-500 transition-colors"
+                    >
+                        <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
+                    </label>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        {/* Device Push Management */}
+        <PushNotificationManager />
 
         <div className="flex justify-end pt-6">
           <button
