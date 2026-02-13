@@ -731,6 +731,15 @@ export function StockManagement() {
       : String(bValue).localeCompare(String(aValue));
   });
 
+
+  if (!userRole) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
   if (!["admin", "superadmin"].includes(userRole?.name || "")) {
     return (
       <div className="min-h-screen pt-24 pb-12">

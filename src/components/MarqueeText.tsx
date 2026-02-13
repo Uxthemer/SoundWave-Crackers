@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 export function MarqueeText() {
   const messages = [
     "🎆 Special Diwali Offer - <b>Up to 80% OFF!</b>",
-    "🚚 Minimum Orders Above <b>₹2000 for Tamilnadu</b>",
+    "🚚 Minimum Orders Above <b>₹3000 for Tamilnadu</b>",
     "🚚 Minimum Orders Above <b>₹5000 for other states</b>",
     "🚚 All Over India, Major Cities Delivery Available",
   ];

@@ -9,6 +9,8 @@ import { Chart, BarElement, CategoryScale, LinearScale, Legend, Tooltip } from "
 import { Pie } from "react-chartjs-2";
 import { EXPENSE_TYPE_COLORS, EXPENSE_TYPE_ORDER } from "../config/chartConfig";
 import { useAuth } from "../context/AuthContext";
+import { useDateRange } from "../hooks/useDateRange";
+import { DateRangeFilter } from "../components/DateRangeFilter";
 
 interface Expense {
   id: string;
@@ -45,22 +47,45 @@ export function Expenses() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"all" | "spend" | "credit" | "purchase" | "rent">("all");
   const [sortField, setSortField] = useState<"date" | "amount" | "spend_by">("date");
+
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
+  // Date range filter logic
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const [isApplying, setIsApplying] = useState(false);
+
   // Fetch expenses
-  const fetchExpenses = async () => {
+  const fetchExpenses = async (startDate?: Date, endDate?: Date) => {
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("expenses")
       .select("*")
       .order("date", { ascending: false });
+
+     if (startDate && endDate) {
+       query = query
+         .gte("date", startDate.toISOString())
+         .lte("date", endDate.toISOString());
+     }
+
+    const { data, error } = await query;
     if (!error && data) setExpenses(data as Expense[]);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchExpenses();
-  }, []);
+    if (range !== "custom") {
+      const { startDate, endDate } = getDateRange();
+      fetchExpenses(startDate, endDate);
+    }
+  }, [range]);
+
+  const handleApplyCustom = async () => {
+    setIsApplying(true);
+    const { startDate, endDate } = getDateRange();
+    await fetchExpenses(startDate, endDate);
+    setIsApplying(false);
+  };
 
   // Upload helper - stores file in Supabase storage 'expenses' bucket and returns public url + path
   async function uploadDocument(file: File): Promise<{ publicUrl: string | null; path: string | null }> {
@@ -210,12 +235,45 @@ export function Expenses() {
       return 0;
     });
 
+  if (!userRole) {
+    return (
+      <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-orange" />
+      </div>
+    );
+  }
+
+  if (!["admin", "superadmin"].includes(userRole?.name || "")) {
+    return (
+      <div className="min-h-screen pt-24 pb-12">
+        <div className="container mx-auto px-6">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
+            <p>You don't have permission to access this page.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-          <h1 className="font-heading text-3xl">Expense Tracking</h1>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2">
+             <h1 className="font-heading text-3xl">Expense Tracking</h1>
+             <DateRangeFilter
+               range={range}
+               setRange={setRange}
+               customStart={customStart}
+               setCustomStart={setCustomStart}
+               customEnd={customEnd}
+               setCustomEnd={setCustomEnd}
+               onApply={handleApplyCustom}
+               isApplying={isApplying}
+             />
+          </div>
+          <div className="flex gap-2 items-start">
             <button
               onClick={() => setShowForm(true)}
               className="btn-primary flex items-center gap-2"

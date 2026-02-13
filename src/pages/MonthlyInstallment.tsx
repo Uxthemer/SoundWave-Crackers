@@ -48,7 +48,7 @@ const schemeSlides = [
 export function MonthlyInstallment() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { selectScheme, getActiveScheme, isLoading, error } = useScheme();
+  const { selectScheme, getActiveScheme, isLoading } = useScheme();
   const [schemes, setSchemes] = useState<Scheme[]>([]);
   const [selectedScheme, setSelectedScheme] = useState<Scheme | null>(null);
   const [activeScheme, setActiveScheme] = useState<{
@@ -66,10 +66,18 @@ export function MonthlyInstallment() {
           .from("schemes")
           .select("*")
           .eq("is_active", true)
-          .order("installment", { ascending: true });
+          .in("installment", ["500", "1000", "2000", "3000", "4000", "5000"]);
 
         if (error) throw error;
-        setSchemes(data || []);
+        
+        // Sort numerically since installment is a string in DB
+        const sortedData = (data || []).sort((a, b) => {
+             const valA = parseInt(String(a.installment).replace(/[^0-9]/g, '')) || 0;
+             const valB = parseInt(String(b.installment).replace(/[^0-9]/g, '')) || 0;
+             return valA - valB;
+        });
+
+        setSchemes(sortedData);
       } catch (err) {
         console.error("Error fetching schemes:", err);
         toast.error("Failed to load schemes");

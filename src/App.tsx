@@ -209,14 +209,14 @@ import { usePageTracking } from "./hooks/usePageTracking";
 export function AppContent() {
   usePageTracking();
   const { theme, toggleTheme } = useTheme();
-  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const { totalQuantity, items } = useCartStore();
+  const { totalQuantity, items, isCartOpen, openCart, closeCart } = useCartStore();
   const { settings } = useAppSettings();
 
   const handleMenuItemClick = () => {
     setIsMobileMenuOpen(false);
   };
+
 
   const PRICE_LIST_URL =
     "https://nqlhrwpgdaulwdzgmumv.supabase.co/storage/v1/object/sign/Price%20List/Soundwave%20Crackers%20-%20Price%20List%202025-2.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80NTY2MGYwMC1lNzc0LTRiYmItODdlNS1kYzk0YzFlMzIzMzkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJQcmljZSBMaXN0L1NvdW5kd2F2ZSBDcmFja2VycyAtIFByaWNlIExpc3QgMjAyNS0yLnBkZiIsImlhdCI6MTc2MzIxMTg4OCwiZXhwIjoxNzk0NzQ3ODg4fQ.NSE-742_GDzgMFP7A6CRg1wmIX-xLWqd58pBEo8Dr2E";
@@ -334,7 +334,7 @@ export function AppContent() {
             </button>
             <UserMenu />
             <div className="relative">
-              <button onClick={() => setIsCartOpen(true)} className="relative" id="cart-button">
+              <button onClick={openCart} className="relative" id="cart-button">
                 <ShoppingCart className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
                 {items.length > 0 && (
                   <span className="absolute -top-2 -right-2 bg-primary-red text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
@@ -552,7 +552,7 @@ export function AppContent() {
       <Route path="/update-password" element={<UpdatePassword />} />
       </Routes>
       <Footer />
-      <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <Cart isOpen={isCartOpen} onClose={closeCart} />
       <QuickPurchaseButton />
       <BottomNav />
     </div>

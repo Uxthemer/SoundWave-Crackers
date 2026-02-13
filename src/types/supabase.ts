@@ -334,6 +334,82 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+      },
+      quotations: {
+        Row: {
+          id: string
+          short_id: string
+          user_id: string | null
+          customer_name: string | null
+          email: string | null
+          phone: string | null
+          address: string | null
+          city: string | null
+          state: string | null
+          pincode: string | null
+          total_amount: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          short_id: string
+          user_id?: string | null
+          customer_name?: string | null
+          email?: string | null
+          phone?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
+          total_amount: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          short_id?: string
+          user_id?: string | null
+          customer_name?: string | null
+          email?: string | null
+          phone?: string | null
+          address?: string | null
+          city?: string | null
+          state?: string | null
+          pincode?: string | null
+          total_amount?: number
+          created_at?: string
+          updated_at?: string
+        }
+      },
+      quotation_items: {
+        Row: {
+          id: string
+          quotation_id: string
+          product_id: string | null
+          quantity: number
+          price: number
+          total_price: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quotation_id: string
+          product_id?: string | null
+          quantity: number
+          price: number
+          total_price: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quotation_id?: string
+          product_id?: string | null
+          quantity?: number
+          price?: number
+          total_price?: number
+          created_at?: string
+        }
       }
     }
     Views: {
