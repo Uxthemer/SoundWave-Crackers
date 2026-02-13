@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { messaging } from '../lib/firebase';
 import { getToken } from 'firebase/messaging';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
 
 export function PushNotificationManager() {
   const { user } = useAuth();
@@ -40,7 +40,11 @@ export function PushNotificationManager() {
       toast.error("VITE_FIREBASE_VAPID_KEY is missing in .env");
       return;
     }
-    if (!messaging) {
+    
+    // Resolve messaging instance
+    const messagingInstance = await messaging;
+    
+    if (!messagingInstance) {
       toast.error("Firebase Messaging not initialized");
       return;
     }
@@ -58,7 +62,7 @@ export function PushNotificationManager() {
         // Wait for it to be active
         await navigator.serviceWorker.ready;
 
-        const token = await getToken(messaging, { 
+        const token = await getToken(messagingInstance, { 
             vapidKey, 
             serviceWorkerRegistration: registration 
         });
@@ -145,6 +149,57 @@ export function PushNotificationManager() {
           )}
         </button>
       </div>
+      
+      {permission === 'granted' && isSubscribed && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex gap-4">
+                  <button
+                      onClick={async () => {
+                          const messagingInstance = await messaging;
+                          if (!messagingInstance) return;
+                          
+                          const token = await getToken(messagingInstance, { vapidKey });
+                          if (!token) return toast.error("No token found");
+                          
+                          const toastId = toast.loading("Sending test to THIS device...");
+                          try {
+                              const { error } = await supabase.functions.invoke('notify-admins-new-order', {
+                                  body: { test: true, target_token: token, broadcast: false }
+                              });
+                              if(error) throw error;
+                              toast.success("Sent!", { id: toastId });
+                          } catch (e: any) {
+                              toast.error("Failed: " + e.message, { id: toastId });
+                          }
+                      }}
+                      className="text-xs flex items-center gap-1 text-primary-orange hover:underline"
+                  >
+                      <Bell className="w-3 h-3" />
+                      Test This Device
+                  </button>
+
+                  <button
+                      onClick={async () => {
+                          const toastId = toast.loading("Sending test to ALL devices...");
+                          try {
+                              const { error, data } = await supabase.functions.invoke('notify-admins-new-order', {
+                                  body: { test: true, broadcast: true }
+                              });
+                              if(error) throw error;
+                              toast.success(`Sent to ${data?.successCount ?? 'all'} devices`, { id: toastId });
+                          } catch (e: any) {
+                              toast.error("Failed: " + e.message, { id: toastId });
+                          }
+                      }}
+                      className="text-xs flex items-center gap-1 text-blue-600 hover:underline"
+                  >
+                      <Bell className="w-3 h-3" />
+                      Test ALL Devices
+                  </button>
+              </div>
+          </div>
+      )}
+
       {permission === 'denied' && (
           <p className="text-xs text-red-500 mt-2">
               Permission was denied. Please reset permissions in your browser settings (lock icon in address bar).

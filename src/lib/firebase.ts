@@ -22,15 +22,23 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.error('Error setting auth persistence:', error);
 });
 
-let messaging: any = null;
-try {
-  // Only import/init messaging if in browser context
-  if (typeof window !== 'undefined') {
-    const { getMessaging } = await import('firebase/messaging');
-    messaging = getMessaging(app);
-  }
-} catch (e) {
-  console.error('Firebase Messaging failed to init', e);
-}
 
-export { auth, messaging };
+// Export a function to get messaging, rather than a top-level await value
+// to avoid build issues with esbuild/vite top-level await requirements.
+
+const getFirebaseMessaging = async () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const { getMessaging } = await import('firebase/messaging');
+      return getMessaging(app);
+    } catch (e) {
+      console.error("Firebase messaging failed to load", e);
+      return null;
+    }
+  }
+  return null;
+};
+
+// We can export a promise or just the function
+export { auth, getFirebaseMessaging };
+export const messaging = typeof window !== 'undefined' ? (async () => await getFirebaseMessaging())() : null;
