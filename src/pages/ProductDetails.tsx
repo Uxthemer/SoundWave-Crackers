@@ -62,7 +62,7 @@ export function ProductDetails() {
 
   const relatedProducts = products
     .filter(
-      (p) => p.categories.id === product.category_id && p.id !== product.id // Exclude the current product
+      (p) => p.categories?.id === product.category_id && p.id !== product.id // Exclude the current product
     )
     .slice(0, 4);
 
@@ -105,16 +105,16 @@ export function ProductDetails() {
           offer_price: product.offer_price,
           actual_price: product.actual_price,
           content: product.content || "",
-          discount_percentage: product.discount_percentage,
-          cateDescription: product.categories.description,
-          image_url: product.categories.image_url || "",
-          created_at: product.categories.created_at,
+          discount_percentage: product.discount_percentage ?? 0,
+          cateDescription: product.categories?.description ?? null,
+          image_url: product.categories?.image_url || "",
+          created_at: product.created_at,
           category: {
-            id: product.categories.id,
-            name: product.categories.name,
-            cateDescription: product.categories.description,
-            image_url: product.categories.image_url || "",
-            created_at: product.categories.created_at,
+            id: product.categories?.id ?? "",
+            name: product.categories?.name ?? "",
+            cateDescription: product.categories?.description ?? null,
+            image_url: product.categories?.image_url || "",
+            created_at: product.created_at,
           },
         },
         quantity
@@ -140,10 +140,10 @@ export function ProductDetails() {
           </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <Link
-            to={`/buy-cracker-online?category=${product.categories.name.toLowerCase()}`}
+            to={`/buy-cracker-online?category=${(product.categories?.name ?? "").toLowerCase()}`}
             className="text-text/60 hover:text-primary-orange"
           >
-            {product.categories.name}
+            {product.categories?.name}
           </Link>
           <ChevronRight className="w-4 h-4 text-text/40" />
           <span className="text-text/80">{product.name}</span>

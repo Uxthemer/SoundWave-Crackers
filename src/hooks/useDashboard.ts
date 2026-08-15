@@ -1,19 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
-import {
-  format,
-  startOfWeek,
-  endOfWeek,
-  startOfMonth,
-  endOfMonth,
-  startOfYear,
-  endOfYear,
-  startOfDay,
-  endOfDay,
-  subDays,
-} from "date-fns";
+import { format, startOfDay, endOfDay } from "date-fns";
 import { DashboardStats } from "../types";
-import { DASHBOARD_RANGES, DEFAULT_DASHBOARD_RANGE, DashboardRange } from "../config/dashboardConfig";
 
 export function useDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -79,55 +67,54 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Accept preset ranges or a custom object { startDate, endDate }
+  /** The range currently on screen, so realtime refreshes reuse it. */
+  const lastRangeRef = useRef<{
+    startDate: Date;
+    endDate: Date;
+    seasonId?: string | null;
+  } | null>(null);
+
+  // Inventory figures always describe some season. When a rolling date preset
+  // is selected there is no season in the range, so use the live one.
+  const resolveActiveSeasonId = async (): Promise<string | null> => {
+    const { data } = await supabase
+      .from("seasons")
+      .select("id")
+      .eq("status", "active")
+      .maybeSingle();
+    return data?.id ?? null;
+  };
+
+  /**
+   * @param range  Resolved window from useDateRange. When it carries a
+   *               seasonId the query filters on orders.season_id, which is
+   *               exact — date maths across the April 1 boundary is not.
+   */
   const fetchDashboardData = async (
-    range: DashboardRange | { startDate: Date; endDate: Date } = DEFAULT_DASHBOARD_RANGE
+    range: {
+      startDate: Date;
+      endDate: Date;
+      seasonId?: string | null;
+    } = {
+      startDate: startOfDay(new Date(2020, 0, 1)),
+      endDate: endOfDay(new Date(2100, 11, 31)),
+    }
   ) => {
     try {
       setLoading(true);
+      lastRangeRef.current = range;
 
-      // Resolve start/end based on preset or custom range
-      let startDate: Date;
-      let endDate: Date;
-      if (typeof range === "object" && range.startDate && range.endDate) {
-        startDate = startOfDay(range.startDate);
-        endDate = endOfDay(range.endDate);
-      } else {
-        const preset = range as DashboardRange;
-        const now = new Date();
-        if (preset === "today") {
-          startDate = startOfDay(now);
-          endDate = endOfDay(now);
-        } else if (preset === "last90") {
-          endDate = endOfDay(now);
-          startDate = startOfDay(subDays(now, 89)); // include today => 90 days
-        } else if (preset === "week") {
-          startDate = startOfWeek(now);
-          endDate = endOfWeek(now);
-        } else if (preset === "month") {
-          startDate = startOfMonth(now);
-          endDate = endOfMonth(now);
-        } else if (preset === "all") {
-           startDate = startOfDay(new Date(2020, 0, 1));
-           endDate = endOfDay(new Date(2100, 11, 31));
-        } else if (String(preset).startsWith("season-")) {
-          // parse year from season-YYYY
-          const year = parseInt(String(preset).split("-")[1], 10);
-          // Season 2025 = April 1, 2025 to March 31, 2026
-          startDate = startOfDay(new Date(year, 3, 1)); // month is 0-indexed: 3 = April
-          endDate = endOfDay(new Date(year + 1, 2, 31)); // 2 = March
-        } else {
-          // year
-          startDate = startOfYear(now);
-          endDate = endOfYear(now);
-        }
-      }
+      const startDate = startOfDay(range.startDate);
+      const endDate = endOfDay(range.endDate);
+      const seasonId = range.seasonId ?? null;
 
       // consider only completed orders for revenue/profit/sales
       const COMPLETED_STATUSES = ["shipped", "dispatched", "delivered"];
 
-      // Fetch orders within date range and include order_items -> product.apr
-      const { data: orders, error: ordersError } = await supabase
+      // Cost comes from order_items.apr_snapshot — frozen when the order was
+      // placed. Joining live product cost made historical profit change every
+      // time a price was edited.
+      let ordersQuery = supabase
         .from("orders")
         .select(
           `
@@ -135,14 +122,20 @@ export function useDashboard() {
           order_items:order_items (
             price,
             quantity,
-            product:products (
-              apr
-            )
+            apr_snapshot
           )
         `
-        )
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+        );
+
+      if (seasonId) {
+        ordersQuery = ordersQuery.eq("season_id", seasonId);
+      } else {
+        ordersQuery = ordersQuery
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
+      }
+
+      const { data: orders, error: ordersError } = await ordersQuery;
 
       if (ordersError) throw ordersError;
 
@@ -162,7 +155,7 @@ export function useDashboard() {
           const orderProfit = order.order_items.reduce(
             (itemSum: number, item: any) => {
               const price = Number(item.price) || 0;
-              const apr = Number(item.product?.apr) || 0;
+              const apr = Number(item.apr_snapshot) || 0;
               const qty = Number(item.quantity) || 0;
               return itemSum + (price - apr) * qty;
             },
@@ -265,23 +258,31 @@ export function useDashboard() {
       }
 
       // --- Inventory & Top SKUs (charts)
+      // Stock is per-season, so these read the selected season, falling back to
+      // whichever season is live when a rolling date preset is in use.
       try {
+        const inventorySeasonId = seasonId ?? (await resolveActiveSeasonId());
+
         // low stock products (fetch a small set)
         const { data: products } = await supabase
-          .from("products")
+          .from("season_catalog")
           .select("id,name,product_code,stock,reorder_level")
+          .eq("season_id", inventorySeasonId ?? "")
+          .eq("is_active", true)
           .order("stock", { ascending: true })
           .limit(20);
 
         const lowStockList = (products || []).filter((p: any) => {
-          const rl = Number(p.reorder_level ?? p.reorder ?? p.min_stock ?? 5);
+          const rl = Number(p.reorder_level ?? 5);
           const st = Number(p.stock ?? 0);
           return st <= Math.max(rl, 5);
         });
 
         const { count: outOfStockCount } = await supabase
-          .from("products")
+          .from("season_catalog")
           .select("id", { count: "exact", head: true })
+          .eq("season_id", inventorySeasonId ?? "")
+          .eq("is_active", true)
           .eq("stock", 0);
 
         // build low stock chart (top 8 lowest stock)
@@ -294,12 +295,24 @@ export function useDashboard() {
           datasets: [{ label: "Stock", data: lowForChart.map((l) => l.stock), backgroundColor: "#E53E3E" }],
         });
 
-        // top SKUs by revenue in the selected date range
-        const { data: orderItems } = await supabase
+        // top SKUs by revenue in the selected range
+        let itemsQuery = supabase
           .from("order_items")
-          .select("price,quantity,product:products(id,name,product_code)")
-          .gte("created_at", startDate.toISOString())
-          .lte("created_at", endDate.toISOString());
+          // The embed is NOT aliased on purpose: PostgREST resolves the filter
+          // below against the embed's name, so `order:orders!inner(...)` would
+          // silently fail to match `orders.season_id` and the season filter
+          // would be ignored.
+          .select("price,quantity,product:products(id,name,product_code),orders!inner(season_id)");
+
+        if (seasonId) {
+          itemsQuery = itemsQuery.eq("orders.season_id", seasonId);
+        } else {
+          itemsQuery = itemsQuery
+            .gte("created_at", startDate.toISOString())
+            .lte("created_at", endDate.toISOString());
+        }
+
+        const { data: orderItems } = await itemsQuery;
 
         const revMap: Record<string, { name: string; revenue: number; qty: number }> = {};
         (orderItems || []).forEach((it: any) => {
@@ -342,14 +355,20 @@ export function useDashboard() {
            table: "orders",
          },
         () => {
-          // Refresh dashboard data when orders change (use configured default)
-          fetchDashboardData();
+          // Refresh using whatever range is currently displayed. This used to
+          // call fetchDashboardData() with no arguments, which silently fell
+          // back to all-time — so any order change wiped out the selected
+          // season's figures.
+          if (lastRangeRef.current) {
+            fetchDashboardData(lastRangeRef.current);
+          }
         }
        )
        .subscribe();
 
-    // Initial fetch using configured default
-    fetchDashboardData();
+    // No initial fetch here. The page owns the first fetch and issues it once
+    // the season list has settled; firing an all-time request here as well
+    // produced two in-flight responses that could land out of order.
 
     return () => {
       supabase.removeChannel(subscription);

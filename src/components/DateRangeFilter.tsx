@@ -1,4 +1,9 @@
-import { DashboardRange, DASHBOARD_RANGES } from "../config/dashboardConfig";
+import {
+  DashboardRange,
+  DASHBOARD_PRESETS,
+  seasonRange,
+} from "../config/dashboardConfig";
+import { useSeasons } from "../context/SeasonContext";
 
 interface DateRangeFilterProps {
   range: DashboardRange;
@@ -21,6 +26,23 @@ export function DateRangeFilter({
   onApply,
   isApplying = false,
 }: DateRangeFilterProps) {
+  const { seasons } = useSeasons();
+
+  const presetLabel = (r: string) =>
+    r === "all"
+      ? "All Time"
+      : r === "today"
+      ? "Today"
+      : r === "last90"
+      ? "Last 90 Days"
+      : r === "week"
+      ? "This Week"
+      : r === "month"
+      ? "This Month"
+      : r === "year"
+      ? "This Year"
+      : "Custom";
+
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
       <select
@@ -28,25 +50,24 @@ export function DateRangeFilter({
         onChange={(e) => setRange(e.target.value as DashboardRange)}
         className="bg-card border border-card-border/10 rounded-lg px-3 py-2 focus:outline-none focus:border-primary-orange w-full sm:w-auto"
       >
-        {DASHBOARD_RANGES.map((r) => (
-          <option key={r} value={r}>
-            {r === "all"
-              ? "All Time"
-              : r === "today"
-              ? "Today"
-              : r === "last90"
-              ? "Last 90 Days"
-              : r === "week"
-              ? "This Week"
-              : r === "month"
-              ? "This Month"
-              : r === "year"
-              ? "This Year"
-              : String(r).startsWith("season-")
-              ? `Season ${String(r).split("-")[1]}`
-              : "Custom"}
-          </option>
-        ))}
+        {/* Seasons come from the database, so adding one needs no code change. */}
+        {seasons.length > 0 && (
+          <optgroup label="Seasons">
+            {seasons.map((s) => (
+              <option key={s.id} value={seasonRange(s.id)}>
+                Season {s.name}
+                {s.status === "active" ? " (live)" : ""}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <optgroup label="Date ranges">
+          {DASHBOARD_PRESETS.map((r) => (
+            <option key={r} value={r}>
+              {presetLabel(r)}
+            </option>
+          ))}
+        </optgroup>
       </select>
 
       {range === "custom" && (

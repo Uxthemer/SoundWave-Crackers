@@ -8,12 +8,17 @@ interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  /** Season whose prices and stock this import writes to. */
+  seasonId: string | null;
+  seasonName?: string;
 }
 
 export function BulkImportModal({
   isOpen,
   onClose,
   onSuccess,
+  seasonId,
+  seasonName,
 }: BulkImportModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,6 +111,10 @@ export function BulkImportModal({
       setError("Please select a file to import");
       return;
     }
+    if (!seasonId) {
+      setError("No season selected. Pick a season before importing.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -144,9 +153,10 @@ export function BulkImportModal({
             }
           }
 
-          // Separate products into updates and inserts based on product_code
+          // product_code is the identity key. Identity fields go to products;
+          // everything commercial goes to the selected season only, so
+          // importing a new price list never rewrites a previous season.
           const productCodes = formattedProducts.map((p) => p.product_code);
-          // Fetch existing products with these product_codes
           const { data: existingProducts, error: fetchError } = await supabase
             .from("products")
             .select("id, product_code")
@@ -154,37 +164,75 @@ export function BulkImportModal({
 
           if (fetchError) throw fetchError;
 
-          const existingCodes = (existingProducts || []).map((p) => p.product_code);
-
-          const toUpdate = formattedProducts.filter((p) =>
-            existingCodes.includes(p.product_code)
-          );
-          const toInsert = formattedProducts.filter(
-            (p) => !existingCodes.includes(p.product_code)
+          const idByCode = new Map<string, string>(
+            (existingProducts || []).map((p: any) => [p.product_code, p.id])
           );
 
-          // Update existing products
-          for (const product of toUpdate) {
-            const existing = (existingProducts || []).find(
-              (ep) => ep.product_code === product.product_code
-            );
-            if (existing) {
+          const seasonRows: any[] = [];
+          const costRows: any[] = [];
+
+          for (const product of formattedProducts as any[]) {
+            const identity = {
+              product_code: product.product_code,
+              name: product.name,
+              category_id: product.category_id,
+              description: product.description ?? null,
+              image_url: product.image_url ?? null,
+              yt_link: product.yt_link ?? null,
+            };
+
+            let productId = idByCode.get(product.product_code);
+
+            if (productId) {
               const { error: updateError } = await supabase
                 .from("products")
-                .update(product)
-                .eq("id", existing.id);
+                .update(identity)
+                .eq("id", productId);
               if (updateError) throw updateError;
+            } else {
+              const { data: inserted, error: insertError } = await supabase
+                .from("products")
+                .insert(identity)
+                .select("id")
+                .single();
+              if (insertError) throw insertError;
+              productId = inserted.id as string;
+              idByCode.set(product.product_code, productId);
             }
+
+            seasonRows.push({
+              season_id: seasonId,
+              product_id: productId,
+              actual_price: Number(product.actual_price) || 0,
+              offer_price: Number(product.offer_price) || 0,
+              discount_percentage: Number(product.discount_percentage) || 0,
+              content: product.content ?? null,
+              stock: Number(product.stock) || 0,
+              opening_stock: Number(product.stock) || 0,
+            });
+
+            costRows.push({
+              season_id: seasonId,
+              product_id: productId,
+              apr: Number(product.apr) || null,
+            });
           }
 
-          // Insert new products
-          if (toInsert.length > 0) {
-            const { error: insertError } = await supabase
-              .from("products")
-              .insert(toInsert);
-            if (insertError) throw insertError;
-          }
+          const { error: seasonError } = await supabase
+            .from("product_seasons")
+            .upsert(seasonRows, { onConflict: "season_id,product_id" });
+          if (seasonError) throw seasonError;
 
+          const { error: costError } = await supabase
+            .from("product_season_costs")
+            .upsert(costRows, { onConflict: "season_id,product_id" });
+          if (costError) throw costError;
+
+          toast.success(
+            `Imported ${seasonRows.length} products into season ${
+              seasonName ?? ""
+            }`.trim()
+          );
           onSuccess();
           onClose();
         } catch (err) {
@@ -228,7 +276,7 @@ export function BulkImportModal({
           loading ? "pointer-events-none opacity-60" : ""
         }`}
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="font-heading text-2xl">Bulk Import Products</h2>
           <button
             onClick={onClose}
@@ -238,6 +286,15 @@ export function BulkImportModal({
             <X className="w-6 h-6" />
           </button>
         </div>
+
+        {/* Import lands in one season only — make that unmistakable. */}
+        <p className="mb-6 text-sm text-text/70">
+          Prices and stock will be written to{" "}
+          <span className="font-semibold text-primary-orange">
+            season {seasonName ?? "—"}
+          </span>
+          . Other seasons are unaffected.
+        </p>
 
         {error && (
           <div className="bg-primary-red/10 text-primary-red p-4 rounded-lg mb-6 flex items-center gap-2">

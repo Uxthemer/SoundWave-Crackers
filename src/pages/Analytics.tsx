@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { ExpandableChart } from "../components/ExpandableChart";
 import { useDateRange } from "../hooks/useDateRange";
+import { useSeasons } from "../context/SeasonContext";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -74,13 +75,33 @@ function buildChartFromMap(mapLabels: string[], mapData: number[], limit = 12) {
   };
 }
 
+function buildExportRows(labels: string[], values: number[]) {
+  return labels
+    .map((label, index) => ({
+      Label: label,
+      Value: Number(values[index] || 0),
+    }))
+    .sort((a, b) => Number(b.Value) - Number(a.Value));
+}
+
+function buildProductExportRows(labels: string[], quantities: number[], revenue: number[]) {
+  return labels
+    .map((label, index) => ({
+      Product: label,
+      QuantitySold: Number(quantities[index] || 0),
+      Revenue: Number(revenue[index] || 0),
+    }))
+    .sort((a, b) => Number(b.QuantitySold) - Number(a.QuantitySold));
+}
+
 export function Analytics() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const { userRole } = useAuth();
-  
+  const { activeSeason } = useSeasons();
+
   // Use shared date range logic
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
   const [isApplying, setIsApplying] = useState(false);
 
   // UI state for Stock & Referral tables
@@ -93,16 +114,18 @@ export function Analytics() {
     useState<"name" | "ordersCount" | "bonus">("ordersCount");
   const [refSortDir, setRefSortDir] = useState<"asc" | "desc">("desc");
 
+  // See Orders.tsx: do not fetch until the season list has settled.
   useEffect(() => {
+    if (!ready) return;
     if (range !== "custom") {
       handleFetch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [range, ready]);
 
   const handleFetch = async () => {
-    const { startDate, endDate } = getDateRange();
-    await fetchAnalyticsData(startDate, endDate);
+    const { startDate, endDate, seasonId } = getDateRange();
+    await fetchAnalyticsData(startDate, endDate, seasonId);
   };
 
   const handleApplyCustom = async () => {
@@ -111,11 +134,15 @@ export function Analytics() {
     setIsApplying(false);
   };
 
-  const fetchAnalyticsData = async (startDate: Date, endDate: Date) => {
+  const fetchAnalyticsData = async (
+    startDate: Date,
+    endDate: Date,
+    seasonId: string | null = null
+  ) => {
     try {
       setLoading(true);
 
-      const { data: orders, error: ordersError } = await supabase
+      let ordersQuery = supabase
         .from("orders")
         .select(
           `
@@ -127,17 +154,47 @@ export function Analytics() {
             )
           )
         `
-        )
-        .gte("created_at", startDate.toISOString())
-        .lte("created_at", endDate.toISOString());
+        );
+
+      // season_id is exact; dates are a fallback for rolling presets.
+      if (seasonId) {
+        ordersQuery = ordersQuery.eq("season_id", seasonId);
+      } else {
+        ordersQuery = ordersQuery
+          .gte("created_at", startDate.toISOString())
+          .lte("created_at", endDate.toISOString());
+      }
+
+      const { data: orders, error: ordersError } = await ordersQuery;
       if (ordersError) throw ordersError;
 
-      // fetch product_type and is_active so we can exclude group products and inactive ones
-      const { data: products, error: prodError } = await supabase
-        .from("products")
-        .select("id,name,product_code,stock,apr,product_type,is_active")
-        .order("name", { ascending: true });
-      if (prodError) throw prodError;
+      // Stock valuation is per-season. Cost lives in the admin-only costs
+      // table, so it is fetched separately and merged.
+      const valuationSeasonId = seasonId ?? activeSeason?.id ?? null;
+
+      const [catalogRes, costsRes] = await Promise.all([
+        supabase
+          .from("season_catalog")
+          .select("id,name,product_code,stock,product_type,is_active")
+          .eq("season_id", valuationSeasonId ?? "")
+          .order("order", { nullsFirst: false })
+          .order("name", { ascending: true }),
+        supabase
+          .from("product_season_costs")
+          .select("product_id, apr")
+          .eq("season_id", valuationSeasonId ?? ""),
+      ]);
+
+      if (catalogRes.error) throw catalogRes.error;
+      if (costsRes.error) throw costsRes.error;
+
+      const aprByProduct = new Map(
+        (costsRes.data || []).map((c: any) => [c.product_id, c.apr])
+      );
+      const products = (catalogRes.data || []).map((p: any) => ({
+        ...p,
+        apr: aprByProduct.get(p.id) ?? 0,
+      }));
 
       // aggregate maps
       const cityMap: Record<string, number> = {};
@@ -345,6 +402,15 @@ export function Analytics() {
   const districtChart = buildChartFromMap(data.districtSales.labels, data.districtSales.data, 100);
   const cityChart = buildChartFromMap(data.citySales.labels, data.citySales.data, 100);
   const topProducts = buildChartFromMap(data.productSales.labels, data.productSales.quantities, 100);
+
+  const stateViewRows = buildExportRows(data.stateSales.labels, data.stateSales.data);
+  const districtViewRows = buildExportRows(data.districtSales.labels, data.districtSales.data);
+  const cityViewRows = buildExportRows(data.citySales.labels, data.citySales.data);
+  const topProductViewRows = buildProductExportRows(
+    data.productSales.labels,
+    data.productSales.quantities,
+    data.productSales.revenue
+  );
 
   return (
     <div className="min-h-screen pt-8 pb-12">
@@ -672,7 +738,11 @@ export function Analytics() {
 
           {/* State-wise Sales */}
           {/* State-wise Sales */}
-          <ExpandableChart title="State-wise Sales">
+          <ExpandableChart
+            title="State-wise Sales"
+            viewData={stateViewRows}
+            exportFileName="state-wise-sales.xlsx"
+          >
             <Bar
               data={{
                 labels: stateChart.labels,
@@ -684,7 +754,11 @@ export function Analytics() {
 
           {/* District-wise Sales */}
           {/* District-wise Sales */}
-          <ExpandableChart title="District-wise Sales">
+          <ExpandableChart
+            title="District-wise Sales"
+            viewData={districtViewRows}
+            exportFileName="district-wise-sales.xlsx"
+          >
             <Bar
               data={{
                 labels: districtChart.labels,
@@ -696,7 +770,11 @@ export function Analytics() {
 
           {/* City-wise Sales */}
           {/* City-wise Sales */}
-          <ExpandableChart title="City-wise Sales">
+          <ExpandableChart
+            title="City-wise Sales"
+            viewData={cityViewRows}
+            exportFileName="city-wise-sales.xlsx"
+          >
             <Bar
               data={{
                 labels: cityChart.labels,
@@ -708,7 +786,11 @@ export function Analytics() {
 
           {/* Top Products (Quantity Sold) */}
           {/* Top Products (Quantity Sold) */}
-          <ExpandableChart title="Top Products (Quantity Sold)">
+          <ExpandableChart
+            title="Top Products (Quantity Sold)"
+            viewData={topProductViewRows}
+            exportFileName="top-products-sales.xlsx"
+          >
             <Bar
               data={{
                 labels: topProducts.labels,

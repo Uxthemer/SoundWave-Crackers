@@ -64,7 +64,7 @@ export function Dashboard() {
   const { userRole } = useAuth();
   
   // configurable date range (values come from src/config/dashboardConfig.ts)
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
   const [isApplyingCustom, setIsApplyingCustom] = useState(false);
   const {
     stats,
@@ -127,6 +127,21 @@ export function Dashboard() {
     };
   }, []); // run once; keep light to avoid interfering with other dashboard fetches
 
+  // Range resolution lives in useDateRange only — useDashboard used to repeat
+  // the season maths, which meant two places to keep in step.
+  //
+  // This must sit ABOVE the early returns below. It previously sat after them,
+  // so on the first render (userRole still loading) the hook was never
+  // registered, and the data fetch only fired on a later render — which is why
+  // the season dropdown could show one season while the tiles showed another.
+  useEffect(() => {
+    if (!ready) return;
+    if (range !== "custom") {
+      fetchDashboardData(getDateRange());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, ready]);
+
   if (!userRole) {
     return (
       <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
@@ -150,33 +165,10 @@ export function Dashboard() {
 
 
 
-  // Fetch initial data and whenever dateRange changes
-  // Fetch initial data and whenever dateRange changes
-  useEffect(() => {
-    if (range !== "custom") {
-       // if preset, pass string directly as before, OR explicitly compute dates
-       // The original fetchDashboardData supported both mode. 
-       // but wait, useDateRange computes dates for us. 
-       // Let's rely on computed dates to be unified. 
-       // But useDashboard actually supports 'range: DashboardRange | {startDate, endDate}'.
-       // If we pass range string, it handles it inside. 
-       // If we pass object, it expects startDate/endDate.
-       // Let's pass range string if not custom to let it handle "today", etc consistently?
-       // Actually useDateRange logic handles seasons. useDashboard logic ALSO handles seasons (I added it).
-       // To avoid duplicate logic maintenance, let's prefer passing the string if not custom, 
-       // BUT useDateRange is where I put the season logic recently. 
-       // I also added season logic to useDashboard.ts in step 81!
-       // So both have it. 
-       // Let's just pass `range` string.
-       fetchDashboardData(range);
-    }
-  }, [range]);
-
   // Apply custom range (start/end) when user clicks Apply
   const applyCustomRange = () => {
     setIsApplyingCustom(true);
-    const { startDate, endDate } = getDateRange();
-    fetchDashboardData({ startDate, endDate }).finally(() =>
+    fetchDashboardData(getDateRange()).finally(() =>
       setIsApplyingCustom(false)
     );
   };
