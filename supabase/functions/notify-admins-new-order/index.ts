@@ -72,9 +72,10 @@ serve(async (req) => {
   }
 
   try {
+    // USE SERVICE ROLE KEY to bypass RLS
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
     // 1. Check if Push is enabled globally
@@ -91,11 +92,14 @@ serve(async (req) => {
 
     if (settings && settings.enable_push_notifications === false) {
        console.log("Push notifications disabled in settings.");
-       return new Response(JSON.stringify({ message: "Push disabled" }), { headers: corsHeaders });
+       // We continue strictly for logging/debugging purposes or valid return. 
+       // Actually user probably wants it to stop if disabled.
+       return new Response(JSON.stringify({ message: "Push disabled in settings" }), { headers: corsHeaders });
     }
 
     // 2. Parse Webhook Payload
     const payload = await req.json();
+    console.log("Packet received:", JSON.stringify(payload));
 
     // HANDLE TEST NOTIFICATION
     if (payload.test === true) {
@@ -143,7 +147,6 @@ serve(async (req) => {
         };
         
         try {
-            // Use sendEachForMulticast for both single (as array) and multiple
             const batchResponse = await firebase.messaging().sendEachForMulticast(message);
             
             return new Response(JSON.stringify({ 
@@ -158,38 +161,39 @@ serve(async (req) => {
         }
     }
 
-    const order = payload.record; // 'record' holds the new row data on INSERT
+    // HANDLE NEW ORDER NOTIFICATION
+    const order = payload.record; 
     
     if (!order) {
-        throw new Error("No record found in payload");
+        console.error("No record in payload", payload);
+        return new Response(JSON.stringify({ error: "No record found in payload", debug_payload: payload }), { status: 400, headers: corsHeaders });
     }
 
     const orderId = order.id;
     const orderTotal = order.total_amount || order.total || 0; 
-    // Adjust field names based on your actual orders table schema
-
-    // 3. Update 'orders' status? No, we just notify.
 
     // 4. Get Admin Tokens
-    const { data: subscriptions } = await supabase
+    const { data: subscriptions, error: subError } = await supabase
         .from('admin_push_subscriptions')
         .select('fcm_token');
 
+    if (subError) {
+        console.error("Error fetching subscriptions:", subError);
+        return new Response(JSON.stringify({ error: "Database error fetching subscriptions", details: subError }), { status: 500, headers: corsHeaders });
+    }
+
     if (!subscriptions || subscriptions.length === 0) {
         console.log("No admin subscriptions found.");
-        return new Response(JSON.stringify({ message: "No subscribers" }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ message: "No subscribers found in DB", settings_enabled: settings?.enable_push_notifications }), { headers: corsHeaders });
     }
 
     const tokens = subscriptions.map(s => s.fcm_token);
-    
-    // 5. Send Notification
-    const firebase = getFirebaseAdmin();
-    
-    // Remove duplicates
     const uniqueTokens = [...new Set(tokens)];
+    
+    console.log(`Found ${uniqueTokens.length} unique tokens to send to.`);
 
     if (uniqueTokens.length === 0) {
-        return new Response(JSON.stringify({ message: "No tokens" }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ message: "No valid tokens found" }), { headers: corsHeaders });
     }
 
     const message = {
@@ -199,74 +203,72 @@ serve(async (req) => {
         },
         tokens: uniqueTokens,
     };
-
-    const response = await firebase.messaging().sendMulticast(message); // sendMulticast changed to sendEachForMulticast in v11? 
-    // v11 uses sendEachForMulticast usually, but let's check. 
-    // Actually sendMulticast is generic in older versions but sendEachForMulticast is recommended.
-    // Let's use sendEachForMulticast if available, or try/catch.
-    // To be safe with v11, let's use sendEachForMulticast.
     
-    // Correction: v11 legacy API is removed? No, supports HTTP v1.
-    // 'sendMulticast' sends to multiple tokens.
-    
-    const batchResponse = await firebase.messaging().sendEachForMulticast(message);
+    // 5. Send Notification
+    const firebase = getFirebaseAdmin();
+    let batchResponse;
 
-    console.log(batchResponse.successCount + ' messages were sent successfully');
-
-    // 6. Send WhatsApp Notifications (Parallel)
-    const adminPhoneNumbers = Deno.env.get('ADMIN_PHONE_NUMBERS'); // Comma separated
-    if (adminPhoneNumbers) {
-       const phones = adminPhoneNumbers.split(',').map(p => p.trim()).filter(p => p);
-       const whatsappBody = `🎉 New Order Received!\nOrder #${orderId} for ₹${orderTotal} has been placed. Check dashboard for details.`;
-       
-       console.log(`Sending WhatsApp to ${phones.length} admins...`);
-       await Promise.all(phones.map(phone => sendWhatsApp(phone, whatsappBody)));
-    }
-
-    // 7. Send WhatsApp to Customer
-    const customerPhone = order.phone;
-    const customerName = order.full_name || 'Customer';
-    
-    if (customerPhone) {
-        // Sanitize phone number: remove non-digits, ensure country code if needed (assuming India +91 for now if missing?)
-        // Meta API requires country code. Let's assume the DB has it or we prepend 91 if length is 10.
-        let cleanPhone = customerPhone.replace(/\D/g, '');
-        if (cleanPhone.length === 10) {
-            cleanPhone = '91' + cleanPhone;
-        }
-
-        const customerMsg = `Hello ${customerName}, 👋\n\nThank you for your order (Order #${orderId}) with Soundwave Crackers! 🎆\n\nTotal Amount: ₹${orderTotal}\n\nWe have received your order and will process it shortly.`;
+    try {
+        batchResponse = await firebase.messaging().sendEachForMulticast(message);
+        console.log(batchResponse.successCount + ' messages were sent successfully');
         
-        console.log(`Sending WhatsApp to customer ${cleanPhone}...`);
-        await sendWhatsApp(cleanPhone, customerMsg);
-    }
-
-    // Optional: Cleanup invalid tokens?
-    if (batchResponse.failureCount > 0) {
-        const failedTokens = [];
-        batchResponse.responses.forEach((resp, idx) => {
-            if (!resp.success) {
-                failedTokens.push(uniqueTokens[idx]);
-            }
-        });
-        // We could delete these from DB:
-        if (failedTokens.length > 0) {
-             await supabase.from('admin_push_subscriptions').delete().in('fcm_token', failedTokens);
+        // 6. Send WhatsApp Notifications (Parallel)
+        const adminPhoneNumbers = Deno.env.get('ADMIN_PHONE_NUMBERS'); // Comma separated
+        if (adminPhoneNumbers) {
+           const phones = adminPhoneNumbers.split(',').map(p => p.trim()).filter(p => p);
+           const whatsappBody = `🎉 New Order Received!\nOrder #${orderId} for ₹${orderTotal} has been placed. Check dashboard for details.`;
+           
+           console.log(`Sending WhatsApp to ${phones.length} admins...`);
+           await Promise.all(phones.map(phone => sendWhatsApp(phone, whatsappBody)));
         }
+    
+        // 7. Send WhatsApp to Customer
+        const customerPhone = order.phone;
+        const customerName = order.full_name || 'Customer';
+        
+        if (customerPhone) {
+            let cleanPhone = customerPhone.replace(/\D/g, '');
+            // Simple validation for India: 10 digits -> preset 91
+            if (cleanPhone.length === 10) {
+                cleanPhone = '91' + cleanPhone;
+            }
+    
+            const customerMsg = `Hello ${customerName}, 👋\n\nThank you for your order (Order #${orderId}) with Soundwave Crackers! 🎆\n\nTotal Amount: ₹${orderTotal}\n\nWe have received your order and will process it shortly.`;
+            
+            console.log(`Sending WhatsApp to customer ${cleanPhone}...`);
+            await sendWhatsApp(cleanPhone, customerMsg);
+        }
+    
+        // Optional: Cleanup invalid tokens
+        if (batchResponse.failureCount > 0) {
+            const failedTokens = [];
+            batchResponse.responses.forEach((resp, idx) => {
+                if (!resp.success) {
+                    failedTokens.push(uniqueTokens[idx]);
+                }
+            });
+            if (failedTokens.length > 0) {
+                 await supabase.from('admin_push_subscriptions').delete().in('fcm_token', failedTokens);
+            }
+        }
+    
+        return new Response(
+          JSON.stringify({ 
+              message: 'Notifications sent', 
+              success: batchResponse.successCount, 
+              failure: batchResponse.failureCount 
+          }),
+          { 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200 
+          }
+        );
+
+    } catch (e) {
+         console.error("Firebase Send Error", e);
+         throw e;
     }
-
-    return new Response(
-      JSON.stringify({ 
-          message: 'Notifications sent', 
-          success: batchResponse.successCount, 
-          failure: batchResponse.failureCount 
-      }),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200 
-      }
-    );
-
+    
   } catch (error) {
     console.error("Error:", error);
     return new Response(

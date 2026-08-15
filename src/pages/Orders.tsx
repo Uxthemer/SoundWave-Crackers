@@ -8,6 +8,7 @@ import { InvoiceTemplate } from "../components/InvoiceTemplate";
 import EditOrderModal, { OrderForEdit } from "../components/EditOrderModal";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import toast from "react-hot-toast";
 
 interface OrderItem {
   id: string;
@@ -15,9 +16,12 @@ interface OrderItem {
   quantity: number;
   price: number;
   total_price: number;
+  /** Cost price frozen at the moment the order was placed. */
+  apr_snapshot?: number | null;
   product: {
     name: string;
     product_code?: string; // added product code
+    order?: number;
     categories: {
       name: string;
     };
@@ -44,6 +48,7 @@ interface Order {
   discount_percentage?: string;
   short_id?: string;
   referred_by?: string;
+  season_id?: string | null;
 }
 
 const ORDER_STATUSES = [
@@ -87,14 +92,19 @@ export function Orders() {
   const [profitBreakdown, setProfitBreakdown] = useState<{ revenue: number; cost: number; discount: number; profit: number } | null>(null);
   
   // Date range filter logic
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
   const [isApplying, setIsApplying] = useState(false);
 
+  // Wait for the season list before the first fetch, otherwise this fires once
+  // against the "all" default and again once the active season resolves, and
+  // the two responses can land out of order.
   useEffect(() => {
+    if (!ready) return;
     if (range !== "custom") {
       handleFetch();
     }
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, ready]);
 
   const handleFetch = async () => {
     const { startDate, endDate } = getDateRange();
@@ -120,8 +130,6 @@ export function Orders() {
               id,
               name,
               product_code,
-              "order",
-              apr,
               categories:categories ( name )
             )
           )
@@ -137,6 +145,36 @@ export function Orders() {
 
       const { data, error } = await query;
        if (error) throw error;
+
+       // Print/export order the items by their catalog display order. That
+       // now lives on product_seasons, so resolve it per season and attach it
+       // where the rest of this file already expects it (item.product.order).
+       const seasonIds = Array.from(
+         new Set((data || []).map((o: any) => o.season_id).filter(Boolean))
+       );
+       if (seasonIds.length > 0) {
+         const { data: displayOrders } = await supabase
+           .from("product_seasons")
+           .select("season_id, product_id, display_order")
+           .in("season_id", seasonIds);
+
+         const orderByKey = new Map(
+           (displayOrders || []).map((r: any) => [
+             `${r.season_id}:${r.product_id}`,
+             r.display_order,
+           ])
+         );
+
+         (data || []).forEach((o: any) => {
+           (o.items || []).forEach((it: any) => {
+             if (it.product) {
+               it.product.order =
+                 orderByKey.get(`${o.season_id}:${it.product_id}`) ?? 0;
+             }
+           });
+         });
+       }
+
        setOrders(data || []);
        // build status counts for the dashboard tiles
        const stats: Record<string, number> = {};
@@ -157,8 +195,11 @@ export function Orders() {
   const computeProfitBreakdown = (order: Order) => {
     const revenue = Number(order.total_amount || 0);
     const discount = Number(order.discount_amt || 0);
+    // Cost comes from the snapshot taken when the order was placed, never
+    // from the live catalog — otherwise re-pricing a product silently
+    // rewrites the profit reported for past orders.
     const cost = (order.items || []).reduce((s, it) => {
-      const apr = Number((it.product as any)?.apr || 0);
+      const apr = Number((it as any)?.apr_snapshot || 0);
       const qty = Number(it.quantity || 0);
       return s + apr * qty;
     }, 0);
@@ -215,51 +256,73 @@ export function Orders() {
 
       if (error) throw error;
 
-      // If order is cancelled, restore stock for ordered items
+      // If order is cancelled, restore stock — to the order's OWN season, not
+      // whichever season happens to be live now.
       if (pendingStatus.newStatus === "Cancelled") {
         try {
-          // fetch order items
-          const { data: items, error: itemsError } = await supabase
-            .from("order_items")
-            .select("product_id, quantity")
-            .eq("order_id", pendingStatus.orderId);
+          const cancelledOrder = orders.find(
+            (o) => o.id === pendingStatus.orderId
+          );
+          const orderSeasonId = (cancelledOrder as any)?.season_id ?? null;
 
-          if (itemsError) throw itemsError;
+          if (!orderSeasonId) {
+            toast.error(
+              "Order cancelled, but stock was not restored: the order is not linked to a season."
+            );
+          } else {
+            // fetch order items
+            const { data: items, error: itemsError } = await supabase
+              .from("order_items")
+              .select("product_id, quantity")
+              .eq("order_id", pendingStatus.orderId);
 
-          // aggregate quantities per product
-          const qtyMap: Record<string, number> = {};
-          (items || []).forEach((it: any) => {
-            qtyMap[it.product_id] =
-              (qtyMap[it.product_id] || 0) + (it.quantity || 0);
-          });
+            if (itemsError) throw itemsError;
 
-          // update each product stock
-          for (const productId of Object.keys(qtyMap)) {
-            const addQty = qtyMap[productId];
+            // aggregate quantities per product
+            const qtyMap: Record<string, number> = {};
+            (items || []).forEach((it: any) => {
+              qtyMap[it.product_id] =
+                (qtyMap[it.product_id] || 0) + (it.quantity || 0);
+            });
 
-            const { data: prod, error: prodError } = await supabase
-              .from("products")
-              .select("stock")
-              .eq("id", productId)
-              .single();
+            for (const productId of Object.keys(qtyMap)) {
+              const addQty = qtyMap[productId];
 
-            if (prodError) {
-              console.error(
-                "Failed to fetch product for stock restore:",
-                prodError
-              );
-              continue;
-            }
+              const { data: prod, error: prodError } = await supabase
+                .from("product_seasons")
+                .select("stock")
+                .eq("product_id", productId)
+                .eq("season_id", orderSeasonId)
+                .single();
 
-            const newStock = Math.max(0, (prod?.stock || 0) + addQty);
+              if (prodError) {
+                console.error(
+                  "Failed to fetch product for stock restore:",
+                  prodError
+                );
+                continue;
+              }
 
-            const { error: updateProdError } = await supabase
-              .from("products")
-              .update({ stock: newStock })
-              .eq("id", productId);
+              const newStock = Math.max(0, (prod?.stock || 0) + addQty);
 
-            if (updateProdError) {
-              console.error("Failed to update product stock:", updateProdError);
+              const { error: updateProdError } = await supabase
+                .from("product_seasons")
+                .update({ stock: newStock })
+                .eq("product_id", productId)
+                .eq("season_id", orderSeasonId);
+
+              if (updateProdError) {
+                console.error(
+                  "Failed to update product stock:",
+                  updateProdError
+                );
+                toast.error(
+                  updateProdError.message.includes("closed")
+                    ? "Order cancelled, but stock was not restored: that season is closed. A superadmin must unlock it."
+                    : "Order cancelled, but stock could not be restored."
+                );
+                break;
+              }
             }
           }
         } catch (stockErr) {
@@ -348,7 +411,7 @@ export function Orders() {
       Category: item.product.categories.name,
       Quantity: item.quantity,
       Price: item.price,
-      APR: (item.product as any)?.apr ?? "-", // <-- added APR column
+      APR: (item as any)?.apr_snapshot ?? "-", // cost snapshotted at sale time
       Total: item.total_price,
     })) || [];
     const wsItems = XLSX.utils.json_to_sheet(orderItems);
@@ -393,7 +456,7 @@ export function Orders() {
         Category: item.product.categories.name,
         Quantity: item.quantity,
         Price: item.price,
-        APR: (item.product as any)?.apr ?? "-", // <-- added APR column
+        APR: (item as any)?.apr_snapshot ?? "-", // cost snapshotted at sale time
         Total: item.total_price,
       }));
     });
@@ -736,7 +799,7 @@ export function Orders() {
               {filteredOrders.length} orders
             </span>
           </div>
-          <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+          <div className="flex flex-wrap gap-4">
             <div className="relative w-full md:w-64">
               <input
                 type="text"
@@ -800,26 +863,26 @@ export function Orders() {
           ))}
         </div>
 
-        <div className="bg-card/30 rounded-xl overflow-hidden w-full max-w-full">
+        <div className="bg-card/30 rounded-xl overflow-hidden border border-card-border/10 w-full">
           <div className="overflow-x-auto w-full">
-            <table className="w-full min-w-[700px] sm:min-w-full text-xs sm:text-sm">
+            <table className="w-full text-xs sm:text-sm">
               <thead>
                 <tr className="bg-card/50">
-                  <th className="py-4 px-6 text-left">
+                  <th className="py-3 px-3 sm:px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
                       onClick={() => handleSort("id")}
                     >
-                      <span>Order ID</span>
+                      <span className="whitespace-nowrap">Order ID</span>
                       {sortField === "id" &&
                         (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
+                          <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" />
                         ) : (
-                          <ChevronDown className="w-4 h-4" />
+                          <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
                         ))}
                     </button>
                   </th>
-                  <th className="py-4 px-6 text-left">
+                  <th className="py-3 px-3 sm:px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
                       onClick={() => handleSort("full_name")}
@@ -827,20 +890,20 @@ export function Orders() {
                       <span>Customer</span>
                       {sortField === "full_name" &&
                         (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
+                          <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" />
                         ) : (
-                          <ChevronDown className="w-4 h-4" />
+                          <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
                         ))}
                     </button>
                   </th>
-                  <th className="py-4 px-6 text-left">Contact</th>
-                  <th className="py-4 px-6 text-left">Status</th>
-                  <th className="py-4 px-6 text-right">Amount</th>
+                  <th className="py-3 px-3 sm:px-6 text-left">Contact</th>
+                  <th className="py-3 px-3 sm:px-6 text-left">Status</th>
+                  <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Amount</th>
                   {userRole?.name === "superadmin" && (
-                    <th className="py-4 px-6 text-right">Profit</th>
+                    <th className="py-3 px-3 sm:px-6 text-right">Profit</th>
                   )}
-                  <th className="py-4 px-6 text-right">Discounted Amount</th>
-                  <th className="py-4 px-6 text-left">
+                  <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Disc. Amt</th>
+                  <th className="py-3 px-3 sm:px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
                       onClick={() => handleSort("created_at")}
@@ -848,25 +911,25 @@ export function Orders() {
                       <span>Date</span>
                       {sortField === "created_at" &&
                         (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
+                          <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" />
                         ) : (
-                          <ChevronDown className="w-4 h-4" />
+                          <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
                         ))}
                     </button>
                   </th>
-                  <th className="py-4 px-6 text-center">Actions</th>
+                  <th className="py-3 px-3 sm:px-6 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-text/60">
+                    <td colSpan={userRole?.name === "superadmin" ? 9 : 8} className="py-8 text-center text-text/60">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-8 text-center text-text/60">
+                    <td colSpan={userRole?.name === "superadmin" ? 9 : 8} className="py-8 text-center text-text/60">
                       No orders found
                     </td>
                   </tr>
@@ -876,26 +939,26 @@ export function Orders() {
                       key={order.id}
                       className="border-t border-card-border/10"
                     >
-                      <td className="py-4 px-6 font-mono text-sm">
-                        {order.short_id || order.id}
+                      <td className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap">
+                        {order.short_id || order.id.slice(0, 8) + "..."}
                       </td>
-                      <td className="py-4 px-6">{order.full_name}</td>
-                      <td className="py-4 px-6">
+                      <td className="py-3 px-3 sm:px-6 min-w-[150px]">{order.full_name}</td>
+                      <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         <div>
-                          <p className="text-sm">{order.phone}</p>
-                          <p className="text-sm text-text/60">{order.city}</p>
+                          <p className="text-xs sm:text-sm whitespace-nowrap">{order.phone}</p>
+                          <p className="text-xs text-text/60 truncate max-w-[100px]">{order.city}</p>
                         </div>
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-3 px-3 sm:px-6">
                         <select
                           value={order.status}
                           onChange={(e) =>
                             handleStatusChange(order.id, e.target.value)
                           }
                           disabled={updatingStatus}
-                          className={`px-3 py-1 rounded-full text-sm ${getStatusColor(
+                          className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
                             order.status
-                          )} bg-opacity-10 border-0 focus:outline-none focus:ring-2 focus:ring-primary-orange`}
+                          )} bg-opacity-10 border-0 focus:outline-none focus:ring-2 focus:ring-primary-orange max-w-[100px] sm:max-w-none`}
                         >
                           {ORDER_STATUSES.map((status) => (
                             <option key={status} value={status}>
@@ -904,31 +967,31 @@ export function Orders() {
                           ))}
                         </select>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
                         ₹{order.total_amount.toFixed(2)}
                       </td>
                       {userRole?.name === "superadmin" && (
-                        <td className="py-4 px-6 text-right">
+                        <td className="py-3 px-3 sm:px-6 text-right">
                           <button
                             onClick={() => handleShowProfit(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                             title="View Profit"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
                         </td>
                       )}
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
                         ₹{(order.discount_amt || 0).toFixed(2)}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className="py-3 px-3 sm:px-6 whitespace-nowrap">
                         {format(new Date(order.created_at), "MMM dd, yyyy")}
                       </td>
-                      <td className="py-4 px-6">
-                        <div className="flex items-center justify-center space-x-2">
+                      <td className="py-3 px-3 sm:px-6">
+                        <div className="flex items-center justify-center space-x-1 sm:space-x-2">
                           <button
                             onClick={() => setSelectedOrder(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                             title="View Order Details"
                           >
                             <Eye className="w-4 h-4" />
@@ -937,7 +1000,7 @@ export function Orders() {
                           {userRole?.name === "superadmin" && (
                           <button
                             onClick={() => setEditOrder(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                             title="Edit Order"
                           >
                             <span className="sr-only">Edit</span>
@@ -947,7 +1010,7 @@ export function Orders() {
                           
                           <button
                             onClick={() => exportOrder(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                             title="Export Order"
                           >
                             <Download className="w-4 h-4" />
@@ -956,7 +1019,7 @@ export function Orders() {
                           {userRole?.name === "superadmin" && (
                             <button
                               onClick={() => handleOpenDiscountModal(order)}
-                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                              className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                               title="Add/Edit Discount"
                             >
                               <Percent className="w-4 h-4" />
@@ -964,7 +1027,7 @@ export function Orders() {
                           )}
                           <button
                             onClick={() => handleInvoicePrint(order)}
-                            className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
                             title="Print Invoice"
                           >
                             <ReceiptText className="w-4 h-4" />
@@ -1438,8 +1501,6 @@ export function Orders() {
                           id,
                           name,
                           product_code,
-                          "order",
-                          apr,
                           categories:categories ( name )
                         )
                       )

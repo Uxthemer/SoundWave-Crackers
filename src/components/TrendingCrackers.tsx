@@ -12,7 +12,6 @@ import { Link } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
 import { useProducts } from "../hooks/useProducts";
 import { useState, useEffect } from "react";
-import { supabase } from "../lib/supabase";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 
 export function TrendingCrackers() {
@@ -36,51 +35,15 @@ export function TrendingCrackers() {
       });
       setQuantities(newQuantities);
 
-      // Fetch real-time stock data
-      const stockSubscription = supabase
-        .channel('product-stock')
-        .on('postgres_changes', {
-          event: '*',
-          schema: 'public',
-          table: 'products',
-          filter: `id=in.(${trending.map(p => p.id).join(',')})`,
-        }, (payload) => {
-          if (payload.new) {
-            setProductStock(prev => ({
-              ...prev,
-              [(payload.new as { id: string; stock: number }).id]: (payload.new as { id: string; stock: number }).stock
-            }));
-          }
-        })
-        .subscribe();
-
-      // Initial stock fetch
-      const fetchStock = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('products')
-            .select('id, stock')
-            .in('id', trending.map(p => p.id));
-
-          if (error) throw error;
-
-          const stockMap: Record<string, number> = {};
-          data.forEach(item => {
-            stockMap[item.id] = item.stock;
-          });
-          setProductStock(stockMap);
-        } catch (error) {
-          console.error('Error fetching stock:', error);
-        } finally {
-          setLoading(false);
-        }
-      };
-
-      fetchStock();
-
-      return () => {
-        stockSubscription.unsubscribe();
-      };
+      // Stock comes straight off the season catalog now. useProducts already
+      // subscribes to product_seasons and refetches on change, so the separate
+      // stock query and subscription this component used to run were redundant.
+      const stockMap: Record<string, number> = {};
+      trending.forEach(p => {
+        stockMap[p.id] = p.stock;
+      });
+      setProductStock(stockMap);
+      setLoading(false);
     }else{
       setTrendingProducts([]);
       setQuantities({});
@@ -198,7 +161,7 @@ export function TrendingCrackers() {
                   </h3>
                 </Link>
                 <p className="text-sm text-text/60 mb-1">
-                  {product.categories.name}
+                  {product.categories?.name}
                 </p>
                 <div className="flex items-center justify-between mb-4">
                   <p className="text-sm text-text/60">{product.content}</p>

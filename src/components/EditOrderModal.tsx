@@ -46,6 +46,8 @@ export type OrderForEdit = {
   discount_percentage?: string;
   short_id?: string;
   referred_by?: string;
+  /** Season this order belongs to. Stock and prices resolve against it. */
+  season_id?: string | null;
 };
 
 type Props = {
@@ -66,6 +68,9 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         ...it,
       })) || []
   );
+
+  // Orders placed before seasons existed were backfilled, but guard anyway.
+  const orderSeasonId = order.season_id ?? null;
 
   const [productOptions, setProductOptions] = useState<ProductOption[]>([]);
   const [addingProductId, setAddingProductId] = useState<string>("");
@@ -98,9 +103,18 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
 
   const fetchProducts = async () => {
     try {
+      // Offer the catalog for the order's own season, so editing a past order
+      // shows the products and prices that applied when it was placed.
+      if (!orderSeasonId) {
+        setProductOptions([]);
+        return;
+      }
+
       const { data, error } = await supabase
-        .from("products")
+        .from("season_catalog")
         .select("id,name,product_code,stock,offer_price")
+        .eq("season_id", orderSeasonId)
+        .order("order", { nullsFirst: false })
         .order("name", { ascending: true })
         .limit(500);
       if (error) throw error;
@@ -268,14 +282,21 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         productDelta[pid] = (newQtyMap[pid] || 0) - (oldQtyMap[pid] || 0); // positive => need to reduce stock
       }
 
-      // validate stock for increases
+      // validate stock for increases — against the order's own season
+      if (!orderSeasonId && Object.values(productDelta).some((d) => d > 0)) {
+        throw new Error(
+          "This order is not linked to a season, so stock cannot be adjusted."
+        );
+      }
+
       for (const pid of Object.keys(productDelta)) {
         const delta = productDelta[pid];
         if (delta <= 0) continue;
         const { data: prod, error: pErr } = await supabase
-          .from("products")
+          .from("product_seasons")
           .select("stock")
-          .eq("id", pid)
+          .eq("product_id", pid)
+          .eq("season_id", orderSeasonId)
           .single();
         if (pErr) throw pErr;
         const currentStock = prod?.stock || 0;
@@ -329,16 +350,20 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         if (insErr) throw insErr;
       }
 
-      // 3) Update product stocks based on productDelta
+      // 3) Update stock for the order's season based on productDelta.
+      //    A closed season rejects this at the database level, so surface that
+      //    as a readable message rather than a raw Postgres error.
       for (const pid of Object.keys(productDelta)) {
         const delta = productDelta[pid];
         if (delta === 0) continue;
+        if (!orderSeasonId) continue;
         // delta > 0 => reduce stock by delta
         // delta < 0 => increase stock by -delta
         const { data: prod, error: pErr } = await supabase
-          .from("products")
+          .from("product_seasons")
           .select("stock")
-          .eq("id", pid)
+          .eq("product_id", pid)
+          .eq("season_id", orderSeasonId)
           .single();
         if (pErr) {
           console.error("Failed to read product for stock update:", pErr);
@@ -347,11 +372,17 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         const currentStock = prod?.stock || 0;
         const newStock = Math.max(0, currentStock - delta);
         const { error: updErr } = await supabase
-          .from("products")
+          .from("product_seasons")
           .update({ stock: newStock })
-          .eq("id", pid);
+          .eq("product_id", pid)
+          .eq("season_id", orderSeasonId);
         if (updErr) {
           console.error("Failed to update product stock:", updErr);
+          throw new Error(
+            updErr.message.includes("closed")
+              ? "This order belongs to a closed season. A superadmin must unlock it before stock can change."
+              : `Failed to update stock: ${updErr.message}`
+          );
         }
       }
 

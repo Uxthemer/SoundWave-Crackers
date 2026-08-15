@@ -25,6 +25,7 @@ import { motion } from "framer-motion";
 import { useTheme } from "./context/ThemeContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AppSettingsProvider, useAppSettings } from "./context/AppSettingsContext";
+import { SeasonProvider } from "./context/SeasonContext";
 import { AnnouncementBar } from "./components/AnnouncementBar";
 import { MarqueeText } from "./components/MarqueeText";
 import { HeroSlider } from "./components/HeroSlider";
@@ -69,6 +70,15 @@ import { Expenses } from "./pages/Expenses";
 import { UpdatePassword } from "./pages/UpdatePassword";
 import { Vendors } from "./pages/Vendors";
 import { VendorDetails } from "./pages/VendorDetails";
+import { Seasons } from "./pages/Seasons";
+import { Purchasing } from "./pages/Purchasing";
+
+// Role ranking so a superadmin satisfies requiredRole="admin".
+const ROLE_RANK: Record<string, number> = {
+  customer: 0,
+  admin: 1,
+  superadmin: 2,
+};
 
 const ProtectedRoute = ({
   children,
@@ -91,8 +101,22 @@ const ProtectedRoute = ({
     return <Navigate to="/login" />;
   }
 
-  if (requiredRole === "superadmin") {
-    return <Navigate to="/" />;
+  if (requiredRole) {
+    // The profile (and therefore the role) can arrive after `loading` clears,
+    // so wait rather than bouncing an admin who is still resolving.
+    if (!userRole) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      );
+    }
+
+    const have = ROLE_RANK[userRole.name] ?? 0;
+    const need = ROLE_RANK[requiredRole] ?? 0;
+    if (have < need) {
+      return <Navigate to="/" />;
+    }
   }
 
   return <>{children}</>;
@@ -548,8 +572,29 @@ export function AppContent() {
             </ProtectedRoute>
           }
         />
-      
-      <Route path="/update-password" element={<UpdatePassword />} />
+        {/* The standalone price-comparison prototype kept its data in
+            localStorage and could not feed purchasing. Real comparison now
+            lives on the Purchasing page, backed by the saved vendor price
+            lists; the old link redirects there. */}
+        <Route path="/price-comparing" element={<Navigate to="/purchasing" replace />} />
+        <Route
+          path="/seasons"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Seasons />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/purchasing"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Purchasing />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route path="/update-password" element={<UpdatePassword />} />
       </Routes>
       <Footer />
       <Cart isOpen={isCartOpen} onClose={closeCart} />
@@ -564,8 +609,10 @@ export default function App() {
     <Router>
       <AuthProvider>
         <AppSettingsProvider>
-          <AppContent />
-          {/* <DebugSettings /> Uncomment if needed for troubleshooting */}
+          <SeasonProvider>
+            <AppContent />
+            {/* <DebugSettings /> Uncomment if needed for troubleshooting */}
+          </SeasonProvider>
         </AppSettingsProvider>
       </AuthProvider>
     </Router>

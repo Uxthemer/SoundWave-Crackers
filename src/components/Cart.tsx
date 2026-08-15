@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import { useCartStore } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
+import { useSeasons } from "../context/SeasonContext";
 
 interface CartProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   } = useCartStore();
 
   const { saveQuotation, deleteQuotation } = useQuotations();
+  const { activeSeason } = useSeasons();
   const [isQuotationSaving, setIsQuotationSaving] = useState(false);
 
   const [showPayment, setShowPayment] = useState(false);
@@ -331,8 +333,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
       const ids = items.map((it) => it.id).filter(Boolean);
       if (ids.length > 0) {
         const { data: prods } = await supabase
-          .from("products")
+          .from("season_catalog")
           .select('id, "order"')
+          .eq("season_id", activeSeason?.id ?? "")
           .in("id", ids);
         const orderMap: Record<string, number> = {};
         (prods || []).forEach((p: any) => {

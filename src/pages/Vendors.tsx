@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, Edit2, Trash2, Eye, Building2 } from "lucide-react";
+import { Plus, Search, Edit2, Trash2, Eye, Building2, BarChart3, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import toast from "react-hot-toast";
 
@@ -13,7 +13,31 @@ interface Vendor {
   gstin: string;
   created_at: string;
   balance?: number; // Calculated on client
+  // Commercial terms — used to compute landed cost when a vendor price list
+  // is imported, and to rank vendors when generating a purchase plan.
+  discount_percent?: number;
+  gst_percent?: number;
+  packing_percent?: number;
+  other_charges_percent?: number;
+  rating?: number;
+  lead_time_days?: number | null;
+  is_preferred?: boolean;
 }
+
+const EMPTY_VENDOR_FORM = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  gstin: "",
+  discount_percent: 0,
+  gst_percent: 18,
+  packing_percent: 0,
+  other_charges_percent: 0,
+  rating: 3,
+  lead_time_days: "" as number | string,
+  is_preferred: false,
+};
 
 export function Vendors() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -23,13 +47,7 @@ export function Vendors() {
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
 
   // Form State
-  const [formData, setFormData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    address: "",
-    gstin: "",
-  });
+  const [formData, setFormData] = useState({ ...EMPTY_VENDOR_FORM });
 
   useEffect(() => {
     fetchVendors();
@@ -82,21 +100,32 @@ export function Vendors() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        discount_percent: Number(formData.discount_percent) || 0,
+        gst_percent: Number(formData.gst_percent) || 0,
+        packing_percent: Number(formData.packing_percent) || 0,
+        other_charges_percent: Number(formData.other_charges_percent) || 0,
+        rating: Number(formData.rating) || 0,
+        lead_time_days:
+          formData.lead_time_days === "" ? null : Number(formData.lead_time_days),
+      };
+
       if (editingVendor) {
         const { error } = await supabase
           .from("vendors")
-          .update(formData)
+          .update(payload)
           .eq("id", editingVendor.id);
         if (error) throw error;
         toast.success("Vendor updated successfully");
       } else {
-        const { error } = await supabase.from("vendors").insert([formData]);
+        const { error } = await supabase.from("vendors").insert([payload]);
         if (error) throw error;
         toast.success("Vendor added successfully");
       }
       setIsModalOpen(false);
       setEditingVendor(null);
-      setFormData({ name: "", phone: "", email: "", address: "", gstin: "" });
+      setFormData({ ...EMPTY_VENDOR_FORM });
       fetchVendors();
     } catch (err: any) {
       toast.error(err.message || "Failed to save vendor");
@@ -123,13 +152,20 @@ export function Vendors() {
       email: v.email || "",
       address: v.address || "",
       gstin: v.gstin || "",
+      discount_percent: Number(v.discount_percent ?? 0),
+      gst_percent: Number(v.gst_percent ?? 18),
+      packing_percent: Number(v.packing_percent ?? 0),
+      other_charges_percent: Number(v.other_charges_percent ?? 0),
+      rating: Number(v.rating ?? 3),
+      lead_time_days: v.lead_time_days ?? "",
+      is_preferred: !!v.is_preferred,
     });
     setIsModalOpen(true);
   };
 
   const handleAddNew = () => {
     setEditingVendor(null);
-    setFormData({ name: "", phone: "", email: "", address: "", gstin: "" });
+    setFormData({ ...EMPTY_VENDOR_FORM });
     setIsModalOpen(true);
   };
 
@@ -202,6 +238,13 @@ export function Vendors() {
                 >
                   <Eye className="w-5 h-5" />
                 </Link>
+                <Link
+                  to="/price-comparing"
+                  className="p-2 text-purple-600 hover:bg-purple-50 rounded"
+                  title="Open Price Comparison"
+                >
+                  <BarChart3 className="w-5 h-5" />
+                </Link>
                 <button
                   onClick={() => handleEdit(vendor)}
                   className="p-2 text-green-600 hover:bg-green-50 rounded"
@@ -231,10 +274,24 @@ export function Vendors() {
       {/* Add/Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-background rounded-lg shadow-xl w-full max-w-md p-6">
-                <h2 className="text-xl font-bold mb-4">{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
-                <form onSubmit={handleSave}>
-                    <div className="space-y-4">
+            {/* Capped to the viewport with the body scrolling inside it. Without
+                the cap, the commercial-terms section makes the form taller than
+                the screen and flex centring pushes the overflow off BOTH ends —
+                the first fields become unreachable. */}
+            <div className="bg-background rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+                <div className="flex items-start justify-between gap-4 p-6 pb-4 border-b border-card-border/10 shrink-0">
+                    <h2 className="text-xl font-bold">{editingVendor ? 'Edit Vendor' : 'Add New Vendor'}</h2>
+                    <button
+                        type="button"
+                        onClick={() => setIsModalOpen(false)}
+                        aria-label="Close"
+                        className="p-1 -m-1 rounded hover:bg-card/70 text-text/60 hover:text-text transition-colors"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSave} className="flex flex-col min-h-0 flex-1">
+                    <div className="space-y-4 overflow-y-auto px-6 py-4 flex-1 min-h-0">
                         <div>
                             <label className="block text-sm font-medium mb-1">Vendor Name *</label>
                             <input 
@@ -270,23 +327,110 @@ export function Vendors() {
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-1">Address</label>
-                            <textarea 
+                            <textarea
                                 className="w-full border rounded px-3 py-2 bg-card"
                                 rows={3}
                                 value={formData.address}
                                 onChange={e => setFormData({...formData, address: e.target.value})}
                             />
                         </div>
+
+                        {/* Commercial terms. These are applied when this vendor's
+                            price list is imported and drive landed cost, which is
+                            what purchase planning ranks vendors on. */}
+                        <div className="pt-4 border-t border-card-border/10">
+                            <h3 className="font-semibold mb-1">Commercial terms</h3>
+                            <p className="text-sm text-text/60 mb-4">
+                                Landed cost = list × (1 − discount%) + packing%, then
+                                + GST%, then + other charges%.
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Discount %</label>
+                                    <input
+                                        type="number" step="0.01" min="0" max="100"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.discount_percent}
+                                        onChange={e => setFormData({...formData, discount_percent: e.target.value as any})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">GST %</label>
+                                    <input
+                                        type="number" step="0.01" min="0" max="100"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.gst_percent}
+                                        onChange={e => setFormData({...formData, gst_percent: e.target.value as any})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Packing %</label>
+                                    <input
+                                        type="number" step="0.01" min="0" max="100"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.packing_percent}
+                                        onChange={e => setFormData({...formData, packing_percent: e.target.value as any})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Other charges %</label>
+                                    <input
+                                        type="number" step="0.01" min="0" max="100"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.other_charges_percent}
+                                        onChange={e => setFormData({...formData, other_charges_percent: e.target.value as any})}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">
+                                        Rating (0–5)
+                                    </label>
+                                    <input
+                                        type="number" step="0.1" min="0" max="5"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.rating}
+                                        onChange={e => setFormData({...formData, rating: e.target.value as any})}
+                                    />
+                                    <p className="text-xs text-text/50 mt-1">
+                                        Breaks ties when landed costs are close.
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Lead time (days)</label>
+                                    <input
+                                        type="number" min="0"
+                                        className="w-full border rounded px-3 py-2 bg-card"
+                                        value={formData.lead_time_days}
+                                        onChange={e => setFormData({...formData, lead_time_days: e.target.value as any})}
+                                    />
+                                </div>
+                            </div>
+
+                            <label className="flex items-center gap-2 mt-4">
+                                <input
+                                    type="checkbox"
+                                    className="w-4 h-4 accent-primary-orange"
+                                    checked={formData.is_preferred}
+                                    onChange={e => setFormData({...formData, is_preferred: e.target.checked})}
+                                />
+                                <span className="text-sm">
+                                    Preferred vendor — wins ties against equally priced vendors
+                                </span>
+                            </label>
+                        </div>
                     </div>
-                    <div className="flex justify-end gap-3 mt-6">
-                        <button 
+                    {/* Pinned outside the scroll area so Save stays reachable
+                        however long the form gets. */}
+                    <div className="flex justify-end gap-3 p-4 border-t border-card-border/10 shrink-0">
+                        <button
                             type="button"
                             onClick={() => setIsModalOpen(false)}
-                            className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
+                            className="px-4 py-2 rounded bg-card hover:bg-card/70 border border-card-border/10"
                         >
                             Cancel
                         </button>
-                        <button 
+                        <button
                             type="submit"
                             className="px-4 py-2 rounded bg-primary-orange text-white hover:bg-primary-orange/90"
                         >

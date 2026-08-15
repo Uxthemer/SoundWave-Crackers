@@ -18,8 +18,8 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { BulkImportModal } from "../components/BulkImportModal";
 import * as XLSX from "xlsx";
-import { p } from "framer-motion/client";
 import { useProducts } from "../hooks/useProducts";
+import { useSeasons, useSeasonActions } from "../context/SeasonContext";
 
 interface Product {
   id: string;
@@ -40,6 +40,9 @@ interface Product {
   order?: number;
   is_active?: boolean;
   yt_link?: string;
+  /** Set when the row came from the season catalog. */
+  season_id?: string;
+  product_season_id?: string;
 }
 
 interface Category {
@@ -48,12 +51,57 @@ interface Category {
   order?: number;
 }
 
+/**
+ * States which season a product form writes to.
+ *
+ * The season selector is remembered across visits, so someone can open this
+ * page days later and add a product to a draft season without realising it.
+ * Price, stock and cost land in the named season only — every other season is
+ * unaffected.
+ */
+function SeasonTargetNotice({
+  seasonName,
+  isLive,
+}: {
+  seasonName: string | undefined;
+  isLive: boolean;
+}) {
+  if (isLive) {
+    return (
+      <p className="text-sm text-text/70 text-center mb-4">
+        Saving to{" "}
+        <span className="font-semibold text-primary-orange">
+          season {seasonName ?? "—"}
+        </span>{" "}
+        (live). Other seasons are unaffected.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-center">
+      <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
+        Saving to season {seasonName ?? "—"} — this is not the live season
+      </p>
+      <p className="text-xs text-text/70 mt-1">
+        Customers will not see this until that season is made live. Switch the
+        season selector to change where it is saved.
+      </p>
+    </div>
+  );
+}
+
 export function StockManagement() {
-  const { exportProductsToExcel } = useProducts();
-  // optional: keep any existing imports/logic intact
-  useEffect(() => {
-    // no-op: ensure hook loads if needed
-  }, []);
+  const {
+    seasons,
+    selectedSeason,
+    selectedSeasonId,
+    setSelectedSeasonId,
+    isSelectedReadOnly,
+    loading: seasonsLoading,
+  } = useSeasons();
+  const { setSeasonUnlocked } = useSeasonActions();
+  const { exportProductsToExcel } = useProducts(selectedSeasonId);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -71,26 +119,47 @@ export function StockManagement() {
   const { userRole } = useAuth();
 
   useEffect(() => {
-    fetchProducts();
     fetchCategories();
   }, []);
 
-  const fetchProducts = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("products")
-        .select(
-          `
-          *,
-          categories:category_id (
-            name
-          )
-        `
-        )
-        .order("name");
+  useEffect(() => {
+    if (selectedSeasonId) fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeasonId]);
 
-      if (error) throw error;
-      setProducts(data || []);
+  const fetchProducts = async () => {
+    if (!selectedSeasonId) return;
+    try {
+      setLoading(true);
+
+      // Cost price lives in its own admin-only table, so it is fetched
+      // separately and merged in rather than exposed through the public view.
+      const [catalogRes, costsRes] = await Promise.all([
+        supabase
+          .from("season_catalog")
+          .select("*")
+          .eq("season_id", selectedSeasonId)
+          .order("order", { nullsFirst: false })
+          .order("name"),
+        supabase
+          .from("product_season_costs")
+          .select("product_id, apr")
+          .eq("season_id", selectedSeasonId),
+      ]);
+
+      if (catalogRes.error) throw catalogRes.error;
+      if (costsRes.error) throw costsRes.error;
+
+      const aprByProduct = new Map(
+        (costsRes.data || []).map((c: any) => [c.product_id, c.apr])
+      );
+
+      setProducts(
+        (catalogRes.data || []).map((row: any) => ({
+          ...row,
+          apr: aprByProduct.get(row.id) ?? "",
+        }))
+      );
     } catch (error) {
       console.error("Error fetching products:", error);
     } finally {
@@ -125,29 +194,60 @@ export function StockManagement() {
   };
 
   const handleEditModalSave = async () => {
-    if (!editingProduct) return;
+    if (!editingProduct || !selectedSeasonId) return;
+    if (isSelectedReadOnly) {
+      alert(
+        "This season is closed and read-only. A superadmin must unlock it first."
+      );
+      return;
+    }
+
     try {
-      const { error } = await supabase
+      // Identity — shared across every season.
+      const { error: identityError } = await supabase
         .from("products")
         .update({
           category_id: editForm.category_id,
           name: editForm.name,
-          stock: editForm.stock,
-          actual_price: editForm.actual_price,
-          offer_price: editForm.offer_price,
-          content: editForm.content,
-          discount_percentage: editForm.discount_percentage,
           image_url: editForm.image_url,
           description: editForm.description,
-          apr: editForm.apr ? Number(Number(editForm.apr).toFixed(2)) : null,
-          is_active: editForm.is_active,
           yt_link: editForm.yt_link,
-          order: editForm.order,
           product_code: editForm.product_code,
         })
         .eq("id", editingProduct.id);
 
-      if (error) throw error;
+      if (identityError) throw identityError;
+
+      // Commercials — this season only.
+      const { error: seasonError } = await supabase
+        .from("product_seasons")
+        .update({
+          stock: Number(editForm.stock ?? 0),
+          actual_price: Number(editForm.actual_price ?? 0),
+          offer_price: Number(editForm.offer_price ?? 0),
+          content: editForm.content,
+          discount_percentage: Number(editForm.discount_percentage ?? 0),
+          is_active: editForm.is_active,
+          display_order: editForm.order,
+        })
+        .eq("product_id", editingProduct.id)
+        .eq("season_id", selectedSeasonId);
+
+      if (seasonError) throw seasonError;
+
+      // Cost price — separate admin-only table.
+      const { error: costError } = await supabase
+        .from("product_season_costs")
+        .upsert(
+          {
+            season_id: selectedSeasonId,
+            product_id: editingProduct.id,
+            apr: editForm.apr ? Number(Number(editForm.apr).toFixed(2)) : null,
+          },
+          { onConflict: "season_id,product_id" }
+        );
+
+      if (costError) throw costError;
 
       setEditModalOpen(false);
       setEditingProduct(null);
@@ -155,7 +255,87 @@ export function StockManagement() {
       fetchProducts();
     } catch (error) {
       console.error("Error updating product:", error);
+      alert(
+        error instanceof Error ? error.message : "Failed to update product"
+      );
     }
+  };
+
+  const getPriceListExportRows = () => {
+    const grouped: { [cat: string]: Product[] } = {};
+
+    filteredProducts
+      .filter((product) => product.is_active !== false)
+      .forEach((product) => {
+        const catName = product.categories?.name || "Uncategorized";
+        if (!grouped[catName]) grouped[catName] = [];
+        grouped[catName].push(product);
+      });
+
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    });
+
+    const categoryOrderMap: Record<string, number> = {};
+    categories.forEach((cat) => {
+      categoryOrderMap[cat.name] = cat.order ?? 0;
+    });
+
+    const sortedCategoryNames = Object.keys(grouped).sort(
+      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
+    );
+
+    const rows: Record<string, string | number>[] = [];
+    let serial = 1;
+
+    sortedCategoryNames.forEach((catName) => {
+      grouped[catName].forEach((product) => {
+        rows.push({
+          "S.No": serial++,
+          Category: catName,
+          Product: product.name,
+          "Actual Price": product.actual_price,
+          "Offer Price": product.offer_price,
+          Content: product.content || "-",
+          Stock: product.stock ?? 0,
+          APR: product.apr || "-",
+        });
+      });
+    });
+
+    return rows;
+  };
+
+  // Archived seasons export under their own name so old price lists stay
+  // distinguishable from the current one.
+  const seasonSlug = (selectedSeason?.name || "current").replace(/\s+/g, "-");
+
+  const handleExportPriceList = (format: "excel" | "csv") => {
+    const rows = getPriceListExportRows();
+
+    if (!rows.length) return;
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Price List");
+
+    if (format === "csv") {
+      const csv = XLSX.utils.sheet_to_csv(worksheet);
+      const blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `soundwave_price_list_${seasonSlug}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    XLSX.writeFile(workbook, `soundwave_price_list_${seasonSlug}.xlsx`);
   };
 
   const handlePrint = () => {
@@ -223,7 +403,7 @@ export function StockManagement() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundwave Crackers - Stock Report 2025</title>
+  <title>Soundwave Crackers - Stock Report ${seasonSlug}</title>
   <style>
     body {
       margin: 0;
@@ -320,7 +500,7 @@ export function StockManagement() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundwave Crackers - Price List 2025</title>
+  <title>Soundwave Crackers - Price List ${seasonSlug}</title>
   <style>
     body {
       margin: 0;
@@ -554,7 +734,7 @@ export function StockManagement() {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundwave Crackers - Price List 2025</title>
+  <title>Soundwave Crackers - Price List ${seasonSlug}</title>
   <style>
     body {
       margin: 0;
@@ -757,7 +937,7 @@ export function StockManagement() {
     <div className="min-h-screen pt-8 pb-12">
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <h1 className="font-heading text-4xl">Stock Management</h1>
             <div className="flex gap-2 items-center">
               <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
@@ -769,6 +949,25 @@ export function StockManagement() {
             </div>
           </div>
           <div className="flex flex-wrap gap-4 w-full md:w-auto">
+            {/* Which season's prices and stock are being viewed/edited. */}
+            <select
+              value={selectedSeasonId ?? ""}
+              onChange={(e) => setSelectedSeasonId(e.target.value)}
+              disabled={seasonsLoading || seasons.length === 0}
+              aria-label="Season"
+              className="px-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange w-full sm:w-auto"
+            >
+              {seasons.map((season) => (
+                <option key={season.id} value={season.id}>
+                  Season {season.name}
+                  {season.status === "active"
+                    ? " (live)"
+                    : season.status === "draft"
+                    ? " (draft)"
+                    : " (closed)"}
+                </option>
+              ))}
+            </select>
             <div className="relative w-full sm:w-auto">
               <input
                 type="text"
@@ -794,11 +993,79 @@ export function StockManagement() {
           </div>
         </div>
 
+        {/* Closed seasons are frozen. The database enforces this too — the
+            banner just explains why the buttons are disabled. */}
+        {isSelectedReadOnly && selectedSeason && (
+          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold text-amber-700 dark:text-amber-400">
+                Season {selectedSeason.name} is closed and read-only
+              </p>
+              <p className="text-sm text-text/70">
+                Prices, stock and cost for this season are frozen as an archive.
+                Switch to the live season to make changes.
+              </p>
+            </div>
+            {userRole?.name === "superadmin" && (
+              <button
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      `Unlock season ${selectedSeason.name} for editing? This is recorded in the audit log.`
+                    )
+                  )
+                    return;
+                  try {
+                    await setSeasonUnlocked(selectedSeason.id, true);
+                  } catch (err) {
+                    alert(
+                      err instanceof Error ? err.message : "Failed to unlock"
+                    );
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors whitespace-nowrap"
+              >
+                Unlock for editing
+              </button>
+            )}
+          </div>
+        )}
+
+        {selectedSeason?.status === "closed" && selectedSeason.is_unlocked && (
+          <div className="mb-6 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <p className="font-semibold text-red-600">
+              Season {selectedSeason.name} is unlocked — you are editing
+              archived data.
+            </p>
+            {userRole?.name === "superadmin" && (
+              <button
+                onClick={() => setSeasonUnlocked(selectedSeason.id, false)}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors whitespace-nowrap"
+              >
+                Re-lock season
+              </button>
+            )}
+          </div>
+        )}
+
+        {selectedSeason?.status === "draft" && (
+          <div className="mb-6 rounded-lg border border-blue-500/40 bg-blue-500/10 px-4 py-3">
+            <p className="font-semibold text-blue-700 dark:text-blue-400">
+              Season {selectedSeason.name} is a draft
+            </p>
+            <p className="text-sm text-text/70">
+              Edits here are not visible to customers. Activate the season on the
+              Seasons page when you are ready to sell from it.
+            </p>
+          </div>
+        )}
+
         {/* Responsive Button Group */}
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6 w-full">
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
+            disabled={isSelectedReadOnly}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Upload className="w-5 h-5" />
             <span>Bulk Import</span>
@@ -817,10 +1084,25 @@ export function StockManagement() {
             <Printer className="w-5 h-5" />
             <span>Price List</span>
           </button>
+          <button
+            onClick={() => handleExportPriceList("excel")}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
+          >
+            <Download className="w-5 h-5" />
+            <span>Export Excel</span>
+          </button>
+          <button
+            onClick={() => handleExportPriceList("csv")}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
+          >
+            <Download className="w-5 h-5" />
+            <span>Export CSV</span>
+          </button>
           {["admin", "superadmin"].includes(userRole?.name || "") && (
             <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
+              disabled={isSelectedReadOnly}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-5 h-5" />
               <span>Add Product</span>
@@ -1041,7 +1323,13 @@ export function StockManagement() {
                           <div className="flex items-center justify-center space-x-2">
                             <button
                               onClick={() => handleEdit(product)}
-                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                              disabled={isSelectedReadOnly}
+                              title={
+                                isSelectedReadOnly
+                                  ? "This season is closed and read-only"
+                                  : "Edit product"
+                              }
+                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
@@ -1076,9 +1364,13 @@ export function StockManagement() {
               >
                 ×
               </button>
-              <h2 className="text-2xl font-bold mb-4 text-center">
+              <h2 className="text-2xl font-bold mb-2 text-center">
                 Edit Product
               </h2>
+              <SeasonTargetNotice
+                seasonName={selectedSeason?.name}
+                isLive={selectedSeason?.status === "active"}
+              />
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -1341,40 +1633,82 @@ export function StockManagement() {
               >
                 ×
               </button>
-              <h2 className="text-2xl font-bold mb-4 text-center">
+              <h2 className="text-2xl font-bold mb-2 text-center">
                 Add Product
               </h2>
+              <SeasonTargetNotice
+                seasonName={selectedSeason?.name}
+                isLive={selectedSeason?.status === "active"}
+              />
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
+                  if (!selectedSeasonId) return;
+                  if (isSelectedReadOnly) {
+                    alert(
+                      "This season is closed and read-only. A superadmin must unlock it first."
+                    );
+                    return;
+                  }
                   try {
-                    const { error } = await supabase.from("products").insert({
-                      name: addForm.name,
-                      category_id: addForm.category_id,
-                      stock: addForm.stock,
-                      actual_price: addForm.actual_price,
-                      offer_price: addForm.offer_price,
-                      content: addForm.content,
-                      discount_percentage: addForm.discount_percentage,
-                      image_url: addForm.image_url,
-                      description: addForm.description,
-                      apr: addForm.apr
-                        ? Number(Number(addForm.apr).toFixed(2))
-                        : null,
-                      order: addForm.order,
-                      is_active:
-                        addForm.is_active !== undefined
-                          ? addForm.is_active
-                          : true,
-                      product_code: addForm.product_code || "",
-                      yt_link: addForm.yt_link || "",
-                    });
+                    // 1. Identity row, shared across seasons.
+                    const { data: created, error } = await supabase
+                      .from("products")
+                      .insert({
+                        name: addForm.name,
+                        category_id: addForm.category_id,
+                        image_url: addForm.image_url,
+                        description: addForm.description,
+                        product_code: addForm.product_code || "",
+                        yt_link: addForm.yt_link || "",
+                      })
+                      .select("id")
+                      .single();
                     if (error) throw error;
+
+                    // 2. Commercials for the season being worked on.
+                    const { error: seasonError } = await supabase
+                      .from("product_seasons")
+                      .insert({
+                        season_id: selectedSeasonId,
+                        product_id: created.id,
+                        actual_price: Number(addForm.actual_price ?? 0),
+                        offer_price: Number(addForm.offer_price ?? 0),
+                        discount_percentage: Number(
+                          addForm.discount_percentage ?? 0
+                        ),
+                        content: addForm.content,
+                        opening_stock: Number(addForm.stock ?? 0),
+                        stock: Number(addForm.stock ?? 0),
+                        display_order: addForm.order,
+                        is_active:
+                          addForm.is_active !== undefined
+                            ? addForm.is_active
+                            : true,
+                      });
+                    if (seasonError) throw seasonError;
+
+                    // 3. Cost price.
+                    if (addForm.apr) {
+                      const { error: costError } = await supabase
+                        .from("product_season_costs")
+                        .insert({
+                          season_id: selectedSeasonId,
+                          product_id: created.id,
+                          apr: Number(Number(addForm.apr).toFixed(2)),
+                        });
+                      if (costError) throw costError;
+                    }
+
                     setShowAddModal(false);
                     setAddForm({});
                     fetchProducts();
                   } catch (err) {
-                    alert("Failed to add product");
+                    alert(
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to add product"
+                    );
                   }
                 }}
               >
@@ -1626,6 +1960,8 @@ export function StockManagement() {
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         onSuccess={fetchProducts}
+        seasonId={selectedSeasonId}
+        seasonName={selectedSeason?.name}
       />
     </div>
   );
