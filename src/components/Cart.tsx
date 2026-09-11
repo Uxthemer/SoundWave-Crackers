@@ -1,8 +1,19 @@
 import { motion } from "framer-motion";
-import { X, QrCode, Wallet, CreditCard, Loader2, Trash2 } from "lucide-react";
+import {
+  X,
+  QrCode,
+  Wallet,
+  CreditCard,
+  Loader2,
+  Trash2,
+  LogIn,
+  UserPlus,
+  ArrowRight,
+} from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
 import { createOrder } from "../hooks/useOrders";
+import { createGuestOrder } from "../lib/guestOrders";
 import { supabase } from "../lib/supabase";
 import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
@@ -60,6 +71,17 @@ export function Cart({ isOpen, onClose }: CartProps) {
   >([]);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState(false); // <-- New state
+  // Shown to a signed-out customer at checkout: sign in, create an account,
+  // or skip both. Skipping is a first-class option, not a fallback.
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  // Set once a guest chooses to carry on without an account, so the gate does
+  // not reappear if they step back to edit the cart.
+  const [continuingAsGuest, setContinuingAsGuest] = useState(false);
+  // The reference a guest needs to track the order afterwards.
+  const [guestOrderRef, setGuestOrderRef] = useState<{
+    short_id: string;
+    phone: string;
+  } | null>(null);
 
   // ensure when cart empties we clear delivery (optional)
   useEffect(() => {
@@ -178,6 +200,17 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   };
 
+  /** Opens the delivery form and brings it into view. */
+  const goToDeliveryForm = () => {
+    setShowDeliveryForm(true);
+    setTimeout(() => {
+      cartAddressRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+  };
+
   const handlePlaceOrder = async (paymentMethod: string) => { // Reverted to original signature to maintain syntactical correctness
     try {
       setIsProcessing(true);
@@ -235,14 +268,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
         throw new Error("Please enter a valid 6-digit pincode");
       }
 
-      // Check if user is authenticated
+      // An account is optional. If there is a session the order is attached to
+      // it exactly as before; if there is not, it goes through the guest
+      // endpoint, which prices it from the catalog server-side.
       const {
-        data: { user },
-        error: authError,
+        data: { user: currentUser },
       } = await supabase.auth.getUser();
-      if (authError || !user) {
-        throw new Error("Please sign in to place an order");
-      }
 
       // check minimum order amount
       const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
@@ -280,12 +311,34 @@ export function Cart({ isOpen, onClose }: CartProps) {
       }));
 
       // Create order and get the order data (with id)
-      const orderData = await createOrder({
-        total_amount: totalAmount,
-        payment_method: paymentMethod,
-        items: orderItems,
-        delivery_details: delivery,
-      });
+      let orderData: { id: string };
+
+      if (currentUser) {
+        orderData = await createOrder({
+          total_amount: totalAmount,
+          payment_method: paymentMethod,
+          items: orderItems,
+          delivery_details: delivery,
+          season_id: activeSeason?.id ?? null,
+        });
+        setGuestOrderRef(null);
+      } else {
+        const guestOrder = await createGuestOrder({
+          delivery,
+          items: items.map((item) => ({
+            product_id: item.id,
+            quantity: item.quantity,
+          })),
+          paymentMethod,
+        });
+        orderData = { id: guestOrder.id };
+        // A guest has no My Orders to come back to, so the order number is
+        // put in front of them and kept on the device.
+        setGuestOrderRef({
+          short_id: guestOrder.short_id,
+          phone: delivery.phone,
+        });
+      }
 
       setLastOrderId(orderData.id);
 
@@ -626,6 +679,31 @@ export function Cart({ isOpen, onClose }: CartProps) {
                 <h2 className="text-2xl font-bold text-green-700 mb-2">
                   🎉 Enquiry Submitted Successfully!
                 </h2>
+                {/* A guest has no My Orders page to return to, so the
+                    reference they will need is shown here and kept on the
+                    device for the Track Order page to prefill. */}
+                {guestOrderRef && (
+                  <div className="mb-4 rounded-lg border border-green-300 bg-white/70 px-4 py-3 text-green-900">
+                    <p className="text-sm">Your order number</p>
+                    <p className="text-2xl font-bold font-mono tracking-wide">
+                      {guestOrderRef.short_id}
+                    </p>
+                    <p className="text-xs mt-2">
+                      Keep this safe. Track your order any time with this
+                      number and{" "}
+                      <span className="font-semibold">
+                        {guestOrderRef.phone}
+                      </span>
+                      .
+                    </p>
+                    <a
+                      href="/track-order"
+                      className="inline-block mt-3 text-sm font-semibold underline"
+                    >
+                      Track this order
+                    </a>
+                  </div>
+                )}
                 <p className="text-base text-green-800 mb-4">
                   Thank you for your order. Our team will contact you soon
                   regarding order and payment confirmation.
@@ -954,26 +1032,79 @@ export function Cart({ isOpen, onClose }: CartProps) {
               </div>
 
               {/* Step Buttons */}
-              {!showDeliveryForm && !showPayment && (
+              {!showDeliveryForm && !showPayment && !showAuthGate && (
                 <button
                   onClick={() => {
-                    if (!user) {
-                      toast.error("Please sign in to proceed with checkout");
-                      navigate("/login");
+                    // Signing in is offered, never required. A customer who
+                    // has already chosen to carry on as a guest is not asked
+                    // again if they step back to change the cart.
+                    if (!user && !continuingAsGuest) {
+                      setShowAuthGate(true);
                       return;
                     }
-                    setShowDeliveryForm(true);
-                    setTimeout(() => {
-                      cartAddressRef.current?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start",
-                      });
-                    }, 100);
+                    goToDeliveryForm();
                   }}
                   className="btn-primary w-full"
                 >
                   Shipping Details
                 </button>
+              )}
+
+              {/* Sign in / sign up / skip. Skipping goes straight to the
+                  delivery form and the order is placed as a guest. */}
+              {showAuthGate && !showDeliveryForm && !showPayment && (
+                <div className="bg-card/30 rounded-xl p-6 mb-8">
+                  <h3 className="font-montserrat font-bold text-xl mb-2">
+                    Sign in to your account?
+                  </h3>
+                  <p className="text-sm text-text/70 mb-5">
+                    An account keeps your address ready for next time and lets
+                    you see all your orders in one place. It is not required —
+                    you can order as a guest and track it with your order
+                    number and phone.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    <button
+                      onClick={() =>
+                        navigate("/login", {
+                          state: { from: window.location.pathname },
+                        })
+                      }
+                      className="btn-primary flex items-center justify-center gap-2"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      <span>Sign in</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        navigate("/signup", {
+                          state: { from: window.location.pathname },
+                        })
+                      }
+                      className="flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 border border-card-border/10 transition-colors"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Create account</span>
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setContinuingAsGuest(true);
+                      setShowAuthGate(false);
+                      goToDeliveryForm();
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-primary-orange hover:bg-card/50 font-semibold transition-colors"
+                  >
+                    <span>Skip &amp; continue as guest</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+
+                  <p className="text-xs text-text/50 text-center mt-2">
+                    Your cart is saved either way.
+                  </p>
+                </div>
               )}
 
               {/* Delivery Form */}

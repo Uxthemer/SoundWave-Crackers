@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound, Eye, EyeOff } from "lucide-react";
+import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
@@ -136,6 +136,23 @@ export function Login() {
 
   const { signInWithEmail, signInWithPhone } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  /**
+   * Where to go after signing in, or after skipping.
+   *
+   * Checkout sends customers here with the page they came from, so both
+   * outcomes put them back at their cart rather than on the home page with an
+   * order half-placed. Anything that is not a local path is ignored, so a
+   * crafted link cannot use this to bounce someone off-site.
+   */
+  const rawReturnTo = (location.state as { from?: string } | null)?.from;
+  const returnTo =
+    typeof rawReturnTo === "string" &&
+    rawReturnTo.startsWith("/") &&
+    !rawReturnTo.startsWith("//")
+      ? rawReturnTo
+      : "/";
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -149,7 +166,7 @@ export function Login() {
       if (error) throw error;
 
       showToast("success", "Successfully signed in!");
-      navigate("/");
+      navigate(returnTo);
     } catch (error: any) {
       console.error(error);
       showToast(
@@ -237,7 +254,7 @@ export function Login() {
         if (error) throw error;
       }
       showToast("success", "Successfully signed in!");
-      navigate("/");
+      navigate(returnTo);
     } catch (error: any) {
       console.error(error);
       showToast("error", "Verification failed. Please try again.");
@@ -434,10 +451,29 @@ export function Login() {
                 Don't have an account?{" "}
                 <Link
                   to="/signup"
+                  state={{ from: returnTo }}
                   className="text-primary-orange hover:text-primary-red"
                 >
                   Sign Up
                 </Link>
+              </p>
+            </div>
+
+            {/* Signing in is optional. Skipping returns to whatever page sent
+                the customer here — the cart, normally — with everything in it
+                still there, so they can check out as a guest. */}
+            <div className="mt-6 pt-5 border-t border-card-border/10 text-center">
+              <button
+                type="button"
+                onClick={() => navigate(returnTo)}
+                className="inline-flex items-center gap-2 text-text/70 hover:text-primary-orange font-semibold transition-colors"
+              >
+                <span>Skip for now</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <p className="text-xs text-text/50 mt-1">
+                Continue without an account — you can still place and track an
+                order.
               </p>
             </div>
           </motion.div>

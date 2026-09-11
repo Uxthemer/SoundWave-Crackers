@@ -281,3 +281,19 @@ textarea {
     background-color: #ffffff;
   }
 }
+/* Number inputs inside editable tables.
+
+   The mouse wheel silently changes a focused <input type="number">, so
+   scrolling down a price list would quietly edit whatever number the cursor
+   passed over. The spinner arrows go too: they steal width that the product
+   name column needs more. */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.no-spinner[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

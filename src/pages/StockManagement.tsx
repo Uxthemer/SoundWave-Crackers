@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -12,14 +12,38 @@ import {
   Printer,
   ChevronUp,
   ChevronDown,
+  PencilLine,
+  TableProperties,
+  ListPlus,
+  LayoutList,
+  GripVertical,
+  RotateCcw,
+  Check,
+  Percent,
+  Calculator,
+  FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { BulkImportModal } from "../components/BulkImportModal";
+import { BulkAddProductsModal } from "../components/BulkAddProductsModal";
 import * as XLSX from "xlsx";
 import { useProducts } from "../hooks/useProducts";
 import { useSeasons, useSeasonActions } from "../context/SeasonContext";
+import {
+  actualFromOffer,
+  formatPrice,
+  isUsableDiscount,
+} from "../lib/pricing";
+import {
+  byOrder,
+  nextOrderInCategory,
+  nextProductCode,
+  renumber,
+} from "../lib/ordering";
+import { openPriceListPdf } from "../lib/priceListPdf";
+import toast from "react-hot-toast";
 
 interface Product {
   id: string;
@@ -100,7 +124,8 @@ export function StockManagement() {
     isSelectedReadOnly,
     loading: seasonsLoading,
   } = useSeasons();
-  const { setSeasonUnlocked } = useSeasonActions();
+  const { setSeasonUnlocked, updateSeason, applyPriceListDiscount } =
+    useSeasonActions();
   const { exportProductsToExcel } = useProducts(selectedSeasonId);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -113,10 +138,66 @@ export function StockManagement() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkAddModal, setShowBulkAddModal] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
+  // Order is auto-filled from the chosen category until it is typed over —
+  // after that, switching category must not overwrite a deliberate position.
+  const [addOrderTouched, setAddOrderTouched] = useState(false);
   const [sortField, setSortField] = useState<string>("order");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const { userRole } = useAuth();
+
+  // Price-list discount config, held as a string so the field can be cleared
+  // while typing without snapping back to 0.
+  const [discountInput, setDiscountInput] = useState("");
+  const [savingDiscount, setSavingDiscount] = useState(false);
+  const [repricing, setRepricing] = useState(false);
+
+  // Actual price is derived from the offer price by default in both forms.
+  // Unticking lets a one-off price be typed by hand.
+  const [addAutoActual, setAddAutoActual] = useState(true);
+  const [editAutoActual, setEditAutoActual] = useState(true);
+
+  // Inline (in-row) editing — one row at a time, so an accidental keystroke
+  // cannot quietly change a product three rows up.
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [inlineForm, setInlineForm] = useState<Partial<Product>>({});
+  const [inlineAutoActual, setInlineAutoActual] = useState(true);
+  const [savingInline, setSavingInline] = useState(false);
+
+  // Bulk editing — every visible row editable at once, across every column
+  // the table shows. Drafts are keyed by product id and only created when a
+  // row is actually touched, so the save writes the handful of rows that
+  // changed rather than every product in the season.
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [bulkForm, setBulkForm] = useState<Record<string, Partial<Product>>>({});
+  const [bulkAutoActual, setBulkAutoActual] = useState(true);
+  const [savingBulk, setSavingBulk] = useState(false);
+
+  // The catalog is arranged, not sorted: categories in a chosen sequence and
+  // products in a chosen sequence inside each one, exactly as the price list
+  // prints. Grouping is the default view because that is what is being built.
+  const [groupByCategory, setGroupByCategory] = useState(true);
+  const [dragging, setDragging] = useState<{
+    kind: "product" | "category";
+    id: string;
+  } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    kind: "product" | "category" | "group";
+    id: string;
+    edge: "before" | "after";
+  } | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+
+  /** The discount every derived actual price on this page is calculated at. */
+  const seasonDiscount = Number(
+    selectedSeason?.price_list_discount_percentage ?? 0
+  );
+  const discountUsable = isUsableDiscount(seasonDiscount);
+
+  /** Actual price for an offer price at this season's discount, or null. */
+  const deriveActual = (offer: unknown) =>
+    actualFromOffer(Number(offer), seasonDiscount);
 
   useEffect(() => {
     fetchCategories();
@@ -124,8 +205,24 @@ export function StockManagement() {
 
   useEffect(() => {
     if (selectedSeasonId) fetchProducts();
+    // Switching season abandons any half-finished edit — it belonged to the
+    // catalog that just went off screen. The season selector confirms first
+    // when there is unsaved bulk work.
+    setInlineEditId(null);
+    setInlineForm({});
+    setBulkEditMode(false);
+    setBulkForm({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSeasonId]);
+
+  useEffect(() => {
+    setDiscountInput(
+      selectedSeason ? String(selectedSeason.price_list_discount_percentage ?? 0) : ""
+    );
+    // Only the identity and the discount matter here; re-running on every
+    // other season field would fight the field while it is being typed in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSeason?.id, selectedSeason?.price_list_discount_percentage]);
 
   const fetchProducts = async () => {
     if (!selectedSeasonId) return;
@@ -184,6 +281,13 @@ export function StockManagement() {
   const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setEditForm(product);
+    // Start in auto mode only when the stored price already matches what the
+    // discount produces; otherwise the price was set by hand and reopening the
+    // modal must not silently overwrite it.
+    const derived = deriveActual(product.offer_price);
+    setEditAutoActual(
+      derived === null || Number(product.actual_price) === derived
+    );
     setEditModalOpen(true);
   };
 
@@ -226,7 +330,12 @@ export function StockManagement() {
           actual_price: Number(editForm.actual_price ?? 0),
           offer_price: Number(editForm.offer_price ?? 0),
           content: editForm.content,
-          discount_percentage: Number(editForm.discount_percentage ?? 0),
+          // In auto mode the season's discount is what the actual price was
+          // derived from, so store that rather than a stale per-product value.
+          discount_percentage:
+            editAutoActual && discountUsable
+              ? seasonDiscount
+              : Number(editForm.discount_percentage ?? 0),
           is_active: editForm.is_active,
           display_order: editForm.order,
         })
@@ -261,6 +370,743 @@ export function StockManagement() {
     }
   };
 
+  /**
+   * Saves the season's price-list discount.
+   *
+   * Existing actual prices are deliberately NOT rewritten here — changing a
+   * whole price list is an explicit action ("Recalculate"), not a side effect
+   * of typing in a config box.
+   */
+  const handleSaveDiscount = async () => {
+    if (!selectedSeason) return;
+    const value = discountInput.trim() === "" ? 0 : Number(discountInput);
+    if (!Number.isFinite(value) || value < 0 || value >= 100) {
+      alert("Price list discount must be between 0 and 99.99%");
+      return;
+    }
+
+    setSavingDiscount(true);
+    try {
+      await updateSeason(selectedSeason.id, {
+        price_list_discount_percentage: value,
+      });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save discount");
+    } finally {
+      setSavingDiscount(false);
+    }
+  };
+
+  /**
+   * Re-derives actual prices across the whole season in one database
+   * statement. `onlyMissing` fills in products that have no actual price yet
+   * and leaves hand-set prices alone.
+   */
+  const handleReprice = async (onlyMissing: boolean) => {
+    if (!selectedSeasonId || !selectedSeason) return;
+    if (isSelectedReadOnly) {
+      alert(
+        "This season is closed and read-only. A superadmin must unlock it first."
+      );
+      return;
+    }
+    if (Number(discountInput) !== seasonDiscount) {
+      alert("Save the discount first, then recalculate.");
+      return;
+    }
+    const scope = onlyMissing
+      ? "products that have no actual price yet"
+      : "EVERY product in this season";
+    if (
+      !confirm(
+        `Recalculate actual prices for ${scope} in season ${selectedSeason.name} at ${formatPrice(
+          seasonDiscount
+        )}% ?
+
+Offer prices are not changed.`
+      )
+    )
+      return;
+
+    setRepricing(true);
+    try {
+      const updated = await applyPriceListDiscount(
+        selectedSeasonId,
+        onlyMissing
+      );
+      await fetchProducts();
+      alert(`${updated} product${updated === 1 ? "" : "s"} re-priced.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to recalculate");
+    } finally {
+      setRepricing(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Inline (in-row) editing
+  //
+  // Covers only the fields that get corrected in bulk while preparing a price
+  // list — stock, the two prices and cost. Anything identity-shaped (name,
+  // category, images) still goes through the full edit modal.
+  // -------------------------------------------------------------------------
+
+  const startInlineEdit = (product: Product) => {
+    setInlineEditId(product.id);
+    setInlineForm({
+      stock: product.stock,
+      offer_price: product.offer_price,
+      actual_price: product.actual_price,
+      apr: product.apr,
+    });
+    const derived = deriveActual(product.offer_price);
+    setInlineAutoActual(
+      derived === null || Number(product.actual_price) === derived
+    );
+  };
+
+  const cancelInlineEdit = () => {
+    setInlineEditId(null);
+    setInlineForm({});
+  };
+
+  /** Offer price drives the actual price whenever auto mode is on. */
+  const handleInlineOfferChange = (raw: string) => {
+    const offer = raw === "" ? "" : Number(raw);
+    setInlineForm((f) => {
+      const next = { ...f, offer_price: offer as number };
+      if (inlineAutoActual) {
+        const derived = deriveActual(offer);
+        if (derived !== null) next.actual_price = derived;
+      }
+      return next;
+    });
+  };
+
+  /** Enter saves the row, Escape abandons it — a keyboard-only price pass. */
+  const handleInlineKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveInlineEdit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelInlineEdit();
+    }
+  };
+
+  const saveInlineEdit = async () => {
+    if (!inlineEditId || !selectedSeasonId) return;
+    if (isSelectedReadOnly) {
+      alert(
+        "This season is closed and read-only. A superadmin must unlock it first."
+      );
+      return;
+    }
+
+    setSavingInline(true);
+    try {
+      const { error: seasonError } = await supabase
+        .from("product_seasons")
+        .update({
+          stock: Number(inlineForm.stock ?? 0),
+          offer_price: Number(inlineForm.offer_price ?? 0),
+          actual_price: Number(inlineForm.actual_price ?? 0),
+          ...(inlineAutoActual && discountUsable
+            ? { discount_percentage: seasonDiscount }
+            : {}),
+        })
+        .eq("product_id", inlineEditId)
+        .eq("season_id", selectedSeasonId);
+
+      if (seasonError) throw seasonError;
+
+      // Cost is admin-only and lives in its own table; skip it entirely for
+      // roles that cannot see the column, so an empty box never blanks a
+      // cost the editor was not shown.
+      if (userRole?.name === "superadmin") {
+        const { error: costError } = await supabase
+          .from("product_season_costs")
+          .upsert(
+            {
+              season_id: selectedSeasonId,
+              product_id: inlineEditId,
+              apr:
+                inlineForm.apr === "" || inlineForm.apr == null
+                  ? null
+                  : Number(Number(inlineForm.apr).toFixed(2)),
+            },
+            { onConflict: "season_id,product_id" }
+          );
+        if (costError) throw costError;
+      }
+
+      // Patch the row in place rather than refetching: a full reload would
+      // re-sort the table under someone working down it row by row.
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === inlineEditId
+            ? {
+                ...p,
+                stock: Number(inlineForm.stock ?? 0),
+                offer_price: Number(inlineForm.offer_price ?? 0),
+                actual_price: Number(inlineForm.actual_price ?? 0),
+                apr:
+                  userRole?.name === "superadmin"
+                    ? (inlineForm.apr as string) ?? ""
+                    : p.apr,
+              }
+            : p
+        )
+      );
+      cancelInlineEdit();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save row");
+    } finally {
+      setSavingInline(false);
+    }
+  };
+
+  // -------------------------------------------------------------------------
+  // Bulk editing
+  //
+  // Every column the table displays becomes an input on every visible row.
+  // Identity fields (name, code, category) belong to the product and are
+  // shared by all seasons; prices, stock, order and active status belong to
+  // the selected season; cost belongs to the admin-only cost table. The save
+  // routes each field accordingly, exactly as the edit modal does.
+  // -------------------------------------------------------------------------
+
+  /** The columns bulk edit is allowed to change, in one place. */
+  const BULK_FIELDS = [
+    "name",
+    "product_code",
+    "category_id",
+    "content",
+    "order",
+    "stock",
+    "actual_price",
+    "offer_price",
+    "apr",
+    "is_active",
+  ] as const;
+
+  /** What a row's inputs currently show: its draft if touched, else the row. */
+  const bulkDraftFor = (product: Product): Partial<Product> =>
+    bulkForm[product.id] ?? product;
+
+  /** Records a change, seeding the draft from the row on first touch. */
+  const patchBulkDraft = (product: Product, patch: Partial<Product>) =>
+    setBulkForm((prev) => ({
+      ...prev,
+      [product.id]: { ...(prev[product.id] ?? product), ...patch },
+    }));
+
+  /** Offer price drives actual price here too, unless auto is switched off. */
+  const handleBulkOfferChange = (product: Product, raw: string) => {
+    const patch: Partial<Product> = {
+      offer_price: raw === "" ? 0 : Number(raw),
+    };
+    if (bulkAutoActual) {
+      const derived = deriveActual(raw);
+      if (derived !== null) patch.actual_price = derived;
+    }
+    patchBulkDraft(product, patch);
+  };
+
+  /** True when a draft differs from the row it was seeded from. */
+  const bulkRowChanged = (product: Product | undefined, draft: Partial<Product>) => {
+    if (!product) return false;
+    return BULK_FIELDS.some((field) => {
+      const before = product[field];
+      const after = draft[field];
+      if (field === "is_active") return Boolean(before) !== Boolean(after);
+      if (field === "apr")
+        return String(before ?? "").trim() !== String(after ?? "").trim();
+      if (
+        field === "stock" ||
+        field === "order" ||
+        field === "actual_price" ||
+        field === "offer_price"
+      )
+        return Number(before ?? 0) !== Number(after ?? 0);
+      return String(before ?? "") !== String(after ?? "");
+    });
+  };
+
+  /** Drafts that actually differ — what "Save all" will write. */
+  const bulkChangedIds = Object.keys(bulkForm).filter((id) =>
+    bulkRowChanged(
+      products.find((p) => p.id === id),
+      bulkForm[id]
+    )
+  );
+
+  const enterBulkEdit = () => {
+    cancelInlineEdit();
+    setBulkForm({});
+    setBulkAutoActual(true);
+    setBulkEditMode(true);
+  };
+
+  const exitBulkEdit = (force = false) => {
+    if (
+      !force &&
+      bulkChangedIds.length > 0 &&
+      !confirm(
+        `Discard unsaved changes to ${bulkChangedIds.length} product${
+          bulkChangedIds.length === 1 ? "" : "s"
+        }?`
+      )
+    )
+      return;
+    setBulkEditMode(false);
+    setBulkForm({});
+  };
+
+  /** Puts one row back to its saved values without leaving bulk edit. */
+  const revertBulkRow = (productId: string) =>
+    setBulkForm((prev) => {
+      const next = { ...prev };
+      delete next[productId];
+      return next;
+    });
+
+  const saveBulkEdit = async () => {
+    if (!selectedSeasonId) return;
+    if (isSelectedReadOnly) {
+      alert(
+        "This season is closed and read-only. A superadmin must unlock it first."
+      );
+      return;
+    }
+    if (bulkChangedIds.length === 0) {
+      exitBulkEdit(true);
+      return;
+    }
+
+    setSavingBulk(true);
+    const failures: string[] = [];
+
+    /** Writes one product's changes across the three tables it spans. */
+    const saveRow = async (productId: string) => {
+      const draft = bulkForm[productId];
+      const before = products.find((p) => p.id === productId);
+      if (!draft || !before) return;
+
+      const { error: identityError } = await supabase
+        .from("products")
+        .update({
+          name: draft.name,
+          product_code: draft.product_code,
+          category_id: draft.category_id,
+        })
+        .eq("id", productId);
+      if (identityError) throw identityError;
+
+      const { error: seasonError } = await supabase
+        .from("product_seasons")
+        .update({
+          content: draft.content,
+          display_order: draft.order == null ? null : Number(draft.order),
+          stock: Number(draft.stock ?? 0),
+          actual_price: Number(draft.actual_price ?? 0),
+          offer_price: Number(draft.offer_price ?? 0),
+          is_active: Boolean(draft.is_active),
+          ...(bulkAutoActual && discountUsable
+            ? { discount_percentage: seasonDiscount }
+            : {}),
+        })
+        .eq("product_id", productId)
+        .eq("season_id", selectedSeasonId);
+      if (seasonError) throw seasonError;
+
+      // Cost is admin-only; roles that cannot see the column never write it,
+      // so an unseen cost can't be blanked by a bulk save.
+      if (
+        userRole?.name === "superadmin" &&
+        String(before.apr ?? "").trim() !== String(draft.apr ?? "").trim()
+      ) {
+        const { error: costError } = await supabase
+          .from("product_season_costs")
+          .upsert(
+            {
+              season_id: selectedSeasonId,
+              product_id: productId,
+              apr:
+                draft.apr === "" || draft.apr == null
+                  ? null
+                  : Number(Number(draft.apr).toFixed(2)),
+            },
+            { onConflict: "season_id,product_id" }
+          );
+        if (costError) throw costError;
+      }
+    };
+
+    // A few at a time: enough to keep a long price list quick, few enough
+    // that a slow connection is not flooded with hundreds of requests.
+    const CHUNK = 5;
+    const saved = new Set<string>();
+    for (let i = 0; i < bulkChangedIds.length; i += CHUNK) {
+      const chunk = bulkChangedIds.slice(i, i + CHUNK);
+      const results = await Promise.allSettled(chunk.map(saveRow));
+      results.forEach((result, index) => {
+        const id = chunk[index];
+        if (result.status === "fulfilled") {
+          saved.add(id);
+        } else {
+          const name = products.find((p) => p.id === id)?.name ?? id;
+          failures.push(
+            `${name}: ${
+              result.reason instanceof Error
+                ? result.reason.message
+                : "failed to save"
+            }`
+          );
+        }
+      });
+    }
+
+    // Apply what actually saved and keep any failed row in edit mode with its
+    // typed values intact, so a partial failure is recoverable by retrying.
+    setProducts((prev) =>
+      prev.map((p) => {
+        if (!saved.has(p.id)) return p;
+        const draft = bulkForm[p.id];
+        return {
+          ...p,
+          name: draft.name ?? p.name,
+          product_code: draft.product_code ?? p.product_code,
+          category_id: draft.category_id ?? p.category_id,
+          categories:
+            categories.find((c) => c.id === draft.category_id)?.name != null
+              ? {
+                  name: categories.find((c) => c.id === draft.category_id)!
+                    .name,
+                }
+              : p.categories,
+          content: draft.content ?? p.content,
+          order: draft.order == null ? undefined : Number(draft.order),
+          stock: Number(draft.stock ?? 0),
+          actual_price: Number(draft.actual_price ?? 0),
+          offer_price: Number(draft.offer_price ?? 0),
+          is_active: Boolean(draft.is_active),
+          apr:
+            userRole?.name === "superadmin" ? (draft.apr as string) ?? "" : p.apr,
+        };
+      })
+    );
+
+    setBulkForm((prev) => {
+      const next: Record<string, Partial<Product>> = {};
+      Object.keys(prev).forEach((id) => {
+        if (!saved.has(id)) next[id] = prev[id];
+      });
+      return next;
+    });
+    setSavingBulk(false);
+
+    if (failures.length) {
+      alert(
+        `${saved.size} product${saved.size === 1 ? "" : "s"} saved.\n\n` +
+          `${failures.length} failed and are still open for editing:\n` +
+          failures.slice(0, 10).join("\n")
+      );
+      return;
+    }
+
+    setBulkEditMode(false);
+    alert(`${saved.size} product${saved.size === 1 ? "" : "s"} updated.`);
+  };
+
+  // -------------------------------------------------------------------------
+  // Arranging the catalog
+  //
+  // Positions are stored, not derived: categories."order" and
+  // product_seasons.display_order. Dragging works out the new sequence, then
+  // writes only the rows whose position actually moved — dropping one product
+  // usually shifts a handful of neighbours, not the whole season.
+  // -------------------------------------------------------------------------
+
+  /** One category's products, in the order they print. */
+  const productsInCategory = (categoryId: string | null) =>
+    byOrder(
+      products.filter((product) => (product.category_id ?? null) === categoryId),
+      (product) => product.name
+    );
+
+  /**
+   * Writes new positions, and any category change, for the products that
+   * moved. The table is updated first so the row lands where it was dropped
+   * without waiting for a round trip; a failure reloads from the database
+   * rather than leaving the screen disagreeing with it.
+   */
+  const persistProductOrder = async (
+    updates: { id: string; order: number; category_id?: string }[]
+  ) => {
+    if (!selectedSeasonId || updates.length === 0) return;
+
+    const previous = products;
+    setProducts((prev) =>
+      prev.map((product) => {
+        const update = updates.find((u) => u.id === product.id);
+        if (!update) return product;
+        return {
+          ...product,
+          order: update.order,
+          ...(update.category_id
+            ? {
+                category_id: update.category_id,
+                categories: categories.find((c) => c.id === update.category_id)
+                  ? { name: categories.find((c) => c.id === update.category_id)!.name }
+                  : product.categories,
+              }
+            : {}),
+        };
+      })
+    );
+
+    setSavingOrder(true);
+    try {
+      await Promise.all(
+        updates.map(async (update) => {
+          const { error } = await supabase
+            .from("product_seasons")
+            .update({ display_order: update.order })
+            .eq("product_id", update.id)
+            .eq("season_id", selectedSeasonId);
+          if (error) throw error;
+
+          // Category lives on the product itself, so a cross-category drag
+          // changes it for every season. That is intended: a sparkler does
+          // not become a flowerpot for one year only.
+          if (update.category_id) {
+            const { error: categoryError } = await supabase
+              .from("products")
+              .update({ category_id: update.category_id })
+              .eq("id", update.id);
+            if (categoryError) throw categoryError;
+          }
+        })
+      );
+    } catch (err) {
+      setProducts(previous);
+      alert(
+        err instanceof Error ? err.message : "Failed to save the new order"
+      );
+      fetchProducts();
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  /**
+   * Drops `productId` into `targetCategoryId` at `insertAt`.
+   *
+   * Both lists are rebuilt and renumbered from 1, which quietly repairs the
+   * gaps and duplicate positions that years of hand-typed order numbers leave
+   * behind.
+   */
+  const moveProduct = (
+    productId: string,
+    targetCategoryId: string | null,
+    insertAt: number
+  ) => {
+    const moved = products.find((product) => product.id === productId);
+    if (!moved) return;
+
+    const sourceCategoryId = moved.category_id ?? null;
+    const target = productsInCategory(targetCategoryId).filter(
+      (product) => product.id !== productId
+    );
+    target.splice(Math.max(0, Math.min(insertAt, target.length)), 0, moved);
+
+    const updates: { id: string; order: number; category_id?: string }[] =
+      renumber(target);
+
+    if (sourceCategoryId !== targetCategoryId) {
+      // Close the gap the product left behind, and record its new category.
+      const source = productsInCategory(sourceCategoryId).filter(
+        (product) => product.id !== productId
+      );
+      updates.push(...renumber(source));
+
+      const movedUpdate = updates.find((u) => u.id === productId);
+      if (movedUpdate) {
+        movedUpdate.category_id = targetCategoryId ?? undefined;
+      } else {
+        // Its number happened not to change, but its category did.
+        updates.push({
+          id: productId,
+          order: target.indexOf(moved) + 1,
+          category_id: targetCategoryId ?? undefined,
+        });
+      }
+    }
+
+    persistProductOrder(updates);
+  };
+
+  /** Reorders the categories themselves, which reorders every printed list. */
+  const moveCategory = async (categoryId: string, insertAt: number) => {
+    const ordered = byOrder(categories, (category) => category.name).filter(
+      (category) => category.id !== categoryId
+    );
+    const moved = categories.find((category) => category.id === categoryId);
+    if (!moved) return;
+    ordered.splice(Math.max(0, Math.min(insertAt, ordered.length)), 0, moved);
+
+    const updates = renumber(ordered);
+    if (!updates.length) return;
+
+    const previous = categories;
+    setCategories((prev) =>
+      prev.map((category) => {
+        const update = updates.find((u) => u.id === category.id);
+        return update ? { ...category, order: update.order } : category;
+      })
+    );
+
+    setSavingOrder(true);
+    try {
+      await Promise.all(
+        updates.map(async (update) => {
+          const { error } = await supabase
+            .from("categories")
+            .update({ order: update.order })
+            .eq("id", update.id);
+          if (error) throw error;
+        })
+      );
+    } catch (err) {
+      setCategories(previous);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to save the new category order"
+      );
+      fetchCategories();
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  /** Which half of a row the pointer is over — insert above it, or below. */
+  const edgeFromPointer = (
+    e: React.DragEvent<HTMLElement>
+  ): "before" | "after" => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  };
+
+  const handleDropOnProduct = (over: Product) => {
+    if (!dragging || dragging.kind !== "product" || dragging.id === over.id) {
+      setDropTarget(null);
+      setDragging(null);
+      return;
+    }
+
+    const edge = dropTarget?.id === over.id ? dropTarget.edge : "before";
+    const targetCategoryId = over.category_id ?? null;
+    const list = productsInCategory(targetCategoryId).filter(
+      (product) => product.id !== dragging.id
+    );
+    const index = list.findIndex((product) => product.id === over.id);
+    moveProduct(
+      dragging.id,
+      targetCategoryId,
+      edge === "before" ? index : index + 1
+    );
+    setDropTarget(null);
+    setDragging(null);
+  };
+
+  /** Dropping on a group header: a product joins the end, a category moves. */
+  const handleDropOnGroup = (categoryId: string | null) => {
+    if (!dragging) return;
+
+    if (dragging.kind === "product") {
+      const list = productsInCategory(categoryId).filter(
+        (product) => product.id !== dragging.id
+      );
+      moveProduct(dragging.id, categoryId, list.length);
+    } else if (categoryId && dragging.id !== categoryId) {
+      const edge =
+        dropTarget?.id === categoryId ? dropTarget.edge : "before";
+      const ordered = byOrder(categories, (category) => category.name).filter(
+        (category) => category.id !== dragging.id
+      );
+      const index = ordered.findIndex((category) => category.id === categoryId);
+      moveCategory(dragging.id, edge === "before" ? index : index + 1);
+    }
+
+    setDropTarget(null);
+    setDragging(null);
+  };
+
+  /**
+   * The next free SWC-P code.
+   *
+   * Generated from the codes already loaded for this season, and unique in
+   * the database too: products.product_code carries a unique index, so two
+   * people adding products at the same moment get a clean error rather than a
+   * duplicate code printed on a box.
+   */
+  const generateProductCode = () =>
+    nextProductCode(products.map((product) => product.product_code));
+
+  /** Position a new product takes: the end of the category it is going into. */
+  const nextOrderFor = (categoryId: string | undefined) =>
+    nextOrderInCategory(products, categoryId ?? null);
+
+  /** Opens the single-product form with its code and position pre-filled. */
+  const openAddModal = () => {
+    const categoryId = categories[0]?.id;
+    setAddForm({
+      product_code: generateProductCode(),
+      category_id: categoryId,
+      order: nextOrderFor(categoryId),
+      is_active: true,
+    });
+    setAddOrderTouched(false);
+    setAddAutoActual(true);
+    setShowAddModal(true);
+  };
+
+  /**
+   * Shared look for every in-table editor, so rows stay on one baseline.
+   * `no-spinner` removes the stepper arrows and, with the onWheel blur on each
+   * number input, stops the mouse wheel from silently editing prices.
+   */
+  const cellInputClass =
+    "w-full px-2 py-1 rounded border border-card-border/20 bg-card focus:outline-none focus:border-primary-orange no-spinner";
+
+  /** Bulk edit trades whitespace for columns so a whole row fits the screen. */
+  const cellPad = bulkEditMode ? "py-2 px-2" : "py-4 px-6";
+
+  /**
+   * Category names in catalog order.
+   *
+   * Every print and export path routes through this so a rearranged catalog
+   * reaches the PDF, the Excel export and the screen as one order rather than
+   * three that drift apart.
+   */
+  const orderedCategoryNames = (names: string[]): string[] => {
+    const position = new Map(
+      byOrder(categories, (category) => category.name).map((category, index) => [
+        category.name,
+        index,
+      ])
+    );
+    // A name with no category row behind it (deleted category, stale row)
+    // sorts to the end instead of jumping to the front on a missing 0.
+    return [...names].sort(
+      (a, b) =>
+        (position.get(a) ?? Number.MAX_SAFE_INTEGER) -
+        (position.get(b) ?? Number.MAX_SAFE_INTEGER)
+    );
+  };
+
   const getPriceListExportRows = () => {
     const grouped: { [cat: string]: Product[] } = {};
 
@@ -272,18 +1118,13 @@ export function StockManagement() {
         grouped[catName].push(product);
       });
 
+    // The printed list is the arrangement made on screen, not a re-sort:
+    // same category sequence, same product sequence inside each one.
     Object.keys(grouped).forEach((cat) => {
-      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      grouped[cat] = byOrder(grouped[cat], (product) => product.name);
     });
 
-    const categoryOrderMap: Record<string, number> = {};
-    categories.forEach((cat) => {
-      categoryOrderMap[cat.name] = cat.order ?? 0;
-    });
-
-    const sortedCategoryNames = Object.keys(grouped).sort(
-      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
-    );
+    const sortedCategoryNames = orderedCategoryNames(Object.keys(grouped));
 
     const rows: Record<string, string | number>[] = [];
     let serial = 1;
@@ -350,21 +1191,13 @@ export function StockManagement() {
       grouped[catName].push(product);
     });
 
-    // Sort products inside each category by product.order
+    // The printed list is the arrangement made on screen, not a re-sort:
+    // same category sequence, same product sequence inside each one.
     Object.keys(grouped).forEach((cat) => {
-      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      grouped[cat] = byOrder(grouped[cat], (product) => product.name);
     });
 
-    // Get category order mapping from categories state
-    const categoryOrderMap: Record<string, number> = {};
-    categories.forEach((cat) => {
-      categoryOrderMap[cat.name] = cat.order ?? 0;
-    });
-
-    // Sort categories by category order
-    const sortedCategoryNames = Object.keys(grouped).sort(
-      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
-    );
+    const sortedCategoryNames = orderedCategoryNames(Object.keys(grouped));
 
     // Generate table rows
     let tableRows = "";
@@ -670,171 +1503,71 @@ export function StockManagement() {
     printWindow.document.close();
   };
 
+  /**
+   * Opens the price list as a PDF in the browser's own viewer, which brings
+   * print, zoom and save with it. It used to print straight to the dialog and
+   * close, so nobody could check the list before it went to paper.
+   */
   const handlePriceListDownload = async () => {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
+    // Opened before the await: a window created after one is a popup.
+    const viewer = window.open("", "_blank");
+    if (viewer) {
+      viewer.document.write(
+        `<!doctype html><title>Price List ${seasonSlug}</title>` +
+          `<body style="font:14px sans-serif;padding:24px;color:#555">` +
+          `Preparing the price list…</body>`
+      );
+      viewer.document.close();
+    }
 
-    // Filter products based on active status
-    const filteredProducts = products.filter((product) => product.is_active);
+    try {
+      // Same arrangement as the screen: categories in their order, products
+      // in theirs. The search box does not narrow a printed price list.
+      const grouped: { [cat: string]: Product[] } = {};
+      products
+        .filter((product) => product.is_active)
+        .forEach((product) => {
+          const catName = product.categories?.name || "Uncategorized";
+          if (!grouped[catName]) grouped[catName] = [];
+          grouped[catName].push(product);
+        });
 
-    // Group products by category and sort products by order inside each category
-    const grouped: { [cat: string]: Product[] } = {};
-    filteredProducts.forEach((product) => {
-      const catName = product.categories?.name || "Uncategorized";
-      if (!grouped[catName]) grouped[catName] = [];
-      grouped[catName].push(product);
-    });
-
-    // Sort products inside each category by product.order
-    Object.keys(grouped).forEach((cat) => {
-      grouped[cat].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    });
-
-    // Get category order mapping from categories state
-    const categoryOrderMap: Record<string, number> = {};
-    categories.forEach((cat) => {
-      categoryOrderMap[cat.name] = cat.order ?? 0;
-    });
-
-    // Sort categories by category order
-    const sortedCategoryNames = Object.keys(grouped).sort(
-      (a, b) => (categoryOrderMap[a] ?? 0) - (categoryOrderMap[b] ?? 0)
-    );
-
-    // Generate table rows
-    let tableRows = "";
-    let serial = 1;
-    sortedCategoryNames.forEach((catName) => {
-      const products = grouped[catName];
-      // Category row
-      tableRows += `
-      <tr>
-        <td colspan="5" style="text-align:center; font-weight:bold; background:#f5f5f5; font-size:1.1rem;">
-          ${catName}
-        </td>
-      </tr>
-    `;
-      // Product rows
-      products.forEach((product) => {
-        tableRows += `
-        <tr>
-          <td>${serial++}</td>
-          <td class="text-align-left">${product.name}</td>
-          <td><del>₹${product.actual_price}</del></td>
-          <td>₹${product.offer_price}</td>
-          <td>${product.content || "-"}</td>
-        </tr>
-      `;
+      Object.keys(grouped).forEach((cat) => {
+        grouped[cat] = byOrder(grouped[cat], (product) => product.name);
       });
-    });
 
-    const content = `
-    <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soundwave Crackers - Price List ${seasonSlug}</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: sans-serif, "Segoe UI";
-      background-color: #fff0f5;
-      color: #333;
-    }
-    .header-image {
-      width: 100%;
-      max-height: 400px;
-      display: block;
-      margin: 0 auto;
-      border-radius: 12px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    }
-    .table-overlay {
-      background-color: rgba(255, 255, 255, 0.88);
-      padding: 20px 6px;
-      border-radius: 12px;
-      margin: auto;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    }
-    table.product-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.75rem;
-      font-weight: 400;
-    }
-    table.product-table th,
-    table.product-table td {
-      border: 1px solid #999;
-      padding: 5px 8px;
-      text-align: center;
-    }
-    table.product-table td.text-align-left {
-      text-align: left;
-    }
-    table.product-table th {
-      background-color: brown;
-      font-weight: bold;
-      color: wheat;
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <img src="/assets/img/banners/price-list-header.png" alt="Soundwave Crackers Banner" class="header-image" />
-  </header>
-  <section class="table-section">
-    <div class="table-overlay">
-      <table class="product-table">
-        <thead>
-          <tr>
-            <th>S.No</th>
-            <th>Product</th>
-            <th>Actual Price</th>
-            <th>Offer Price</th>
-            <th>Quantity</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
-    </div>
-  </section>
-  <footer style="text-align: center; padding: 20px; font-size: 0.9rem; color: #666;">
-    <p><strong>Soundwave Crackers</strong> - Your premier destination for premium-quality crackers and fireworks, making your celebrations brighter and more memorable.</p>
-    <p>Thank you for choosing Soundwave Crackers! For inquiries, contact us</p>
-  </footer>
-  <script>
-    // Wait for all images and DOM to be loaded before printing
-    function readyToPrint() {
-      const img = document.querySelector('.header-image');
-      if (img && !img.complete) {
-        img.onload = function() {
-          setTimeout(function() {
-            window.print();
-            window.close();
-          }, 300);
-        };
-      } else {
-        setTimeout(function() {
-          window.print();
-          window.close();
-        }, 300);
+      const groups = orderedCategoryNames(Object.keys(grouped)).map(
+        (category) => ({
+          category,
+          products: grouped[category].map((product) => ({
+            name: product.name,
+            actual_price: product.actual_price ?? null,
+            offer_price: product.offer_price ?? null,
+            content: product.content ?? null,
+          })),
+        })
+      );
+
+      if (!groups.length) {
+        viewer?.close();
+        toast.error("There are no active products to print");
+        return;
       }
-    }
-    if (document.readyState === "complete") {
-      readyToPrint();
-    } else {
-      window.onload = readyToPrint;
-    }
-  </script>
-</body>
-</html>
-  `;
 
-    printWindow.document.write(content);
-    printWindow.document.close();
+      await openPriceListPdf(
+        {
+          groups,
+          seasonName: seasonSlug,
+          discountPercent: discountUsable ? seasonDiscount : null,
+        },
+        viewer
+      );
+    } catch (err) {
+      viewer?.close();
+      toast.error(
+        err instanceof Error ? err.message : "Could not build the price list"
+      );
+    }
   };
 
   const filteredProducts = products.filter((product) => {
@@ -851,6 +1584,9 @@ export function StockManagement() {
 
   // Add sorting handler
   const handleSort = (field: string) => {
+    // Grouped mode shows the arranged order; a column sort there would
+    // contradict what the drag handles just did.
+    if (groupByCategory) return;
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
@@ -912,6 +1648,489 @@ export function StockManagement() {
   });
 
 
+  /**
+   * One product row. Shared by the grouped view and the flat sorted view, so
+   * bulk edit, inline edit and drag-to-reorder behave identically in both.
+   */
+  const renderProductRow = (product: Product) => {
+    // Two ways into edit mode: one row via inline edit, or
+    // every row via bulk edit. Bulk covers every column the
+    // table displays; inline stays on the price-pass fields.
+    const editingInline = inlineEditId === product.id;
+    const draft = bulkEditMode
+      ? bulkDraftFor(product)
+      : inlineForm;
+    const editingPrices = bulkEditMode || editingInline;
+    const rowDirty =
+      bulkEditMode && bulkChangedIds.includes(product.id);
+    const autoActual = bulkEditMode
+      ? bulkAutoActual
+      : inlineAutoActual;
+
+    /** Routes a cell edit to whichever draft is in play. */
+    const patch = (fields: Partial<Product>) =>
+      bulkEditMode
+        ? patchBulkDraft(product, fields)
+        : setInlineForm((f) => ({ ...f, ...fields }));
+
+    const onOfferChange = (raw: string) =>
+      bulkEditMode
+        ? handleBulkOfferChange(product, raw)
+        : handleInlineOfferChange(raw);
+
+    /** Re-derives the actual price when auto is switched on. */
+    const syncActual = (auto: boolean) => {
+      if (bulkEditMode) setBulkAutoActual(auto);
+      else setInlineAutoActual(auto);
+      if (!auto) return;
+      const derived = deriveActual(draft.offer_price);
+      if (derived !== null) patch({ actual_price: derived });
+    };
+
+    const isDragged =
+      dragging?.kind === "product" && dragging.id === product.id;
+    const dropEdge =
+      dropTarget?.kind === "product" && dropTarget.id === product.id
+        ? dropTarget.edge
+        : null;
+
+    return (
+    <tr
+      key={product.id}
+      draggable={dndEnabled}
+      onDragStart={() => {
+        if (!dndEnabled) return;
+        setDragging({ kind: "product", id: product.id });
+      }}
+      onDragOver={(e) => {
+        if (!dndEnabled || dragging?.kind !== "product") return;
+        e.preventDefault();
+        setDropTarget({
+          kind: "product",
+          id: product.id,
+          edge: edgeFromPointer(e),
+        });
+      }}
+      onDragLeave={() =>
+        setDropTarget((current) =>
+          current?.id === product.id ? null : current
+        )
+      }
+      onDrop={(e) => {
+        if (!dndEnabled) return;
+        e.preventDefault();
+        handleDropOnProduct(product);
+      }}
+      onDragEnd={() => {
+        setDragging(null);
+        setDropTarget(null);
+      }}
+      className={`border-t border-card-border/10 ${
+        isDragged ? "opacity-40" : ""
+      } ${
+        dropEdge === "before"
+          ? "shadow-[inset_0_3px_0_0_rgb(var(--primary-orange))]"
+          : dropEdge === "after"
+          ? "shadow-[inset_0_-3px_0_0_rgb(var(--primary-orange))]"
+          : ""
+      } ${
+        rowDirty
+          ? "bg-amber-500/10"
+          : editingPrices
+          ? "bg-primary-orange/5"
+          : ""
+      }`}
+    >
+      {dndEnabled && (
+        <td className={`${cellPad} cursor-grab text-text/40`}>
+          <GripVertical className="w-4 h-4" />
+        </td>
+      )}
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <input
+            type="number"
+            onWheel={(e) => e.currentTarget.blur()}
+            min={0}
+            value={draft.order ?? ""}
+            onChange={(e) =>
+              patch({
+                order:
+                  e.target.value === ""
+                    ? undefined
+                    : Number(e.target.value),
+              })
+            }
+            aria-label={`Display order for ${product.name}`}
+            className={cellInputClass}
+          />
+        ) : (
+          product.order ?? "-"
+        )}
+      </td>
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <input
+            type="text"
+            value={draft.product_code ?? ""}
+            onChange={(e) =>
+              patch({ product_code: e.target.value })
+            }
+            aria-label={`Product code for ${product.name}`}
+            className={cellInputClass}
+          />
+        ) : (
+          product.product_code || "-"
+        )}
+      </td>
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <input
+            type="text"
+            value={draft.name ?? ""}
+            onChange={(e) => patch({ name: e.target.value })}
+            aria-label="Product name"
+            className={cellInputClass}
+          />
+        ) : (
+          product.name
+        )}
+      </td>
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <select
+            value={draft.category_id ?? ""}
+            onChange={(e) =>
+              patch({ category_id: e.target.value })
+            }
+            aria-label={`Category for ${product.name}`}
+            className={cellInputClass}
+          >
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          product.categories?.name
+        )}
+      </td>
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <input
+            type="text"
+            value={draft.content ?? ""}
+            onChange={(e) => patch({ content: e.target.value })}
+            aria-label={`Content for ${product.name}`}
+            className={cellInputClass}
+          />
+        ) : (
+          product.content
+        )}
+      </td>
+      <td
+        className={`${cellPad} ${
+          !editingPrices && product.stock <= 20
+            ? "text-red-500 font-bold"
+            : ""
+        }`}
+      >
+        {editingPrices ? (
+          <input
+            type="number"
+            onWheel={(e) => e.currentTarget.blur()}
+            min={0}
+            value={draft.stock ?? ""}
+            onChange={(e) =>
+              patch({ stock: Number(e.target.value) })
+            }
+            onKeyDown={
+              bulkEditMode ? undefined : handleInlineKeyDown
+            }
+            aria-label={`Stock for ${product.name}`}
+            autoFocus={editingInline}
+            className={cellInputClass}
+          />
+        ) : (
+          product.stock
+        )}
+      </td>
+      <td className={cellPad}>
+        {editingPrices ? (
+          <div className="flex flex-col gap-1">
+            <input
+              type="number"
+              onWheel={(e) => e.currentTarget.blur()}
+              min={0}
+              step="0.01"
+              value={draft.actual_price ?? ""}
+              onChange={(e) =>
+                patch({ actual_price: Number(e.target.value) })
+              }
+              onKeyDown={
+                bulkEditMode ? undefined : handleInlineKeyDown
+              }
+              readOnly={autoActual && discountUsable}
+              aria-label={`Actual price for ${product.name}`}
+              title={
+                autoActual && discountUsable
+                  ? `Calculated from the offer price at ${formatPrice(
+                      seasonDiscount
+                    )}%`
+                  : undefined
+              }
+              className={`${cellInputClass} ${
+                autoActual && discountUsable
+                  ? "bg-card/40 text-text/70 cursor-not-allowed"
+                  : ""
+              }`}
+            />
+            {/* Bulk edit has one auto switch in the toolbar;
+                inline edit carries its own, per row. */}
+            {discountUsable && !bulkEditMode && (
+              <label className="flex items-center gap-1 text-xs text-text/60 whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={autoActual}
+                  onChange={(e) => syncActual(e.target.checked)}
+                />
+                auto
+              </label>
+            )}
+          </div>
+        ) : (
+          `₹${formatPrice(product.actual_price)}`
+        )}
+      </td>
+      <td className={cellPad}>
+        {editingPrices ? (
+          <input
+            type="number"
+            onWheel={(e) => e.currentTarget.blur()}
+            min={0}
+            step="0.01"
+            value={draft.offer_price ?? ""}
+            onChange={(e) => onOfferChange(e.target.value)}
+            onKeyDown={
+              bulkEditMode ? undefined : handleInlineKeyDown
+            }
+            aria-label={`Offer price for ${product.name}`}
+            className={cellInputClass}
+          />
+        ) : (
+          `₹${formatPrice(product.offer_price)}`
+        )}
+      </td>
+      {userRole?.name === "superadmin" && (
+        <td className={cellPad}>
+          {editingPrices ? (
+            <input
+              type="number"
+              onWheel={(e) => e.currentTarget.blur()}
+              min={0}
+              step="0.01"
+              value={draft.apr ?? ""}
+              onChange={(e) => patch({ apr: e.target.value })}
+              onKeyDown={
+                bulkEditMode ? undefined : handleInlineKeyDown
+              }
+              aria-label={`APR for ${product.name}`}
+              className={cellInputClass}
+            />
+          ) : (
+            product.apr || "-"
+          )}
+        </td>
+      )}
+      <td className={cellPad}>
+        {bulkEditMode ? (
+          <select
+            value={draft.is_active ? "true" : "false"}
+            onChange={(e) =>
+              patch({ is_active: e.target.value === "true" })
+            }
+            aria-label={`Active status for ${product.name}`}
+            className={cellInputClass}
+          >
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        ) : (
+          <span
+            className={`px-3 py-1 rounded-full text-xs font-bold ${
+              product.is_active
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-700"
+            }`}
+          >
+            {product.is_active ? "Active" : "Inactive"}
+          </span>
+        )}
+      </td>
+      {userRole?.name === "superadmin" && (
+        <td className={cellPad}>
+          <div className="flex items-center justify-center space-x-2">
+            {bulkEditMode ? (
+              // Saving is one action for the whole table, so
+              // the only per-row control is undoing this row.
+              <button
+                onClick={() => revertBulkRow(product.id)}
+                disabled={!rowDirty || savingBulk}
+                title={
+                  rowDirty
+                    ? "Revert this row"
+                    : "No changes on this row"
+                }
+                className="p-2 text-text/60 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            ) : editingInline ? (
+              <>
+                <button
+                  onClick={saveInlineEdit}
+                  disabled={savingInline}
+                  title="Save row"
+                  className="p-2 text-green-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  {savingInline ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                </button>
+                <button
+                  onClick={cancelInlineEdit}
+                  disabled={savingInline}
+                  title="Cancel"
+                  className="p-2 text-red-500 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => handleEdit(product)}
+                  disabled={isSelectedReadOnly}
+                  title={
+                    isSelectedReadOnly
+                      ? "This season is closed and read-only"
+                      : "Edit product"
+                  }
+                  className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => startInlineEdit(product)}
+                  disabled={isSelectedReadOnly}
+                  title={
+                    isSelectedReadOnly
+                      ? "This season is closed and read-only"
+                      : "Inline edit — stock, prices and APR"
+                  }
+                  className="p-2 text-blue-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <PencilLine className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </td>
+      )}
+    </tr>
+    );
+  };
+
+  /**
+   * The table's columns in one place: the header renders from this, and the
+   * percentages are what let bulk edit lay the row out inside the screen
+   * instead of scrolling sideways. Product name gets the most room — it is
+   * the only column you navigate by.
+   */
+  const TABLE_COLUMNS: {
+    key: string;
+    label: string;
+    sortable: boolean;
+    width: string;
+  }[] = [
+    { key: "order", label: "Order", sortable: true, width: "5%" },
+    { key: "product_code", label: "Code", sortable: true, width: "8%" },
+    { key: "name", label: "Product Name", sortable: true, width: "24%" },
+    { key: "categories.name", label: "Category", sortable: true, width: "12%" },
+    { key: "content", label: "Content", sortable: true, width: "10%" },
+    { key: "stock", label: "Stock", sortable: true, width: "7%" },
+    { key: "actual_price", label: "Actual Price", sortable: true, width: "9%" },
+    { key: "offer_price", label: "Offer Price", sortable: true, width: "9%" },
+    ...(userRole?.name === "superadmin"
+      ? [{ key: "apr", label: "APR", sortable: true, width: "7%" }]
+      : []),
+    { key: "is_active", label: "Active", sortable: true, width: "9%" },
+  ];
+
+  /**
+   * Dragging is only offered when it can do what it looks like it does: in the
+   * grouped view, with nothing else holding the row, on a season that is not
+   * frozen.
+   */
+  const dndEnabled =
+    groupByCategory &&
+    !bulkEditMode &&
+    !inlineEditId &&
+    !isSelectedReadOnly &&
+    !savingOrder &&
+    userRole?.name === "superadmin";
+
+  // Column sorting and a hand-arranged order are different answers to the
+  // same question, so only one of them is live at a time.
+  const sortingEnabled = !groupByCategory;
+
+  const columnCount =
+    TABLE_COLUMNS.length +
+    (dndEnabled ? 1 : 0) +
+    (userRole?.name === "superadmin" ? 1 : 0);
+
+  /**
+   * The catalog as it prints: categories in their stored order, each holding
+   * its products in theirs. Products whose category has gone missing are
+   * collected at the end rather than dropped from the page.
+   */
+  const categoryGroups: {
+    id: string | null;
+    name: string;
+    products: Product[];
+  }[] = [
+    ...byOrder(categories, (category) => category.name).map((category) => ({
+      id: category.id as string | null,
+      name: category.name,
+      products: byOrder(
+        filteredProducts.filter(
+          (product) => product.category_id === category.id
+        ),
+        (product) => product.name
+      ),
+    })),
+    {
+      id: null,
+      name: "Uncategorized",
+      products: byOrder(
+        filteredProducts.filter(
+          (product) =>
+            !categories.some((category) => category.id === product.category_id)
+        ),
+        (product) => product.name
+      ),
+    },
+  ].filter((group) => {
+    if (group.products.length > 0) return true;
+    // An empty category is still worth a band in the full view — it is the
+    // only place to drop the first product into it. While searching or
+    // filtering it is just noise, and so is an empty catch-all.
+    return group.id !== null && !searchTerm && categoryFilter === "all";
+  });
+
   if (!userRole) {
     return (
       <div className="min-h-screen pt-24 pb-12 flex items-center justify-center">
@@ -952,7 +2171,20 @@ export function StockManagement() {
             {/* Which season's prices and stock are being viewed/edited. */}
             <select
               value={selectedSeasonId ?? ""}
-              onChange={(e) => setSelectedSeasonId(e.target.value)}
+              onChange={(e) => {
+                // Changing season discards bulk drafts, so say so first
+                // rather than losing a screenful of typed prices.
+                if (
+                  bulkChangedIds.length > 0 &&
+                  !confirm(
+                    `Switching season will discard unsaved changes to ${bulkChangedIds.length} product${
+                      bulkChangedIds.length === 1 ? "" : "s"
+                    }. Continue?`
+                  )
+                )
+                  return;
+                setSelectedSeasonId(e.target.value);
+              }}
               disabled={seasonsLoading || seasons.length === 0}
               aria-label="Season"
               className="px-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange w-full sm:w-auto"
@@ -1060,6 +2292,111 @@ export function StockManagement() {
           </div>
         )}
 
+        {/* Price list configuration.
+            The whole price list is printed at one discount, so it is set once
+            here rather than product by product. Actual prices are derived:
+            actual = offer / (1 - discount/100). */}
+        {userRole?.name === "superadmin" && (
+          <div className="mb-6 rounded-xl border border-card-border/10 bg-card/30 p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Percent className="w-5 h-5 text-primary-orange" />
+              <h2 className="text-lg font-semibold">
+                Price list configuration
+              </h2>
+              <span className="text-sm text-text/60">
+                — season {selectedSeason?.name ?? "—"}
+              </span>
+            </div>
+            <p className="text-sm text-text/70 mb-4">
+              Enter the offer price for each product; the actual (struck-out)
+              price is calculated from it at this discount. Each season keeps
+              its own discount.
+            </p>
+
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+              <div>
+                <label className="block mb-1 text-sm font-medium">
+                  Price list discount %
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={99.99}
+                  step="0.01"
+                  value={discountInput}
+                  onChange={(e) => setDiscountInput(e.target.value)}
+                  disabled={isSelectedReadOnly}
+                  placeholder="80"
+                  className="w-full sm:w-40 px-3 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange disabled:opacity-40"
+                />
+              </div>
+
+              <button
+                onClick={handleSaveDiscount}
+                disabled={
+                  savingDiscount ||
+                  isSelectedReadOnly ||
+                  Number(discountInput) === seasonDiscount
+                }
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {savingDiscount ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                <span>Save discount</span>
+              </button>
+
+              <button
+                onClick={() => handleReprice(false)}
+                disabled={repricing || isSelectedReadOnly || !discountUsable}
+                title={
+                  discountUsable
+                    ? "Recalculate every product's actual price from its offer price"
+                    : "Set a discount above 0 first"
+                }
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {repricing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Calculator className="w-4 h-4" />
+                )}
+                <span>Recalculate all actual prices</span>
+              </button>
+
+              <button
+                onClick={() => handleReprice(true)}
+                disabled={repricing || isSelectedReadOnly || !discountUsable}
+                title="Only fill in products that have no actual price yet"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Calculator className="w-4 h-4" />
+                <span>Fill missing only</span>
+              </button>
+            </div>
+
+            <p className="text-sm text-text/70 mt-3">
+              {discountUsable ? (
+                <>
+                  At{" "}
+                  <span className="font-semibold">
+                    {formatPrice(seasonDiscount)}%
+                  </span>
+                  , an offer price of ₹8 prints as{" "}
+                  <span className="font-semibold">
+                    ₹{formatPrice(deriveActual(8) ?? 0)}
+                  </span>
+                  .
+                </>
+              ) : (
+                "No discount configured — actual prices must be entered by hand."
+              )}
+            </p>
+          </div>
+        )}
+
         {/* Responsive Button Group */}
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6 w-full">
           <button
@@ -1079,10 +2416,11 @@ export function StockManagement() {
           </button>
           <button
             onClick={handlePriceListDownload}
+            title="Opens the price list as a PDF — print or save it from the viewer"
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
           >
-            <Printer className="w-5 h-5" />
-            <span>Price List</span>
+            <FileText className="w-5 h-5" />
+            <span>Price List PDF</span>
           </button>
           <button
             onClick={() => handleExportPriceList("excel")}
@@ -1098,14 +2436,60 @@ export function StockManagement() {
             <Download className="w-5 h-5" />
             <span>Export CSV</span>
           </button>
+          <button
+            onClick={() => setGroupByCategory((on) => !on)}
+            title={
+              groupByCategory
+                ? "Show one flat, sortable list"
+                : "Group by category and arrange by dragging"
+            }
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto ${
+              groupByCategory
+                ? "bg-primary-orange/10 text-primary-orange border border-primary-orange/30"
+                : "bg-card hover:bg-card/70"
+            }`}
+          >
+            <LayoutList className="w-5 h-5" />
+            <span>{groupByCategory ? "Grouped" : "Flat list"}</span>
+          </button>
+          {userRole?.name === "superadmin" && !bulkEditMode && (
+            <button
+              onClick={enterBulkEdit}
+              disabled={isSelectedReadOnly}
+              title={
+                isSelectedReadOnly
+                  ? "This season is closed and read-only"
+                  : "Make every column on every visible row editable"
+              }
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <TableProperties className="w-5 h-5" />
+              <span>Bulk Edit</span>
+            </button>
+          )}
           {["admin", "superadmin"].includes(userRole?.name || "") && (
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={openAddModal}
               disabled={isSelectedReadOnly}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-5 h-5" />
               <span>Add Product</span>
+            </button>
+          )}
+          {["admin", "superadmin"].includes(userRole?.name || "") && (
+            <button
+              onClick={() => setShowBulkAddModal(true)}
+              disabled={isSelectedReadOnly}
+              title={
+                isSelectedReadOnly
+                  ? "This season is closed and read-only"
+                  : "Enter several products in one sheet"
+              }
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ListPlus className="w-5 h-5" />
+              <span>Bulk Add</span>
             </button>
           )}
           <button
@@ -1117,131 +2501,117 @@ export function StockManagement() {
           </button>
         </div>
 
+        {groupByCategory && userRole?.name === "superadmin" && (
+          <p className="text-sm text-text/60 mb-3 flex items-center gap-2">
+            <GripVertical className="w-4 h-4" />
+            {isSelectedReadOnly
+              ? "This season is frozen, so the catalog order cannot be rearranged."
+              : bulkEditMode || inlineEditId
+              ? "Finish the current edit to rearrange the catalog by dragging."
+              : "Drag a row to reposition it, onto another category to move it there, or drag a category band to reorder the whole category. The printed price list follows this order."}
+            {savingOrder && (
+              <span className="flex items-center gap-1 text-primary-orange">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                saving order…
+              </span>
+            )}
+          </p>
+        )}
+
+        {/* Bulk edit control bar. Sticky so Save stays reachable part-way
+            down a several-hundred-row price list. */}
+        {bulkEditMode && (
+          <div className="sticky top-[5.5rem] z-30 mb-4 rounded-xl border border-primary-orange/40 bg-card px-4 py-3 shadow-lg flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+            <div className="flex items-center gap-3 flex-wrap">
+              <TableProperties className="w-5 h-5 text-primary-orange" />
+              <span className="font-semibold">Bulk edit</span>
+              <span className="text-sm text-text/70">
+                {bulkChangedIds.length === 0
+                  ? `${sortedProducts.length} rows editable — nothing changed yet`
+                  : `${bulkChangedIds.length} of ${sortedProducts.length} rows changed`}
+              </span>
+              {discountUsable && (
+                <label className="flex items-center gap-2 text-sm text-text/70">
+                  <input
+                    type="checkbox"
+                    checked={bulkAutoActual}
+                    onChange={(e) => setBulkAutoActual(e.target.checked)}
+                  />
+                  Auto actual price at {formatPrice(seasonDiscount)}%
+                </label>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => exitBulkEdit()}
+                disabled={savingBulk}
+                className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 border border-card-border/10 transition-colors disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveBulkEdit}
+                disabled={savingBulk || bulkChangedIds.length === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {savingBulk ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                <span>
+                  {savingBulk
+                    ? "Saving…"
+                    : `Save all${
+                        bulkChangedIds.length
+                          ? ` (${bulkChangedIds.length})`
+                          : ""
+                      }`}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="bg-card/30 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-card/50">
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("order")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Order
-                      {sortField === "order" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("product_code")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Product Code
-                      {sortField === "product_code" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("name")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Product Name
-                      {sortField === "name" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("categories.name")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Category
-                      {sortField === "categories.name" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("content")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Content
-                      {sortField === "content" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("stock")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Stock
-                      {sortField === "stock" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("actual_price")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Actual Price
-                      {sortField === "actual_price" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("offer_price")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Offer Price
-                      {sortField === "offer_price" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
-                  {userRole?.name === "superadmin" && (
+          {/* One scroll container for both axes. The header sticks to its top
+              edge, so it stays readable all the way down a several-hundred
+              row price list, and the whole thing sits under the site nav. */}
+          <div className="overflow-auto max-h-[calc(100vh-13rem)]">
+            <table
+              className={`w-full ${bulkEditMode ? "table-fixed" : ""}`}
+            >
+              <thead className="sticky top-0 z-20">
+                <tr className="bg-card [&>th]:shadow-[inset_0_-1px_0_0_rgb(0_0_0/0.12)]">
+                  {dndEnabled && (
                     <th
-                      className="py-4 px-6 text-left cursor-pointer"
-                      onClick={() => handleSort("apr")}
+                      className="py-4 px-3 text-left"
+                      style={bulkEditMode ? { width: "3%" } : undefined}
+                    >
+                      <span className="sr-only">Reorder</span>
+                    </th>
+                  )}
+                  {TABLE_COLUMNS.map((column) => (
+                    <th
+                      key={column.key}
+                      onClick={
+                        sortingEnabled && column.sortable
+                          ? () => handleSort(column.key)
+                          : undefined
+                      }
+                      style={bulkEditMode ? { width: column.width } : undefined}
+                      className={`py-4 ${
+                        bulkEditMode ? "px-2" : "px-6"
+                      } text-left ${
+                        sortingEnabled && column.sortable
+                          ? "cursor-pointer"
+                          : ""
+                      }`}
                     >
                       <span className="flex items-center gap-1">
-                        APR
-                        {sortField === "apr" &&
+                        {column.label}
+                        {sortingEnabled &&
+                          sortField === column.key &&
                           (sortDirection === "asc" ? (
                             <ChevronUp className="w-4 h-4" />
                           ) : (
@@ -1249,95 +2619,116 @@ export function StockManagement() {
                           ))}
                       </span>
                     </th>
-                  )}
-                  <th
-                    className="py-4 px-6 text-left cursor-pointer"
-                    onClick={() => handleSort("is_active")}
-                  >
-                    <span className="flex items-center gap-1">
-                      Active
-                      {sortField === "is_active" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        ))}
-                    </span>
-                  </th>
+                  ))}
                   {userRole?.name === "superadmin" && (
-                    <th className="py-4 px-6 text-center">Actions</th>
+                    <th
+                      className="py-4 px-2 text-center"
+                      style={bulkEditMode ? { width: "7%" } : undefined}
+                    >
+                      Actions
+                    </th>
                   )}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center text-text/60">
+                    <td
+                      colSpan={columnCount}
+                      className="py-8 text-center text-text/60"
+                    >
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : sortedProducts.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-8 text-center text-text/60">
+                    <td
+                      colSpan={columnCount}
+                      className="py-8 text-center text-text/60"
+                    >
                       No products found
                     </td>
                   </tr>
-                ) : (
-                  sortedProducts.map((product) => (
-                    <tr
-                      key={product.id}
-                      className="border-t border-card-border/10"
-                    >
-                      <td className="py-4 px-6">{product.order ?? "-"}</td>
-                      <td className="py-4 px-6">
-                        {product.product_code || "-"}
-                      </td>
-                      <td className="py-4 px-6">{product.name}</td>
-                      <td className="py-4 px-6">{product.categories?.name}</td>
-                      <td className="py-4 px-6">{product.content}</td>
-                      <td
-                        className={`py-4 px-6 ${
-                          product.stock <= 20 ? "text-red-500 font-bold" : ""
-                        }`}
-                      >
-                        {product.stock}
-                      </td>
-                      <td className="py-4 px-6">₹{product.actual_price}</td>
-                      <td className="py-4 px-6">₹{product.offer_price}</td>
-                      {userRole?.name === "superadmin" && (
-                        <td className="py-4 px-6">{product.apr || "-"}</td>
-                      )}
-                      <td className="py-4 px-6">
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-bold ${
-                            product.is_active
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
+                ) : groupByCategory ? (
+                  categoryGroups.map((group) => {
+                    const categoryDragged =
+                      dragging?.kind === "category" &&
+                      dragging.id === group.id;
+                    const groupEdge =
+                      dropTarget?.kind === "group" && dropTarget.id === group.id
+                        ? dropTarget.edge
+                        : null;
+
+                    return (
+                      <Fragment key={group.id ?? "uncategorized"}>
+                        {/* Category band. Drag it to reorder the whole
+                            category; drop a product on it to move that
+                            product to the end of this category. */}
+                        <tr
+                          draggable={dndEnabled && group.id !== null}
+                          onDragStart={() => {
+                            if (!dndEnabled || !group.id) return;
+                            setDragging({ kind: "category", id: group.id });
+                          }}
+                          onDragOver={(e) => {
+                            if (!dndEnabled || !dragging) return;
+                            e.preventDefault();
+                            setDropTarget({
+                              kind: "group",
+                              id: group.id ?? "uncategorized",
+                              edge: edgeFromPointer(e),
+                            });
+                          }}
+                          onDragLeave={() =>
+                            setDropTarget((current) =>
+                              current?.id === (group.id ?? "uncategorized")
+                                ? null
+                                : current
+                            )
+                          }
+                          onDrop={(e) => {
+                            if (!dndEnabled) return;
+                            e.preventDefault();
+                            handleDropOnGroup(group.id);
+                          }}
+                          onDragEnd={() => {
+                            setDragging(null);
+                            setDropTarget(null);
+                          }}
+                          className={`bg-card/70 border-t border-card-border/10 ${
+                            categoryDragged ? "opacity-40" : ""
+                          } ${
+                            groupEdge
+                              ? "shadow-[inset_0_3px_0_0_rgb(var(--primary-orange))]"
+                              : ""
                           }`}
                         >
-                          {product.is_active ? "Active" : "Inactive"}
-                        </span>
-                      </td>
-                      {userRole?.name === "superadmin" && (
-                        <td className="py-4 px-6">
-                          <div className="flex items-center justify-center space-x-2">
-                            <button
-                              onClick={() => handleEdit(product)}
-                              disabled={isSelectedReadOnly}
-                              title={
-                                isSelectedReadOnly
-                                  ? "This season is closed and read-only"
-                                  : "Edit product"
-                              }
-                              className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              <Edit2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))
+                          <td
+                            colSpan={columnCount}
+                            className={`${
+                              bulkEditMode ? "py-2 px-2" : "py-3 px-4"
+                            } font-semibold`}
+                          >
+                            <span className="flex items-center gap-2">
+                              {dndEnabled && group.id && (
+                                <GripVertical className="w-4 h-4 text-text/40 cursor-grab" />
+                              )}
+                              <span className="text-primary-orange">
+                                {group.name}
+                              </span>
+                              <span className="text-xs font-normal text-text/60">
+                                {group.products.length} product
+                                {group.products.length === 1 ? "" : "s"}
+                              </span>
+                            </span>
+                          </td>
+                        </tr>
+                        {group.products.map(renderProductRow)}
+                      </Fragment>
+                    );
+                  })
+                ) : (
+                  sortedProducts.map(renderProductRow)
                 )}
               </tbody>
             </table>
@@ -1456,9 +2847,58 @@ export function StockManagement() {
                       min={0}
                     />
                   </div>
+                  {/* Offer price is the input; actual price is derived from
+                      it at the season's price-list discount. */}
                   <div>
                     <label className="block mb-1 font-medium">
-                      Actual Price
+                      Offer Price
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.offer_price ?? ""}
+                      onChange={(e) =>
+                        setEditForm((f) => {
+                          const next = {
+                            ...f,
+                            offer_price: Number(e.target.value),
+                          };
+                          if (editAutoActual) {
+                            const derived = deriveActual(e.target.value);
+                            if (derived !== null) next.actual_price = derived;
+                          }
+                          return next;
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 font-medium flex items-center justify-between gap-2">
+                      <span>Actual Price</span>
+                      {discountUsable && (
+                        <span className="flex items-center gap-1 text-xs font-normal text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={editAutoActual}
+                            onChange={(e) => {
+                              const auto = e.target.checked;
+                              setEditAutoActual(auto);
+                              if (!auto) return;
+                              const derived = deriveActual(
+                                editForm.offer_price
+                              );
+                              if (derived !== null)
+                                setEditForm((f) => ({
+                                  ...f,
+                                  actual_price: derived,
+                                }));
+                            }}
+                          />
+                          auto at {formatPrice(seasonDiscount)}%
+                        </span>
+                      )}
                     </label>
                     <input
                       type="number"
@@ -1469,25 +2909,14 @@ export function StockManagement() {
                           actual_price: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border rounded"
+                      readOnly={editAutoActual && discountUsable}
+                      className={`w-full px-3 py-2 border rounded ${
+                        editAutoActual && discountUsable
+                          ? "bg-gray-100 text-gray-600 cursor-not-allowed"
+                          : ""
+                      }`}
                       min={0}
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium">
-                      Offer Price
-                    </label>
-                    <input
-                      type="number"
-                      value={editForm.offer_price ?? ""}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          offer_price: Number(e.target.value),
-                        }))
-                      }
-                      className="w-full px-3 py-2 border rounded"
-                      min={0}
+                      step="0.01"
                     />
                   </div>
                   <div>
@@ -1674,9 +3103,10 @@ export function StockManagement() {
                         product_id: created.id,
                         actual_price: Number(addForm.actual_price ?? 0),
                         offer_price: Number(addForm.offer_price ?? 0),
-                        discount_percentage: Number(
-                          addForm.discount_percentage ?? 0
-                        ),
+                        discount_percentage:
+                          addAutoActual && discountUsable
+                            ? seasonDiscount
+                            : Number(addForm.discount_percentage ?? 0),
                         content: addForm.content,
                         opening_stock: Number(addForm.stock ?? 0),
                         stock: Number(addForm.stock ?? 0),
@@ -1729,7 +3159,10 @@ export function StockManagement() {
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">
-                      Product Code
+                      Product Code{" "}
+                      <span className="text-xs font-normal text-gray-500">
+                        (generated — editable)
+                      </span>
                     </label>
                     <input
                       type="text"
@@ -1752,6 +3185,12 @@ export function StockManagement() {
                         setAddForm((f) => ({
                           ...f,
                           category_id: e.target.value,
+                          // Position is per category, so a category change
+                          // re-points it at the end of the new one — unless a
+                          // position was typed by hand.
+                          order: addOrderTouched
+                            ? f.order
+                            : nextOrderFor(e.target.value),
                         }))
                       }
                       className="w-full px-3 py-2 border rounded"
@@ -1793,7 +3232,52 @@ export function StockManagement() {
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">
-                      Actual Price
+                      Offer Price
+                    </label>
+                    <input
+                      type="number"
+                      value={addForm.offer_price ?? ""}
+                      onChange={(e) =>
+                        setAddForm((f) => {
+                          const next = {
+                            ...f,
+                            offer_price: Number(e.target.value),
+                          };
+                          if (addAutoActual) {
+                            const derived = deriveActual(e.target.value);
+                            if (derived !== null) next.actual_price = derived;
+                          }
+                          return next;
+                        })
+                      }
+                      className="w-full px-3 py-2 border rounded"
+                      min={0}
+                      step="0.01"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 font-medium flex items-center justify-between gap-2">
+                      <span>Actual Price</span>
+                      {discountUsable && (
+                        <span className="flex items-center gap-1 text-xs font-normal text-gray-600">
+                          <input
+                            type="checkbox"
+                            checked={addAutoActual}
+                            onChange={(e) => {
+                              const auto = e.target.checked;
+                              setAddAutoActual(auto);
+                              if (!auto) return;
+                              const derived = deriveActual(addForm.offer_price);
+                              if (derived !== null)
+                                setAddForm((f) => ({
+                                  ...f,
+                                  actual_price: derived,
+                                }));
+                            }}
+                          />
+                          auto at {formatPrice(seasonDiscount)}%
+                        </span>
+                      )}
                     </label>
                     <input
                       type="number"
@@ -1804,25 +3288,14 @@ export function StockManagement() {
                           actual_price: Number(e.target.value),
                         }))
                       }
-                      className="w-full px-3 py-2 border rounded"
+                      readOnly={addAutoActual && discountUsable}
+                      className={`w-full px-3 py-2 border rounded ${
+                        addAutoActual && discountUsable
+                          ? "bg-gray-100 text-gray-600 cursor-not-allowed"
+                          : ""
+                      }`}
                       min={0}
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium">
-                      Offer Price
-                    </label>
-                    <input
-                      type="number"
-                      value={addForm.offer_price ?? ""}
-                      onChange={(e) =>
-                        setAddForm((f) => ({
-                          ...f,
-                          offer_price: Number(e.target.value),
-                        }))
-                      }
-                      className="w-full px-3 py-2 border rounded"
-                      min={0}
+                      step="0.01"
                     />
                   </div>
                   <div>
@@ -1839,17 +3312,24 @@ export function StockManagement() {
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-medium">Order</label>
+                    <label className="block mb-1 font-medium">
+                      Order{" "}
+                      <span className="text-xs font-normal text-gray-500">
+                        (position in its category)
+                      </span>
+                    </label>
                     <input
                       type="number"
                       value={addForm.order ?? ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setAddOrderTouched(true);
                         setAddForm((f) => ({
                           ...f,
                           order: Number(e.target.value),
-                        }))
-                      }
-                      className="w-full px-3 py-2 border rounded"
+                        }));
+                      }}
+                      onWheel={(e) => e.currentTarget.blur()}
+                      className="w-full px-3 py-2 border rounded no-spinner"
                       min={0}
                       placeholder="Order"
                     />
@@ -1955,6 +3435,19 @@ export function StockManagement() {
           </div>
         </>
       )}
+
+      <BulkAddProductsModal
+        isOpen={showBulkAddModal}
+        onClose={() => setShowBulkAddModal(false)}
+        onSuccess={fetchProducts}
+        seasonId={selectedSeasonId}
+        seasonName={selectedSeason?.name}
+        isLive={selectedSeason?.status === "active"}
+        categories={categories}
+        existingProducts={products}
+        seasonDiscount={seasonDiscount}
+        canEditCost={userRole?.name === "superadmin"}
+      />
 
       <BulkImportModal
         isOpen={showImportModal}
