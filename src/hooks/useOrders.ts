@@ -34,6 +34,12 @@ export async function createOrder(order: {
     total_price: number;
   }[];
   delivery_details: DeliveryDetails;
+  /**
+   * The season the order is priced from. Analytics filters by this exactly
+   * (`orders.season_id`) and falls back to dates only for rolling presets, so
+   * an order without it is invisible to every season-scoped report.
+   */
+  season_id?: string | null;
 }) {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
@@ -60,6 +66,7 @@ export async function createOrder(order: {
     .from('orders')
     .insert({
       user_id: userData.user.id,
+      season_id: order.season_id ?? null,
       total_amount: order.total_amount,
       payment_method: order.payment_method,
       status: 'Enquiry Received',

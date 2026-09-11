@@ -9,12 +9,14 @@ import {
   Search,
   ArrowRight,
   Pencil,
+  Percent,
 } from "lucide-react";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useSeasons, useSeasonActions, Season } from "../context/SeasonContext";
+import { actualFromOffer, formatPrice } from "../lib/pricing";
 
 interface CarryRow {
   product_id: string;
@@ -29,6 +31,67 @@ interface SeasonSummary {
   totalStock: number;
   /** Used to spot products the live season has but a draft does not. */
   productIds: Set<string>;
+}
+
+/**
+ * Validates the price-list discount typed into a season form.
+ *
+ * Returns the number, or null when it is unusable. 100% is rejected because
+ * actual = offer / (1 - 1) divides by zero; a negative would mark prices up.
+ */
+function parseDiscount(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return 0;
+  const value = Number(trimmed);
+  if (!Number.isFinite(value) || value < 0 || value >= 100) return null;
+  return value;
+}
+
+/**
+ * The season's headline price-list discount.
+ *
+ * Actual prices are DERIVED from it, so it is edited alongside the season's
+ * dates rather than buried per product: change it once and every product's
+ * struck-out price follows from its offer price.
+ */
+function DiscountField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const preview = actualFromOffer(8, parseDiscount(value) ?? 0);
+
+  return (
+    <div>
+      <label className="block mb-1 font-medium">Price list discount %</label>
+      <div className="relative">
+        <input
+          type="number"
+          min={0}
+          max={99.99}
+          step="0.01"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="80"
+          className="w-full px-3 py-2 pr-9 rounded-lg bg-card border border-card-border/10"
+        />
+        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text/40" />
+      </div>
+      <p className="text-xs text-text/60 mt-1">
+        Actual (struck-out) prices are calculated from the offer price at this
+        discount.
+        {preview !== null && (
+          <>
+            {" "}
+            An offer price of ₹8 prints as{" "}
+            <span className="font-semibold">₹{formatPrice(preview)}</span>.
+          </>
+        )}
+      </p>
+    </div>
+  );
 }
 
 export function Seasons() {
@@ -53,6 +116,7 @@ export function Seasons() {
     name: "",
     start_date: "",
     end_date: "",
+    price_list_discount: "",
   });
 
   // Edit-season form
@@ -62,6 +126,7 @@ export function Seasons() {
     name: "",
     start_date: "",
     end_date: "",
+    price_list_discount: "",
   });
 
   // Copy-forward wizard
@@ -158,6 +223,11 @@ export function Seasons() {
       // A season runs April 1 -> March 31, matching how the business reports.
       start_date: `${startYear}-04-01`,
       end_date: `${startYear + 1}-03-31`,
+      // Carry the live season's headline discount as the starting point — a new
+      // season is nearly always printed at the same discount as the last one.
+      price_list_discount: activeSeason
+        ? String(activeSeason.price_list_discount_percentage ?? "")
+        : "",
     });
     setShowCreate(true);
   };
@@ -167,12 +237,27 @@ export function Seasons() {
       toast.error("Fill in every field");
       return;
     }
+    const discount = parseDiscount(newSeason.price_list_discount);
+    if (discount === null) {
+      toast.error("Price list discount must be between 0 and 99.99%");
+      return;
+    }
     setBusy(true);
     try {
-      await createSeason(newSeason);
+      const { price_list_discount, ...fields } = newSeason;
+      await createSeason({
+        ...fields,
+        price_list_discount_percentage: discount,
+      });
       toast.success(`Season ${newSeason.name} created as a draft`);
       setShowCreate(false);
-      setNewSeason({ code: "", name: "", start_date: "", end_date: "" });
+      setNewSeason({
+        code: "",
+        name: "",
+        start_date: "",
+        end_date: "",
+        price_list_discount: "",
+      });
     } catch (e: any) {
       toast.error(e?.message || "Failed to create season");
     } finally {
@@ -188,6 +273,7 @@ export function Seasons() {
       // <input type="date"> needs a bare yyyy-mm-dd value.
       start_date: String(season.start_date).slice(0, 10),
       end_date: String(season.end_date).slice(0, 10),
+      price_list_discount: String(season.price_list_discount_percentage ?? 0),
     });
   };
 
@@ -201,9 +287,18 @@ export function Seasons() {
       toast.error("End date must be after the start date");
       return;
     }
+    const discount = parseDiscount(editForm.price_list_discount);
+    if (discount === null) {
+      toast.error("Price list discount must be between 0 and 99.99%");
+      return;
+    }
     setBusy(true);
     try {
-      await updateSeason(editing.id, editForm);
+      const { price_list_discount, ...fields } = editForm;
+      await updateSeason(editing.id, {
+        ...fields,
+        price_list_discount_percentage: discount,
+      });
       toast.success(`Season ${editForm.name} updated`);
       setEditing(null);
     } catch (e: any) {
@@ -460,6 +555,15 @@ export function Seasons() {
                       {summary
                         ? `${summary.productCount} products · ${summary.totalStock} units in stock`
                         : "No catalog yet"}
+                      {Number(season.price_list_discount_percentage) > 0 && (
+                        <>
+                          {" · "}
+                          <span className="text-primary-orange font-medium">
+                            {formatPrice(season.price_list_discount_percentage)}%
+                            price list discount
+                          </span>
+                        </>
+                      )}
                     </p>
 
                     {/* A product added to the live season after this draft was
@@ -608,6 +712,12 @@ export function Seasons() {
                   />
                 </div>
               </div>
+              <DiscountField
+                value={newSeason.price_list_discount}
+                onChange={(value) =>
+                  setNewSeason((f) => ({ ...f, price_list_discount: value }))
+                }
+              />
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <button
@@ -683,6 +793,12 @@ export function Seasons() {
                   />
                 </div>
               </div>
+              <DiscountField
+                value={editForm.price_list_discount}
+                onChange={(value) =>
+                  setEditForm((f) => ({ ...f, price_list_discount: value }))
+                }
+              />
             </div>
 
             <p className="text-xs text-text/50 mt-4">

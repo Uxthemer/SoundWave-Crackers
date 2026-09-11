@@ -42,14 +42,15 @@ export interface Database {
           name: string
           description: string | null
           image_url: string | null
-          actual_price: number
-          discount_percentage: number
-          offer_price: number
-          content: string | null
-          stock: number
           created_at: string
           yt_link: string | null
           product_type: string | null
+          /** Legacy, pre-season columns. Commercials live on product_seasons. */
+          actual_price: number | null
+          discount_percentage: number | null
+          offer_price: number | null
+          content: string | null
+          stock: number | null
           apr: number | null
           is_active: boolean | null
           order: number | null
@@ -59,33 +60,40 @@ export interface Database {
           id?: string
           category_id: string
           name: string
+          product_code?: string
           description?: string | null
           image_url?: string | null
-          actual_price: number
-          discount_percentage?: number
-          offer_price: number
-          content?: string | null
-          stock?: number
           created_at?: string
+          yt_link?: string | null
+          product_type?: string | null
+          actual_price?: number | null
+          discount_percentage?: number | null
+          offer_price?: number | null
+          content?: string | null
+          stock?: number | null
         }
         Update: {
           id?: string
           category_id?: string
           name?: string
+          product_code?: string
           description?: string | null
           image_url?: string | null
-          actual_price?: number
-          discount_percentage?: number
-          offer_price?: number
-          content?: string | null
-          stock?: number
           created_at?: string
+          yt_link?: string | null
+          product_type?: string | null
+          actual_price?: number | null
+          discount_percentage?: number | null
+          offer_price?: number | null
+          content?: string | null
+          stock?: number | null
         }
       }
       orders: {
         Row: {
           id: string
-          user_id: string
+          /** NULL for a guest checkout — the order has no account behind it. */
+          user_id: string | null
           total_amount: number
           status: string
           payment_method: string | null
@@ -104,7 +112,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          user_id: string
+          user_id?: string | null
           total_amount: number
           status?: string
           payment_method?: string | null
@@ -434,6 +442,8 @@ export interface Database {
           end_date: string
           status: SeasonStatus
           is_unlocked: boolean
+          /** Headline discount the price list is printed at; actual_price is derived from it. */
+          price_list_discount_percentage: number
           unlocked_by: string | null
           unlocked_at: string | null
           copied_from: string | null
@@ -450,6 +460,7 @@ export interface Database {
           end_date: string
           status?: SeasonStatus
           is_unlocked?: boolean
+          price_list_discount_percentage?: number
           copied_from?: string | null
           created_by?: string | null
         }
@@ -460,6 +471,7 @@ export interface Database {
           end_date?: string
           status?: SeasonStatus
           is_unlocked?: boolean
+          price_list_discount_percentage?: number
           copied_from?: string | null
         }
       },
@@ -601,6 +613,46 @@ export interface Database {
       set_season_unlocked: {
         Args: { p_season: string; p_unlocked: boolean }
         Returns: void
+      }
+      apply_season_price_list_discount: {
+        Args: { p_season: string; p_only_missing?: boolean }
+        Returns: number
+      }
+      copy_season_discount: {
+        Args: { p_source_season: string; p_target_season: string }
+        Returns: void
+      }
+      // Guest checkout. The only two things an unauthenticated visitor may
+      // do with orders; both re-check everything server-side.
+      create_guest_order: {
+        Args: {
+          p_delivery: Record<string, string>
+          p_items: { product_id: string; quantity: number }[]
+          p_payment_method?: string
+        }
+        Returns: {
+          id: string
+          short_id: string
+          total_amount: number
+          item_count: number
+        }
+      }
+      track_guest_order: {
+        Args: { p_reference: string; p_phone: string }
+        Returns: {
+          id: string
+          short_id: string
+          status: string
+          created_at: string
+          total_amount: number
+          full_name: string
+          phone: string
+          address: string
+          city: string
+          district: string
+          state: string
+          pincode: string
+        }[]
       }
     }
     Enums: {

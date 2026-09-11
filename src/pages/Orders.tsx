@@ -49,6 +49,8 @@ interface Order {
   short_id?: string;
   referred_by?: string;
   season_id?: string | null;
+  /** NULL when the order came from guest checkout, with no account behind it. */
+  user_id?: string | null;
 }
 
 const ORDER_STATUSES = [
@@ -942,7 +944,16 @@ export function Orders() {
                       <td className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap">
                         {order.short_id || order.id.slice(0, 8) + "..."}
                       </td>
-                      <td className="py-3 px-3 sm:px-6 min-w-[150px]">{order.full_name}</td>
+                      <td className="py-3 px-3 sm:px-6 min-w-[150px]">
+                        {order.full_name}
+                        {/* Worth seeing at a glance: a guest order has no
+                            account to chase up, only the phone on the row. */}
+                        {!order.user_id && (
+                          <span className="ml-2 align-middle px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                            GUEST
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         <div>
                           <p className="text-xs sm:text-sm whitespace-nowrap">{order.phone}</p>

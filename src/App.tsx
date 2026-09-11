@@ -22,6 +22,7 @@ import {
   HeartHandshake,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
 import { useTheme } from "./context/ThemeContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { AppSettingsProvider, useAppSettings } from "./context/AppSettingsContext";
@@ -242,29 +243,31 @@ export function AppContent() {
   };
 
 
-  const PRICE_LIST_URL =
-    "https://nqlhrwpgdaulwdzgmumv.supabase.co/storage/v1/object/sign/Price%20List/Soundwave%20Crackers%20-%20Price%20List%202025-2.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80NTY2MGYwMC1lNzc0LTRiYmItODdlNS1kYzk0YzFlMzIzMzkiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJQcmljZSBMaXN0L1NvdW5kd2F2ZSBDcmFja2VycyAtIFByaWNlIExpc3QgMjAyNS0yLnBkZiIsImlhdCI6MTc2MzIxMTg4OCwiZXhwIjoxNzk0NzQ3ODg4fQ.NSE-742_GDzgMFP7A6CRg1wmIX-xLWqd58pBEo8Dr2E";
+  const [priceListLoading, setPriceListLoading] = useState(false);
 
+  /**
+   * Builds the current price list from the live catalogue and downloads it.
+   *
+   * It used to fetch a signed URL for a PDF someone had exported and uploaded
+   * by hand, so the link showed last year's prices until that was redone.
+   */
   const handleDownloadPriceList = async () => {
+    if (priceListLoading) return;
+    setPriceListLoading(true);
+    const pending = toast.loading("Preparing the latest price list…");
     try {
-      const res = await fetch(PRICE_LIST_URL, { method: "GET" });
-      if (!res.ok) {
-        // fallback: open in new tab
-        window.open(PRICE_LIST_URL, "_blank");
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "Soundwave_Crackers_Price_List_2025.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      // fallback open link
-      window.open(PRICE_LIST_URL, "_blank");
+      const { downloadLatestPriceListPdf } = await import(
+        "./lib/latestPriceList"
+      );
+      await downloadLatestPriceListPdf();
+      toast.success("Price list downloaded", { id: pending });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not build the price list",
+        { id: pending }
+      );
+    } finally {
+      setPriceListLoading(false);
     }
   };
 
@@ -342,9 +345,11 @@ export function AppContent() {
             </NavLink>
             <button
               onClick={handleDownloadPriceList}
-              className="font-montserrat font-semibold transition-colors cursor-pointer px-3 py-1 rounded hover:bg-card/60 text-primary"
+              disabled={priceListLoading}
+              title="Download the current price list"
+              className="font-montserrat font-semibold transition-colors cursor-pointer px-3 py-1 rounded hover:bg-card/60 text-primary disabled:opacity-60 disabled:cursor-wait"
             >
-              Price List
+              {priceListLoading ? "Preparing…" : "Price List"}
             </button>
           </div>
 
@@ -429,9 +434,10 @@ export function AppContent() {
                   handleDownloadPriceList();
                   setIsMobileMenuOpen(false);
                 }}
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange text-left"
+                disabled={priceListLoading}
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange text-left disabled:opacity-60 disabled:cursor-wait"
               >
-                Price List
+                {priceListLoading ? "Preparing…" : "Price List"}
               </button>
             </div>
           </div>

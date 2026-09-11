@@ -162,6 +162,7 @@ export function useSeasonActions() {
     name: string;
     start_date: string;
     end_date: string;
+    price_list_discount_percentage?: number;
   }) => {
     const { data, error } = await supabase
       .from("seasons")
@@ -180,6 +181,7 @@ export function useSeasonActions() {
       name: string;
       start_date: string;
       end_date: string;
+      price_list_discount_percentage: number;
     }>
   ) => {
     const { error } = await supabase
@@ -201,8 +203,37 @@ export function useSeasonActions() {
       p_carry_stock_ids: carryStockProductIds,
     });
     if (error) throw error;
+
+    // The headline discount is part of the same commercial setup as the prices
+    // it derived, so a draft copied from last season starts on last season's
+    // discount instead of silently reverting to 0.
+    const { error: discountError } = await supabase.rpc(
+      "copy_season_discount",
+      { p_source_season: sourceSeasonId, p_target_season: targetSeasonId }
+    );
+    if (discountError) throw discountError;
+
     await refresh();
     return data as unknown as number;
+  };
+
+  /**
+   * Re-derives actual_price from offer_price for every product in the season,
+   * using the season's configured discount. Returns the number of rows priced.
+   *
+   * `onlyMissing` fills in products that have no actual price yet and leaves
+   * hand-set prices alone.
+   */
+  const applyPriceListDiscount = async (
+    seasonId: string,
+    onlyMissing = false
+  ) => {
+    const { data, error } = await supabase.rpc(
+      "apply_season_price_list_discount",
+      { p_season: seasonId, p_only_missing: onlyMissing }
+    );
+    if (error) throw error;
+    return (data as unknown as number) ?? 0;
   };
 
   const activateSeason = async (seasonId: string) => {
@@ -232,6 +263,7 @@ export function useSeasonActions() {
     createSeason,
     updateSeason,
     copyForward,
+    applyPriceListDiscount,
     activateSeason,
     closeSeason,
     setSeasonUnlocked,
