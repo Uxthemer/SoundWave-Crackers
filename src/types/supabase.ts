@@ -213,6 +213,10 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified: boolean
+          alternate_phone: string | null
+          /** Base64 mirror of the password, replayed by phone sign-in. */
+          pwd: string | null
           created_at: string
         }
         Insert: {
@@ -227,6 +231,9 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified?: boolean
+          alternate_phone?: string | null
+          pwd?: string | null
           created_at?: string
         }
         Update: {
@@ -241,6 +248,9 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified?: boolean
+          alternate_phone?: string | null
+          pwd?: string | null
           created_at?: string
         }
       }

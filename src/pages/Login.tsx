@@ -5,6 +5,7 @@ import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound, Eye, EyeOff, ArrowRigh
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
+import { decodeStoredPassword } from "../lib/legacyPasswordStore";
 import toast from "react-hot-toast";
 import { z } from "zod";
 import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
@@ -90,6 +91,10 @@ function ForgotPasswordModal({
           <label className="block text-sm font-medium mb-2">
             Enter your registered email address
           </label>
+          <p className="text-xs text-gray-500 -mt-2">
+            We'll send you a link to set a new password. Open it in this same
+            browser, and use it within the hour.
+          </p>
           <input
             type="email"
             value={forgotEmail}
@@ -246,13 +251,26 @@ export function Login() {
         .eq("phone", phone)
         .single();
       if (phoneUserError) throw phoneUserError;
-      if (phoneUser) {
-        const { error } = await signInWithEmail(
-          phoneUser.email,
-          atob(phoneUser.pwd)
+      if (!phoneUser) throw new Error("No account found for this number");
+
+      // The OTP proves the phone number; the actual Supabase session still
+      // comes from an email + password sign-in, replayed from the mirror
+      // that password resets now keep in step.
+      const storedPassword = decodeStoredPassword(phoneUser.pwd);
+      if (!storedPassword) {
+        // Older accounts predate the mirror. Send them down a route that
+        // works instead of failing with "verification failed", which points
+        // at the OTP they just completed correctly.
+        showToast(
+          "error",
+          "Phone sign-in is not set up for this account yet. Please sign in with your email, or use Forgot Password."
         );
-        if (error) throw error;
+        return;
       }
+
+      const { error } = await signInWithEmail(phoneUser.email, storedPassword);
+      if (error) throw error;
+
       showToast("success", "Successfully signed in!");
       navigate(returnTo);
     } catch (error: any) {
@@ -264,23 +282,64 @@ export function Login() {
   // --- FORGOT PASSWORD LOGIC ---
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validated before the request so a typo is reported as a typo, rather
+    // than as "failed to send" alongside every other possible failure.
+    const parsed = emailSchema.safeParse(forgotEmail.trim());
+    if (!parsed.success) {
+      showToast("error", "Please enter a valid email address.");
+      return;
+    }
+
     setForgotLoading(true);
     try {
-      emailSchema.parse(forgotEmail);
-      const redirectUrl =
-        import.meta.env.VITE_PUBLIC_SITE_URL
-          ? `${import.meta.env.VITE_PUBLIC_SITE_URL}/update-password`
-          : `${window.location.origin}/update-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: redirectUrl,
-      });
+      // VITE_PUBLIC_SITE_URL pins the link to the deployed site, so a reset
+      // requested from a preview build still points at production.
+      //
+      // Except when running locally: sending a developer's test reset to the
+      // live site means testing the deployed build instead of the one being
+      // worked on, and the link cannot come back to a machine the phone
+      // cannot reach anyway.
+      //
+      // Either way the URL must also be listed under Supabase -> Authentication
+      // -> URL Configuration -> Redirect URLs, or Supabase quietly substitutes
+      // the project's Site URL.
+      const isLocalHost = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(
+        window.location.hostname
+      );
+      const configuredSite = import.meta.env.VITE_PUBLIC_SITE_URL as
+        | string
+        | undefined;
+      const base = isLocalHost
+        ? window.location.origin
+        : configuredSite || window.location.origin;
+      const redirectUrl = `${base.replace(/\/+$/, "")}/update-password`;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        parsed.data,
+        { redirectTo: redirectUrl }
+      );
       if (error) throw error;
-      showToast("success", "Password reset link sent to your email.");
+
+      // Supabase answers the same way whether or not the address is
+      // registered, so that this form cannot be used to discover who has an
+      // account. The wording reflects that rather than promising an email.
+      showToast(
+        "success",
+        "If that email is registered, a reset link is on its way. It expires in about an hour."
+      );
       setShowForgotModal(false);
       setForgotEmail("");
     } catch (error: any) {
       console.error(error);
-      showToast("error", "Failed to send reset link. Please check your email.");
+      // Rate limiting is the common real failure and has a clear remedy.
+      const message: string = error?.message ?? "";
+      showToast(
+        "error",
+        /rate limit|too many|429/i.test(message)
+          ? "Too many reset requests. Please wait a few minutes and try again."
+          : message || "Failed to send reset link. Please try again."
+      );
     } finally {
       setForgotLoading(false);
     }

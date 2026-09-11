@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import {
   Search,
   Plus,
@@ -22,6 +22,7 @@ import {
   Percent,
   Calculator,
   FileText,
+  Filter,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
@@ -75,6 +76,10 @@ interface Category {
   order?: number;
 }
 
+/** Which slice of the catalog the table is showing. */
+type StockFilter = "all" | "inStock" | "zero" | "low";
+type StatusFilter = "all" | "active" | "inactive";
+
 /**
  * States which season a product form writes to.
  *
@@ -115,6 +120,118 @@ function SeasonTargetNotice({
   );
 }
 
+/**
+ * A toolbar button that opens a menu.
+ *
+ * The page had grown to nine flat buttons across the top, which on a laptop
+ * wrapped into two rows of near-identical pills. Grouping them by what they
+ * do — bulk changes, exports — puts the row back to a glance.
+ */
+function ToolbarMenu({
+  label,
+  icon,
+  children,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={container} className="relative w-full sm:w-auto">
+      <button
+        onClick={() => setOpen((on) => !on)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto ${
+          open
+            ? "bg-primary-orange/10 text-primary-orange border border-primary-orange/30"
+            : "bg-card hover:bg-card/70 border border-transparent"
+        }`}
+      >
+        {icon}
+        <span>{label}</span>
+        <ChevronDown
+          className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && (
+        // Closing on click anywhere inside covers every item without each of
+        // them having to remember to do it.
+        <div
+          role="menu"
+          onClick={() => setOpen(false)}
+          className="absolute left-0 z-40 mt-2 w-full sm:w-72 rounded-xl border border-card-border/20 bg-background shadow-xl py-1.5"
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One row in a {@link ToolbarMenu}. */
+function MenuItem({
+  icon,
+  label,
+  hint,
+  onClick,
+  disabled,
+  title,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  hint?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
+  return (
+    <button
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className="w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+    >
+      <span className="mt-0.5 text-text/70">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{label}</span>
+        {hint && (
+          <span className="block text-xs text-text/60 leading-snug">{hint}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** A labelled divider inside a menu. */
+function MenuSection({ label }: { label: string }) {
+  return (
+    <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-text/40 border-t border-card-border/10 first:border-t-0 first:pt-1">
+      {label}
+    </div>
+  );
+}
+
 export function StockManagement() {
   const {
     seasons,
@@ -133,6 +250,16 @@ export function StockManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  // Stock-keeping filters. A price list is worked through a slice at a time —
+  // everything that ran out, everything running low, everything switched off —
+  // and bulk edit then applies to exactly that slice.
+  const [stockFilter, setStockFilter] = useState<StockFilter>("all");
+  // Held as a string so the box can be emptied while retyping without
+  // snapping to 0 and hiding every row.
+  const [lowStockThreshold, setLowStockThreshold] = useState("10");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [needsPricing, setNeedsPricing] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -146,6 +273,12 @@ export function StockManagement() {
   const [sortField, setSortField] = useState<string>("order");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const { userRole } = useAuth();
+  const isSuperadmin = userRole?.name === "superadmin";
+  const canManage = ["admin", "superadmin"].includes(userRole?.name || "");
+
+  // Collapsed by default: the discount is set once a season and then left
+  // alone, so it should not push the table down the page every visit.
+  const [priceConfigOpen, setPriceConfigOpen] = useState(false);
 
   // Price-list discount config, held as a string so the field can be cleared
   // while typing without snapping back to 0.
@@ -1570,7 +1703,12 @@ Offer prices are not changed.`
     }
   };
 
-  const filteredProducts = products.filter((product) => {
+  /**
+   * Search and category first, on their own: the stock and status counts on
+   * the filter buttons describe this slice, so switching between them does
+   * not change the numbers underneath.
+   */
+  const searchedProducts = products.filter((product) => {
     const matchesSearch = product.name
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
@@ -1579,8 +1717,85 @@ Offer prices are not changed.`
     return matchesSearch && matchesCategory;
   });
 
+  /** A blank or nonsensical threshold filters nothing rather than everything. */
+  const lowStockLimit = Number(lowStockThreshold);
+  const lowStockUsable =
+    lowStockThreshold.trim() !== "" &&
+    Number.isFinite(lowStockLimit) &&
+    lowStockLimit > 0;
+
+  const stockOf = (product: Product) => Number(product.stock ?? 0);
+  /** Only an explicit false is inactive; a row with nothing set is live. */
+  const isInactive = (product: Product) => product.is_active === false;
+  const isUnpriced = (product: Product) => Number(product.offer_price ?? 0) <= 0;
+
+  const matchesStock = (product: Product) => {
+    const stock = stockOf(product);
+    switch (stockFilter) {
+      case "zero":
+        return stock <= 0;
+      case "inStock":
+        return stock > 0;
+      case "low":
+        return lowStockUsable ? stock < lowStockLimit : true;
+      default:
+        return true;
+    }
+  };
+
+  const matchesStatus = (product: Product) => {
+    if (statusFilter === "active") return !isInactive(product);
+    if (statusFilter === "inactive") return isInactive(product);
+    return true;
+  };
+
+  const filteredProducts = searchedProducts.filter(
+    (product) =>
+      matchesStock(product) &&
+      matchesStatus(product) &&
+      (!needsPricing || isUnpriced(product))
+  );
+
+  /** Counts shown on the filter buttons, against the searched slice. */
+  const counts = {
+    total: searchedProducts.length,
+    zero: searchedProducts.filter((p) => stockOf(p) <= 0).length,
+    inStock: searchedProducts.filter((p) => stockOf(p) > 0).length,
+    low: lowStockUsable
+      ? searchedProducts.filter((p) => stockOf(p) < lowStockLimit).length
+      : 0,
+    inactive: searchedProducts.filter(isInactive).length,
+    unpriced: searchedProducts.filter(isUnpriced).length,
+  };
+
+  const filtersActive =
+    searchTerm.trim() !== "" ||
+    categoryFilter !== "all" ||
+    stockFilter !== "all" ||
+    statusFilter !== "all" ||
+    needsPricing;
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setCategoryFilter("all");
+    setStockFilter("all");
+    setStatusFilter("all");
+    setNeedsPricing(false);
+  };
+
   // count of active products within current filtered list
   const activeCount = filteredProducts.filter((p) => p.is_active).length;
+
+  /**
+   * Rows edited in bulk and then filtered out of sight. They are still part
+   * of the save — silently dropping typed-in values would be worse — so the
+   * bulk bar says how many there are.
+   */
+  const hiddenChangedIds = bulkEditMode
+    ? bulkChangedIds.filter(
+        (id) => !filteredProducts.some((product) => product.id === id)
+      )
+    : [];
 
   // Add sorting handler
   const handleSort = (field: string) => {
@@ -2128,7 +2343,7 @@ Offer prices are not changed.`
     // An empty category is still worth a band in the full view — it is the
     // only place to drop the first product into it. While searching or
     // filtering it is just noise, and so is an empty catch-all.
-    return group.id !== null && !searchTerm && categoryFilter === "all";
+    return group.id !== null && !filtersActive;
   });
 
   if (!userRole) {
@@ -2225,6 +2440,123 @@ Offer prices are not changed.`
           </div>
         </div>
 
+        {/* Stock filters. Narrowing the table narrows what bulk edit touches,
+            which is how a season is worked through: filter to the slice that
+            needs attention, switch on bulk edit, type down the column. */}
+        <div className="mb-6 rounded-xl border border-card-border/10 bg-card/50 px-4 py-3 flex flex-col lg:flex-row lg:items-center gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-text/70 shrink-0">
+            <Filter className="w-4 h-4" />
+            <span>Filters</span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                ["all", "All", counts.total],
+                ["inStock", "In stock", counts.inStock],
+                ["zero", "Zero stock", counts.zero],
+                ["low", "Low stock", lowStockUsable ? counts.low : null],
+              ] as [StockFilter, string, number | null][]
+            ).map(([value, label, count]) => (
+              <button
+                key={value}
+                onClick={() => setStockFilter(value)}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors border ${
+                  stockFilter === value
+                    ? "bg-primary-orange/10 text-primary-orange border-primary-orange/40 font-semibold"
+                    : "bg-card border-card-border/10 hover:bg-card/70"
+                }`}
+              >
+                {label}
+                {count !== null && (
+                  <span className="ml-1.5 text-text/50">{count}</span>
+                )}
+              </button>
+            ))}
+
+            {/* The threshold only means anything while Low stock is on, but
+                it stays visible so the number can be set before switching. */}
+            <label
+              className={`flex items-center gap-1.5 text-sm rounded-lg border px-2 py-1 ${
+                stockFilter === "low"
+                  ? "border-primary-orange/40 bg-primary-orange/5"
+                  : "border-card-border/10 text-text/60"
+              }`}
+            >
+              <span>below</span>
+              <input
+                type="number"
+                min={1}
+                value={lowStockThreshold}
+                onChange={(e) => {
+                  setLowStockThreshold(e.target.value);
+                  if (e.target.value.trim() !== "") setStockFilter("low");
+                }}
+                onWheel={(e) => e.currentTarget.blur()}
+                aria-label="Low stock threshold"
+                className="w-16 px-2 py-0.5 rounded bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
+              />
+            </label>
+          </div>
+
+          <div className="hidden lg:block w-px h-6 bg-card-border/20" />
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(
+              [
+                ["all", "Any status", null],
+                ["active", "Active", counts.total - counts.inactive],
+                ["inactive", "Inactive", counts.inactive],
+              ] as [StatusFilter, string, number | null][]
+            ).map(([value, label, count]) => (
+              <button
+                key={value}
+                onClick={() => setStatusFilter(value)}
+                className={`px-3 py-1.5 rounded-lg text-sm transition-colors border ${
+                  statusFilter === value
+                    ? "bg-primary-orange/10 text-primary-orange border-primary-orange/40 font-semibold"
+                    : "bg-card border-card-border/10 hover:bg-card/70"
+                }`}
+              >
+                {label}
+                {count !== null && (
+                  <span className="ml-1.5 text-text/50">{count}</span>
+                )}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setNeedsPricing((on) => !on)}
+              title="Products with no offer price set"
+              className={`px-3 py-1.5 rounded-lg text-sm transition-colors border ${
+                needsPricing
+                  ? "bg-primary-orange/10 text-primary-orange border-primary-orange/40 font-semibold"
+                  : "bg-card border-card-border/10 hover:bg-card/70"
+              }`}
+            >
+              Needs pricing
+              <span className="ml-1.5 text-text/50">{counts.unpriced}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3 lg:ml-auto">
+            <span className="text-sm text-text/60">
+              {filtersActive
+                ? `Showing ${filteredProducts.length} of ${products.length}`
+                : `${products.length} products`}
+            </span>
+            {filtersActive && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 hover:bg-card/70 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Closed seasons are frozen. The database enforces this too — the
             banner just explains why the buttons are disabled. */}
         {isSelectedReadOnly && selectedSeason && (
@@ -2296,17 +2628,34 @@ Offer prices are not changed.`
             The whole price list is printed at one discount, so it is set once
             here rather than product by product. Actual prices are derived:
             actual = offer / (1 - discount/100). */}
-        {userRole?.name === "superadmin" && (
-          <div className="mb-6 rounded-xl border border-card-border/10 bg-card/30 p-5">
-            <div className="flex items-center gap-2 mb-1">
-              <Percent className="w-5 h-5 text-primary-orange" />
+        {isSuperadmin && (
+          <div className="mb-6 rounded-xl border border-card-border/10 bg-card/30">
+            <button
+              onClick={() => setPriceConfigOpen((on) => !on)}
+              aria-expanded={priceConfigOpen}
+              className="w-full flex items-center gap-2 px-5 py-4 text-left hover:bg-card/40 transition-colors rounded-xl"
+            >
+              <Percent className="w-5 h-5 text-primary-orange shrink-0" />
               <h2 className="text-lg font-semibold">
                 Price list configuration
               </h2>
+              {/* The discount itself in the header, so the section does not
+                  have to be opened just to check what it is set to. */}
               <span className="text-sm text-text/60">
-                — season {selectedSeason?.name ?? "—"}
+                — season {selectedSeason?.name ?? "—"} ·{" "}
+                {discountUsable
+                  ? `${formatPrice(seasonDiscount)}% discount`
+                  : "no discount set"}
               </span>
-            </div>
+              <ChevronDown
+                className={`w-5 h-5 ml-auto text-text/50 transition-transform ${
+                  priceConfigOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {priceConfigOpen && (
+            <div className="px-5 pb-5">
             <p className="text-sm text-text/70 mb-4">
               Enter the offer price for each product; the actual (struck-out)
               price is calculated from it at this discount. Each season keeps
@@ -2394,48 +2743,16 @@ Offer prices are not changed.`
                 "No discount configured — actual prices must be entered by hand."
               )}
             </p>
+            </div>
+            )}
           </div>
         )}
 
-        {/* Responsive Button Group */}
+        {/* Toolbar. Actions are grouped by what they do rather than laid
+            out flat: the row used to be nine near-identical pills that
+            wrapped onto two lines. The view toggle stays out on its own
+            because it is a mode, not an action. */}
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-6 w-full">
-          <button
-            onClick={() => setShowImportModal(true)}
-            disabled={isSelectedReadOnly}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <Upload className="w-5 h-5" />
-            <span>Bulk Import</span>
-          </button>
-          <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
-          >
-            <Printer className="w-5 h-5" />
-            <span>Print Stock Report</span>
-          </button>
-          <button
-            onClick={handlePriceListDownload}
-            title="Opens the price list as a PDF — print or save it from the viewer"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
-          >
-            <FileText className="w-5 h-5" />
-            <span>Price List PDF</span>
-          </button>
-          <button
-            onClick={() => handleExportPriceList("excel")}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
-          >
-            <Download className="w-5 h-5" />
-            <span>Export Excel</span>
-          </button>
-          <button
-            onClick={() => handleExportPriceList("csv")}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto"
-          >
-            <Download className="w-5 h-5" />
-            <span>Export CSV</span>
-          </button>
           <button
             onClick={() => setGroupByCategory((on) => !on)}
             title={
@@ -2446,59 +2763,110 @@ Offer prices are not changed.`
             className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors w-full sm:w-auto ${
               groupByCategory
                 ? "bg-primary-orange/10 text-primary-orange border border-primary-orange/30"
-                : "bg-card hover:bg-card/70"
+                : "bg-card hover:bg-card/70 border border-transparent"
             }`}
           >
             <LayoutList className="w-5 h-5" />
             <span>{groupByCategory ? "Grouped" : "Flat list"}</span>
           </button>
-          {userRole?.name === "superadmin" && !bulkEditMode && (
-            <button
-              onClick={enterBulkEdit}
-              disabled={isSelectedReadOnly}
-              title={
-                isSelectedReadOnly
-                  ? "This season is closed and read-only"
-                  : "Make every column on every visible row editable"
-              }
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <TableProperties className="w-5 h-5" />
-              <span>Bulk Edit</span>
-            </button>
+
+          {canManage && (
+            <ToolbarMenu label="Bulk" icon={<TableProperties className="w-5 h-5" />}>
+              <MenuSection label="Edit" />
+              {isSuperadmin && (
+                <MenuItem
+                  icon={<TableProperties className="w-4 h-4" />}
+                  label="Bulk edit rows"
+                  hint={
+                    filtersActive
+                      ? `Edit every column on the ${filteredProducts.length} filtered rows`
+                      : "Edit every column on every row in the table"
+                  }
+                  onClick={enterBulkEdit}
+                  disabled={isSelectedReadOnly || bulkEditMode}
+                  title={
+                    isSelectedReadOnly
+                      ? "This season is closed and read-only"
+                      : bulkEditMode
+                      ? "Already in bulk edit"
+                      : undefined
+                  }
+                />
+              )}
+              <MenuSection label="Add" />
+              <MenuItem
+                icon={<Plus className="w-4 h-4" />}
+                label="Add product"
+                hint="One product, with every field"
+                onClick={openAddModal}
+                disabled={isSelectedReadOnly}
+                title={
+                  isSelectedReadOnly
+                    ? "This season is closed and read-only"
+                    : undefined
+                }
+              />
+              <MenuItem
+                icon={<ListPlus className="w-4 h-4" />}
+                label="Bulk add products"
+                hint="Several at once on one sheet"
+                onClick={() => setShowBulkAddModal(true)}
+                disabled={isSelectedReadOnly}
+                title={
+                  isSelectedReadOnly
+                    ? "This season is closed and read-only"
+                    : undefined
+                }
+              />
+              <MenuItem
+                icon={<Upload className="w-4 h-4" />}
+                label="Import from file"
+                hint="Excel or CSV price list into this season"
+                onClick={() => setShowImportModal(true)}
+                disabled={isSelectedReadOnly}
+                title={
+                  isSelectedReadOnly
+                    ? "This season is closed and read-only"
+                    : undefined
+                }
+              />
+            </ToolbarMenu>
           )}
-          {["admin", "superadmin"].includes(userRole?.name || "") && (
-            <button
-              onClick={openAddModal}
-              disabled={isSelectedReadOnly}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Add Product</span>
-            </button>
-          )}
-          {["admin", "superadmin"].includes(userRole?.name || "") && (
-            <button
-              onClick={() => setShowBulkAddModal(true)}
-              disabled={isSelectedReadOnly}
-              title={
-                isSelectedReadOnly
-                  ? "This season is closed and read-only"
-                  : "Enter several products in one sheet"
-              }
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors w-full sm:w-auto disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ListPlus className="w-5 h-5" />
-              <span>Bulk Add</span>
-            </button>
-          )}
-          <button
-            onClick={exportProductsToExcel}
-            className="flex items-center gap-2 bg-card border border-card-border/10 rounded-lg px-4 py-2 hover:bg-card/70 transition-colors"
-          >
-            <Download className="w-4 h-4" />
-            <span>Export Products</span>
-          </button>
+
+          <ToolbarMenu label="Export" icon={<Download className="w-5 h-5" />}>
+            <MenuSection label="Price list" />
+            <MenuItem
+              icon={<FileText className="w-4 h-4" />}
+              label="Export Price list"
+              hint="PDF — opens in the viewer, print or save from there"
+              onClick={handlePriceListDownload}
+            />
+            <MenuItem
+              icon={<Download className="w-4 h-4" />}
+              label="Excel"
+              hint="One row per product, in printed order"
+              onClick={() => handleExportPriceList("excel")}
+            />
+            <MenuItem
+              icon={<Download className="w-4 h-4" />}
+              label="CSV"
+              hint="Same rows, plain text"
+              onClick={() => handleExportPriceList("csv")}
+            />
+            <MenuSection label="Catalog" />
+            <MenuItem
+              icon={<Download className="w-4 h-4" />}
+              label="Products"
+              hint="Full product export for this season"
+              onClick={exportProductsToExcel}
+            />
+            <MenuItem
+              icon={<Printer className="w-4 h-4" />}
+              label="Stock report"
+              hint="Printable stock sheet"
+              onClick={handlePrint}
+            />
+          </ToolbarMenu>
         </div>
 
         {groupByCategory && userRole?.name === "superadmin" && (
@@ -2527,9 +2895,19 @@ Offer prices are not changed.`
               <span className="font-semibold">Bulk edit</span>
               <span className="text-sm text-text/70">
                 {bulkChangedIds.length === 0
-                  ? `${sortedProducts.length} rows editable — nothing changed yet`
+                  ? `${sortedProducts.length} rows editable${
+                      filtersActive ? " in this filter" : ""
+                    } — nothing changed yet`
                   : `${bulkChangedIds.length} of ${sortedProducts.length} rows changed`}
               </span>
+              {hiddenChangedIds.length > 0 && (
+                <span
+                  title="Changed earlier under a different filter. Save all still writes them."
+                  className="text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2 py-0.5"
+                >
+                  +{hiddenChangedIds.length} changed but hidden by the filter
+                </span>
+              )}
               {discountUsable && (
                 <label className="flex items-center gap-2 text-sm text-text/70">
                   <input
@@ -2646,7 +3024,19 @@ Offer prices are not changed.`
                       colSpan={columnCount}
                       className="py-8 text-center text-text/60"
                     >
-                      No products found
+                      {filtersActive ? (
+                        <span className="flex flex-col items-center gap-2">
+                          <span>No products match these filters</span>
+                          <button
+                            onClick={clearFilters}
+                            className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 hover:bg-card/70 transition-colors"
+                          >
+                            Clear filters
+                          </button>
+                        </span>
+                      ) : (
+                        "No products found"
+                      )}
                     </td>
                   </tr>
                 ) : groupByCategory ? (

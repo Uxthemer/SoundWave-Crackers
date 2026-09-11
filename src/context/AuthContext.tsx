@@ -16,6 +16,7 @@ import {
 } from "firebase/auth";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { encodeStoredPassword } from "../lib/legacyPasswordStore";
 import { auth } from "../lib/firebase";
 import { Database } from "../types/supabase";
 import { v4 as uuidv4 } from "uuid";
@@ -291,6 +292,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email: data.email,
             phone: data.phone,
             phone_verified: true,
+            // Phone sign-in reads the password back from here. Without it a
+            // new account can never sign in by phone, only by email.
+            pwd: encodeStoredPassword(data.password),
           });
 
         if (profileError) throw profileError;
