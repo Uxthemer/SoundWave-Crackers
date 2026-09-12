@@ -17,6 +17,15 @@ interface AppSettings {
   enable_email_notifications?: boolean;
   enable_whatsapp_notifications?: boolean;
   enable_push_notifications?: boolean;
+  // Business details printed on invoices and quotations.
+  business_legal_name?: string | null;
+  gstin?: string | null;
+  business_address?: string | null;
+  business_state?: string | null;
+  business_phone?: string | null;
+  business_email?: string | null;
+  /** Print the GSTIN on invoices. Off by default. */
+  gst_on_invoice?: boolean;
 }
 
 interface AppSettingsContextType {

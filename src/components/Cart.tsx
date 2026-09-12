@@ -23,6 +23,8 @@ import Select from "react-select";
 import { useCartStore } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
+import { NumberInput } from "./NumberInput";
+import { crackerImage } from "../lib/productImage";
 
 /** The single place the UPI id is written down. */
 const UPI_ID = "selvakumar541989@oksbi";
@@ -185,8 +187,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
         total_amount: totalAmount
       };
       
+      // As on an order, a quoted line is a product or a family pack. Sending
+      // a pack id as a product_id would be rejected by the foreign key.
       const quotationItems = items.map(item => ({
-        product_id: item.id,
+        product_id: item.is_pack ? null : item.id,
+        combo_pack_id: item.is_pack ? item.id : null,
         quantity: item.quantity,
         price: item.offer_price,
         total_price: item.totalPrice
@@ -325,9 +330,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
       //   }
       // }
 
-      // Create order
+      // Create order. A pack line carries the pack rather than a product —
+      // the database expands it into its contents when it moves the stock.
       const orderItems = items.map((item) => ({
-        product_id: item.id,
+        product_id: item.is_pack ? null : item.id,
+        combo_pack_id: item.is_pack ? item.id : null,
         quantity: item.quantity,
         price: item.offer_price,
         total_price: item.totalPrice,
@@ -349,7 +356,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
         const guestOrder = await createGuestOrder({
           delivery,
           items: items.map((item) => ({
-            product_id: item.id,
+            product_id: item.is_pack ? null : item.id,
+            combo_pack_id: item.is_pack ? item.id : null,
             quantity: item.quantity,
           })),
           paymentMethod,
@@ -925,9 +933,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                     ? item.image[0]
                                     : item.image?.split(",")[0]
                                   : item.image_url
-                                  ? `/assets/img/crackers/${
-                                      item.image_url.split(",")[0]
-                                    }`
+                                  ? crackerImage(item.image_url.split(",")[0])
                                   : "/assets/img/logo/logo-product.png"
                               }
                               alt={item.name}
@@ -945,14 +951,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         </td>
                         <td className="py-4 px-2 sm:px-4">
                           <div className="flex justify-center">
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.quantity}
-                              onChange={(e) =>
+                              onValueChange={(n) =>
                                 updateQuantity(
                                   item.id,
-                                  parseInt(e.target.value) || 0
+                                  Math.floor(n)
                                 )
                               }
                               className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
@@ -992,9 +997,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               ? item.image[0]
                               : item.image?.split(",")[0]
                             : item.image_url
-                            ? `/assets/img/crackers/${
-                                item.image_url.split(",")[0]
-                              }`
+                            ? crackerImage(item.image_url.split(",")[0])
                             : "/assets/img/logo/logo-product.png"
                         }
                         alt={item.name}
@@ -1020,14 +1023,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         <div className="flex items-center justify-between mt-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-text/60">Qty:</span>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.quantity}
-                              onChange={(e) =>
+                              onValueChange={(n) =>
                                 updateQuantity(
                                   item.id,
-                                  parseInt(e.target.value) || 0
+                                  Math.floor(n)
                                 )
                               }
                               className="w-12 px-2 py-1 text-center rounded-lg border border-card-border/10 focus:outline-none focus:border-primary-orange text-sm"

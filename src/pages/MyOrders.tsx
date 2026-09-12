@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
+import { attachPackDetails } from "../lib/orderItems";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 
@@ -46,10 +47,17 @@ interface Order {
   short_id: string;
 }
 
+/**
+ * The statuses orders actually carry.
+ *
+ * This list had drifted -- "Enquiry Submitted", "Order Placed" and
+ * "Processing" are not values any order has, so filtering by them returned
+ * nothing at all.
+ */
 const ORDER_STATUSES = [
-  "Enquiry Submitted",
-  "Order Placed",
-  "Processing",
+  "Enquiry Received",
+  "Order Confirmed",
+  "Packing",
   "Shipped",
   "Delivered",
   "Cancelled",
@@ -86,7 +94,8 @@ export function MyOrders() {
               categories:categories (
                 name
               )
-            )
+            ),
+            pack:combo_packs ( id, name, pack_code )
           )
         `
           )
@@ -94,6 +103,8 @@ export function MyOrders() {
           .order("created_at", { ascending: false });
 
         if (error) throw error;
+        // Family pack lines have no product row; show the pack instead.
+        attachPackDetails((data || []) as any[]);
         setOrders(data || []);
       }
     } catch (error) {

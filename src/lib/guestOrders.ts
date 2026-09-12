@@ -43,7 +43,12 @@ export interface GuestOrderReference {
 
 export async function createGuestOrder(input: {
   delivery: GuestDeliveryDetails;
-  items: { product_id: string; quantity: number }[];
+  /** A line is a product or a pack, never both. */
+  items: {
+    product_id?: string | null;
+    combo_pack_id?: string | null;
+    quantity: number;
+  }[];
   paymentMethod: string;
 }): Promise<GuestOrderResult> {
   const { data, error } = await supabase.rpc("create_guest_order", {
@@ -51,7 +56,8 @@ export async function createGuestOrder(input: {
     // Only ids and quantities travel. Prices sent from a browser would be a
     // suggestion, so they are not sent at all.
     p_items: input.items.map((item) => ({
-      product_id: item.product_id,
+      product_id: item.product_id ?? null,
+      combo_pack_id: item.combo_pack_id ?? null,
       quantity: item.quantity,
     })),
     p_payment_method: input.paymentMethod,

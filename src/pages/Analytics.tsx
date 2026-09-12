@@ -12,6 +12,7 @@ import {
 } from "chart.js";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
+import { attachPackDetails } from "../lib/orderItems";
 import { useAuth } from "../context/AuthContext";
 import {
   Loader2,
@@ -28,9 +29,10 @@ import { DateRangeFilter } from "../components/DateRangeFilter";
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 interface AnalyticsData {
-  citySales: { labels: string[]; data: number[] };
-  districtSales: { labels: string[]; data: number[] };
-  stateSales: { labels: string[]; data: number[] };
+  // `counts` is the number of orders behind each place, alongside the value.
+  citySales: { labels: string[]; data: number[]; counts?: number[] };
+  districtSales: { labels: string[]; data: number[]; counts?: number[] };
+  stateSales: { labels: string[]; data: number[]; counts?: number[] };
   productSales: { labels: string[]; quantities: number[]; revenue: number[] };
   monthlyRevenue: { labels: string[]; data: number[] };
   stats: {
@@ -61,8 +63,49 @@ interface AnalyticsData {
   referralTotal?: number;
 }
 
-const COMPLETED_STATUSES = ["shipped", "dispatched", "delivered"];
-const PENDING_STATUSES = ["enquiry received", "packing", "payment completed"];
+/**
+ * What counts as a sale.
+ *
+ * This used to be shipped/dispatched/delivered only, which meant every
+ * confirmed order still being packed counted for nothing -- and in a season
+ * where most orders are confirmed weeks before they move, the location charts
+ * were empty for reasons that had nothing to do with geography.
+ *
+ * An order is a sale once it has been confirmed: that is the point stock is
+ * committed and the business has agreed to supply it.
+ *
+ * "payment completed" is kept for orders placed before payment became its own
+ * field; those rows were migrated to Order Confirmed, but a stale cache or an
+ * un-migrated environment should not drop them from the totals.
+ */
+const COMPLETED_STATUSES = [
+  "order confirmed",
+  "packing",
+  "shipped",
+  "dispatched",
+  "delivered",
+  "payment completed",
+];
+
+/** Asked for, not yet agreed. Counted as expected revenue, never as sales. */
+const PENDING_STATUSES = ["enquiry received"];
+
+/**
+ * Collapses the spellings of one place into a single bucket.
+ *
+ * Addresses are typed by customers, so "chennai", "Chennai " and "CHENNAI"
+ * arrive as three separate places and split one town's sales three ways --
+ * which is most of why these charts never looked right.
+ */
+function normalisePlace(value: unknown): string {
+  const text = String(value ?? "").trim().replace(/\s+/g, " ");
+  if (!text) return "Unknown";
+  return text
+    .toLowerCase()
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 // small helper to build chart series sorted & trimmed
 function buildChartFromMap(mapLabels: string[], mapData: number[], limit = 12) {
@@ -151,7 +194,8 @@ export function Analytics() {
             *,
             product:products (
               id,name,product_code
-            )
+            ),
+            pack:combo_packs ( id, name, pack_code )
           )
         `
         );
@@ -167,6 +211,8 @@ export function Analytics() {
 
       const { data: orders, error: ordersError } = await ordersQuery;
       if (ordersError) throw ordersError;
+      // Otherwise every family pack line lands in the "Unknown" bucket.
+      attachPackDetails((orders || []) as any[]);
 
       // Stock valuation is per-season. Cost lives in the admin-only costs
       // table, so it is fetched separately and merged.
@@ -200,6 +246,9 @@ export function Analytics() {
       const cityMap: Record<string, number> = {};
       const districtMap: Record<string, number> = {};
       const stateMap: Record<string, number> = {};
+      const cityCount: Record<string, number> = {};
+      const districtCount: Record<string, number> = {};
+      const stateCount: Record<string, number> = {};
       const productMap: Record<string, { qty: number; revenue: number }> = {};
       
       (orders || []).forEach((order: any) => {
@@ -207,13 +256,19 @@ export function Analytics() {
         if (!COMPLETED_STATUSES.includes(status)) return;
 
         const amt = Number(order.total_amount || 0);
-        const city = order.city || "Unknown";
-        const district = order.district || "Unknown";
-        const state = order.state || "Unknown";
+        const city = normalisePlace(order.city);
+        const district = normalisePlace(order.district);
+        const state = normalisePlace(order.state);
 
         cityMap[city] = (cityMap[city] || 0) + amt;
         districtMap[district] = (districtMap[district] || 0) + amt;
         stateMap[state] = (stateMap[state] || 0) + amt;
+
+        // Order counts per place, so a chart can answer "how many orders"
+        // and not only "how much money".
+        cityCount[city] = (cityCount[city] || 0) + 1;
+        districtCount[district] = (districtCount[district] || 0) + 1;
+        stateCount[state] = (stateCount[state] || 0) + 1;
        
         (order.items || []).forEach((it: any) => {
           const name = it.product?.name || "Unknown";
@@ -310,9 +365,21 @@ export function Analytics() {
       const referralTotal = referralList.reduce((s, r) => s + r.bonus, 0);
 
       setData({
-        citySales: { labels: Object.keys(cityMap), data: Object.values(cityMap) },
-        districtSales: { labels: Object.keys(districtMap), data: Object.values(districtMap) },
-        stateSales: { labels: Object.keys(stateMap), data: Object.values(stateMap) },
+        citySales: {
+          labels: Object.keys(cityMap),
+          data: Object.values(cityMap),
+          counts: Object.keys(cityMap).map((k) => cityCount[k] || 0),
+        },
+        districtSales: {
+          labels: Object.keys(districtMap),
+          data: Object.values(districtMap),
+          counts: Object.keys(districtMap).map((k) => districtCount[k] || 0),
+        },
+        stateSales: {
+          labels: Object.keys(stateMap),
+          data: Object.values(stateMap),
+          counts: Object.keys(stateMap).map((k) => stateCount[k] || 0),
+        },
         productSales: {
           labels: Object.keys(productMap),
           quantities: Object.values(productMap).map((p) => p.qty),

@@ -302,7 +302,9 @@ export function useDashboard() {
           // below against the embed's name, so `order:orders!inner(...)` would
           // silently fail to match `orders.season_id` and the season filter
           // would be ignored.
-          .select("price,quantity,product:products(id,name,product_code),orders!inner(season_id)");
+          .select(
+            "price,quantity,combo_pack_id,product:products(id,name,product_code),pack:combo_packs(id,name,pack_code),orders!inner(season_id)"
+          );
 
         if (seasonId) {
           itemsQuery = itemsQuery.eq("orders.season_id", seasonId);
@@ -316,8 +318,12 @@ export function useDashboard() {
 
         const revMap: Record<string, { name: string; revenue: number; qty: number }> = {};
         (orderItems || []).forEach((it: any) => {
-          const pid = it.product?.id ?? "unknown";
-          const name = it.product?.name ?? `#${pid}`;
+          // A family pack sells as itself, so it ranks as its own line here
+          // rather than disappearing into "unknown".
+          const pid = it.product?.id ?? it.pack?.id ?? "unknown";
+          const name =
+            it.product?.name ??
+            (it.pack?.name ? `${it.pack.name} (pack)` : `#${pid}`);
           const qty = Number(it.quantity) || 0;
           const amount = (Number(it.price) || 0) * qty;
           if (!revMap[pid]) revMap[pid] = { name, revenue: 0, qty: 0 };

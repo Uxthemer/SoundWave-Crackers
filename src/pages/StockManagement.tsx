@@ -23,12 +23,14 @@ import {
   Calculator,
   FileText,
   Filter,
+  Boxes,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { BulkImportModal } from "../components/BulkImportModal";
 import { BulkAddProductsModal } from "../components/BulkAddProductsModal";
+import { AddPackProductModal } from "../components/AddPackProductModal";
 import * as XLSX from "xlsx";
 import { useProducts } from "../hooks/useProducts";
 import { useSeasons, useSeasonActions } from "../context/SeasonContext";
@@ -45,6 +47,7 @@ import {
 } from "../lib/ordering";
 import { openPriceListPdf } from "../lib/priceListPdf";
 import toast from "react-hot-toast";
+import { NumberInput } from "../components/NumberInput";
 
 interface Product {
   id: string;
@@ -68,6 +71,8 @@ interface Product {
   /** Set when the row came from the season catalog. */
   season_id?: string;
   product_season_id?: string;
+  /** Set when this row is a family pack on sale; stock comes from its contents. */
+  combo_pack_id?: string | null;
 }
 
 interface Category {
@@ -266,6 +271,7 @@ export function StockManagement() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkAddModal, setShowBulkAddModal] = useState(false);
+  const [showAddPackModal, setShowAddPackModal] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
   // Order is auto-filled from the chosen category until it is typed over —
   // after that, switching category must not overwrite a deliberate position.
@@ -1963,19 +1969,12 @@ Offer prices are not changed.`
       )}
       <td className={cellPad}>
         {bulkEditMode ? (
-          <input
-            type="number"
-            onWheel={(e) => e.currentTarget.blur()}
+          <NumberInput
             min={0}
             value={draft.order ?? ""}
-            onChange={(e) =>
-              patch({
-                order:
-                  e.target.value === ""
-                    ? undefined
-                    : Number(e.target.value),
-              })
-            }
+            onValueChange={(n) => patch({ order: n })}
+            // Empty means "no position set", as it did before.
+            onClear={() => patch({ order: undefined })}
             aria-label={`Display order for ${product.name}`}
             className={cellInputClass}
           />
@@ -2008,7 +2007,19 @@ Offer prices are not changed.`
             className={cellInputClass}
           />
         ) : (
-          product.name
+          <span className="inline-flex items-center gap-1.5">
+            {product.name}
+            {/* A family pack is a packed box with its own stock, edited
+                here like any product's. */}
+            {product.combo_pack_id && (
+              <span
+                title="Family pack — a packed box with its own stock"
+                className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-orange/10 text-primary-orange"
+              >
+                PACK
+              </span>
+            )}
+          </span>
         )}
       </td>
       <td className={cellPad}>
@@ -2052,13 +2063,11 @@ Offer prices are not changed.`
         }`}
       >
         {editingPrices ? (
-          <input
-            type="number"
-            onWheel={(e) => e.currentTarget.blur()}
+          <NumberInput
             min={0}
             value={draft.stock ?? ""}
-            onChange={(e) =>
-              patch({ stock: Number(e.target.value) })
+            onValueChange={(n) =>
+              patch({ stock: n })
             }
             onKeyDown={
               bulkEditMode ? undefined : handleInlineKeyDown
@@ -2074,14 +2083,12 @@ Offer prices are not changed.`
       <td className={cellPad}>
         {editingPrices ? (
           <div className="flex flex-col gap-1">
-            <input
-              type="number"
-              onWheel={(e) => e.currentTarget.blur()}
+            <NumberInput
               min={0}
               step="0.01"
               value={draft.actual_price ?? ""}
-              onChange={(e) =>
-                patch({ actual_price: Number(e.target.value) })
+              onValueChange={(n) =>
+                patch({ actual_price: n })
               }
               onKeyDown={
                 bulkEditMode ? undefined : handleInlineKeyDown
@@ -2120,13 +2127,11 @@ Offer prices are not changed.`
       </td>
       <td className={cellPad}>
         {editingPrices ? (
-          <input
-            type="number"
-            onWheel={(e) => e.currentTarget.blur()}
+          <NumberInput
             min={0}
             step="0.01"
             value={draft.offer_price ?? ""}
-            onChange={(e) => onOfferChange(e.target.value)}
+            onValueChange={(n) => onOfferChange(String(n))}
             onKeyDown={
               bulkEditMode ? undefined : handleInlineKeyDown
             }
@@ -2819,6 +2824,18 @@ Offer prices are not changed.`
                 }
               />
               <MenuItem
+                icon={<Boxes className="w-4 h-4" />}
+                label="Add family pack"
+                hint="List a saved pack like any product"
+                onClick={() => setShowAddPackModal(true)}
+                disabled={isSelectedReadOnly}
+                title={
+                  isSelectedReadOnly
+                    ? "This season is closed and read-only"
+                    : undefined
+                }
+              />
+              <MenuItem
                 icon={<Upload className="w-4 h-4" />}
                 label="Import from file"
                 hint="Excel or CSV price list into this season"
@@ -3224,13 +3241,12 @@ Offer prices are not changed.`
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Stock</label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={editForm.stock ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setEditForm((f) => ({
                           ...f,
-                          stock: Number(e.target.value),
+                          stock: n,
                         }))
                       }
                       className="w-full px-3 py-2 border rounded"
@@ -3243,17 +3259,16 @@ Offer prices are not changed.`
                     <label className="block mb-1 font-medium">
                       Offer Price
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={editForm.offer_price ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setEditForm((f) => {
                           const next = {
                             ...f,
-                            offer_price: Number(e.target.value),
+                            offer_price: n,
                           };
                           if (editAutoActual) {
-                            const derived = deriveActual(e.target.value);
+                            const derived = deriveActual(String(n));
                             if (derived !== null) next.actual_price = derived;
                           }
                           return next;
@@ -3290,13 +3305,12 @@ Offer prices are not changed.`
                         </span>
                       )}
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={editForm.actual_price ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setEditForm((f) => ({
                           ...f,
-                          actual_price: Number(e.target.value),
+                          actual_price: n,
                         }))
                       }
                       readOnly={editAutoActual && discountUsable}
@@ -3400,13 +3414,12 @@ Offer prices are not changed.`
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Order</label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={editForm.order ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setEditForm((f) => ({
                           ...f,
-                          order: Number(e.target.value),
+                          order: n,
                         }))
                       }
                       className="w-full px-3 py-2 border rounded"
@@ -3607,13 +3620,12 @@ Offer prices are not changed.`
                   </div>
                   <div>
                     <label className="block mb-1 font-medium">Stock</label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={addForm.stock ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setAddForm((f) => ({
                           ...f,
-                          stock: Number(e.target.value),
+                          stock: n,
                         }))
                       }
                       className="w-full px-3 py-2 border rounded"
@@ -3624,17 +3636,16 @@ Offer prices are not changed.`
                     <label className="block mb-1 font-medium">
                       Offer Price
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={addForm.offer_price ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setAddForm((f) => {
                           const next = {
                             ...f,
-                            offer_price: Number(e.target.value),
+                            offer_price: n,
                           };
                           if (addAutoActual) {
-                            const derived = deriveActual(e.target.value);
+                            const derived = deriveActual(String(n));
                             if (derived !== null) next.actual_price = derived;
                           }
                           return next;
@@ -3669,13 +3680,12 @@ Offer prices are not changed.`
                         </span>
                       )}
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={addForm.actual_price ?? ""}
-                      onChange={(e) =>
+                      onValueChange={(n) =>
                         setAddForm((f) => ({
                           ...f,
-                          actual_price: Number(e.target.value),
+                          actual_price: n,
                         }))
                       }
                       readOnly={addAutoActual && discountUsable}
@@ -3708,17 +3718,15 @@ Offer prices are not changed.`
                         (position in its category)
                       </span>
                     </label>
-                    <input
-                      type="number"
+                    <NumberInput
                       value={addForm.order ?? ""}
-                      onChange={(e) => {
+                      onValueChange={(n) => {
                         setAddOrderTouched(true);
                         setAddForm((f) => ({
                           ...f,
-                          order: Number(e.target.value),
+                          order: n,
                         }));
                       }}
-                      onWheel={(e) => e.currentTarget.blur()}
                       className="w-full px-3 py-2 border rounded no-spinner"
                       min={0}
                       placeholder="Order"
@@ -3825,6 +3833,17 @@ Offer prices are not changed.`
           </div>
         </>
       )}
+
+      <AddPackProductModal
+        isOpen={showAddPackModal}
+        onClose={() => setShowAddPackModal(false)}
+        onSuccess={fetchProducts}
+        seasonId={selectedSeasonId}
+        seasonName={selectedSeason?.name}
+        categories={categories}
+        existingProducts={products}
+        seasonDiscount={seasonDiscount}
+      />
 
       <BulkAddProductsModal
         isOpen={showBulkAddModal}

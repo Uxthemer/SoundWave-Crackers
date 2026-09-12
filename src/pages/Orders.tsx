@@ -1,13 +1,22 @@
 import { useState, useEffect } from "react";
-import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
+import { attachPackDetails } from "../lib/orderItems";
 import * as XLSX from "xlsx";
 import { useAuth } from "../context/AuthContext";
 import { InvoiceTemplate } from "../components/InvoiceTemplate";
 import EditOrderModal, { OrderForEdit } from "../components/EditOrderModal";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { RowActionsMenu } from "../components/RowActionsMenu";
+import { useAppSettings } from "../context/AppSettingsContext";
+import { businessFromSettings } from "../lib/businessDetails";
+import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
+import {
+  WhatsAppShareDialog,
+  type WhatsAppShareRequest,
+} from "../components/WhatsAppShareDialog";
 import toast from "react-hot-toast";
 
 interface OrderItem {
@@ -51,23 +60,94 @@ interface Order {
   season_id?: string | null;
   /** NULL when the order came from guest checkout, with no account behind it. */
   user_id?: string | null;
+  // Payment is its own axis, independent of the fulfilment status above.
+  amount_received?: number | null;
+  payment_status?: string | null;
+  payment_received_at?: string | null;
+  confirmed_at?: string | null;
 }
 
+/**
+ * Fulfilment only.
+ *
+ * "Payment Completed" used to sit in this list, which meant recording money
+ * moved the order backwards out of packing, and packing an order lost the
+ * fact it had been paid for. Money arrives whenever the customer sends it, so
+ * it is tracked separately -- see the Payment column.
+ */
 const ORDER_STATUSES = [
   "Enquiry Received",
-  "Payment Completed",
+  "Order Confirmed",
   "Packing",
   "Shipped",
   "Delivered",
   "Cancelled",
 ];
 
+/**
+ * Statuses that hold stock. Reaching any of them means the goods are spoken
+ * for; this list matches order_holds_stock() in the database exactly.
+ */
+const COMMITTED_STATUSES = [
+  "Order Confirmed",
+  "Packing",
+  "Shipped",
+  "Delivered",
+];
+
+/** Fulfilment cannot progress past an order nobody has confirmed yet. */
+const REQUIRES_CONFIRMATION = ["Packing", "Shipped", "Delivered"];
+
+/**
+ * Where a confirmed order may move from the status column. Mirrors
+ * enforce_order_status_transition() in the database: moves among the
+ * confirmed statuses are free (they all hold the same stock), and the way out
+ * is Cancel. Enquiries are confirmed with the button, never from here.
+ */
+const CONFIRMED_NEXT = [
+  "Order Confirmed",
+  "Packing",
+  "Shipped",
+  "Delivered",
+  "Cancelled",
+];
+
+/** Confirmed and fully paid: nothing stands between it and the packing table. */
+const isReadyForPacking = (order: { status: string; payment_status?: string | null }) =>
+  order.status === "Order Confirmed" && order.payment_status === "received";
+
+/** Status filter value for the Ready for packing tile. */
+const READY_FOR_PACKING = "__ready_for_packing";
+
+const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
+  pending: { label: "Unpaid", className: "bg-red-100 text-red-700" },
+  partial: { label: "Part paid", className: "bg-amber-100 text-amber-700" },
+  received: { label: "Paid", className: "bg-green-100 text-green-700" },
+  refunded: { label: "Refunded", className: "bg-gray-200 text-gray-700" },
+};
+
 export function Orders() {
   const { userRole } = useAuth();
+  const { settings: appSettings } = useAppSettings();
+  const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState<
+    "all" | "pending" | "partial" | "received" | "refunded"
+  >("all");
+  const [customerFilter, setCustomerFilter] = useState<
+    "all" | "guest" | "registered"
+  >("all");
+  // Recording a receipt: which order, how much, and how it arrived.
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethodInput, setPaymentMethodInput] = useState("UPI");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNote, setPaymentNote] = useState("");
+  const [paymentError, setPaymentError] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
   const [sortField, setSortField] = useState<keyof Order>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -133,7 +213,8 @@ export function Orders() {
               name,
               product_code,
               categories:categories ( name )
-            )
+            ),
+            pack:combo_packs ( id, name, pack_code )
           )
         `
         )
@@ -147,6 +228,10 @@ export function Orders() {
 
       const { data, error } = await query;
        if (error) throw error;
+
+       // Family pack lines carry no product; present the pack as one so the
+       // table, the invoice and the exports below read it the same way.
+       attachPackDetails((data || []) as any[]);
 
        // Print/export order the items by their catalog display order. That
        // now lives on product_seasons, so resolve it per season and attach it
@@ -233,6 +318,19 @@ export function Orders() {
     if (!["admin", "superadmin"].includes(userRole?.name || "")) return;
     const order = orders.find((o) => o.id === orderId);
     if (!order || newStatus === order.status) return;
+
+    // Packing something nobody has confirmed would commit stock without ever
+    // checking it exists. Confirmation is the step that does that check.
+    if (
+      REQUIRES_CONFIRMATION.includes(newStatus) &&
+      !COMMITTED_STATUSES.includes(order.status)
+    ) {
+      alert(
+        "Confirm this order first. Confirming checks stock is available and reserves it."
+      );
+      return;
+    }
+
     setPendingStatus({ orderId, newStatus });
     setShowConfirmModal(true);
     setLRNumber("");
@@ -247,90 +345,39 @@ export function Orders() {
     }
     setUpdatingStatus(true);
     try {
-      const updateObj: any = { status: pendingStatus.newStatus };
-      if (pendingStatus.newStatus === "Shipped") {
-        updateObj.lr_number = lrNumber.trim();
-      }
-      const { error } = await supabase
-        .from("orders")
-        .update(updateObj)
-        .eq("id", pendingStatus.orderId);
-
-      if (error) throw error;
-
-      // If order is cancelled, restore stock — to the order's OWN season, not
-      // whichever season happens to be live now.
-      if (pendingStatus.newStatus === "Cancelled") {
-        try {
-          const cancelledOrder = orders.find(
-            (o) => o.id === pendingStatus.orderId
-          );
-          const orderSeasonId = (cancelledOrder as any)?.season_id ?? null;
-
-          if (!orderSeasonId) {
-            toast.error(
-              "Order cancelled, but stock was not restored: the order is not linked to a season."
-            );
-          } else {
-            // fetch order items
-            const { data: items, error: itemsError } = await supabase
-              .from("order_items")
-              .select("product_id, quantity")
-              .eq("order_id", pendingStatus.orderId);
-
-            if (itemsError) throw itemsError;
-
-            // aggregate quantities per product
-            const qtyMap: Record<string, number> = {};
-            (items || []).forEach((it: any) => {
-              qtyMap[it.product_id] =
-                (qtyMap[it.product_id] || 0) + (it.quantity || 0);
-            });
-
-            for (const productId of Object.keys(qtyMap)) {
-              const addQty = qtyMap[productId];
-
-              const { data: prod, error: prodError } = await supabase
-                .from("product_seasons")
-                .select("stock")
-                .eq("product_id", productId)
-                .eq("season_id", orderSeasonId)
-                .single();
-
-              if (prodError) {
-                console.error(
-                  "Failed to fetch product for stock restore:",
-                  prodError
-                );
-                continue;
-              }
-
-              const newStock = Math.max(0, (prod?.stock || 0) + addQty);
-
-              const { error: updateProdError } = await supabase
-                .from("product_seasons")
-                .update({ stock: newStock })
-                .eq("product_id", productId)
-                .eq("season_id", orderSeasonId);
-
-              if (updateProdError) {
-                console.error(
-                  "Failed to update product stock:",
-                  updateProdError
-                );
-                toast.error(
-                  updateProdError.message.includes("closed")
-                    ? "Order cancelled, but stock was not restored: that season is closed. A superadmin must unlock it."
-                    : "Order cancelled, but stock could not be restored."
-                );
-                break;
-              }
-            }
-          }
-        } catch (stockErr) {
-          console.error("Error restoring stock for cancelled order:", stockErr);
+      // Confirming is not a plain status write. confirm_order locks the stock
+      // it is about to spend, so two admins confirming different orders for
+      // the same product at the same moment cannot both succeed against the
+      // same units.
+      if (pendingStatus.newStatus === "Order Confirmed") {
+        const { error: confirmError } = await supabase.rpc("confirm_order", {
+          p_order_id: pendingStatus.orderId,
+          p_allow_shortfall: false,
+        });
+        if (confirmError) {
+          // "Not enough stock: X (need 5, have 2)" is the useful half; show
+          // it rather than a generic failure.
+          setLRError(confirmError.message);
+          setUpdatingStatus(false);
+          return;
         }
+      } else {
+        const updateObj: any = { status: pendingStatus.newStatus };
+        if (pendingStatus.newStatus === "Shipped") {
+          updateObj.lr_number = lrNumber.trim();
+        }
+        const { error } = await supabase
+          .from("orders")
+          .update(updateObj)
+          .eq("id", pendingStatus.orderId);
+
+        if (error) throw error;
       }
+
+      // Stock is not touched here. Cancelling (and un-cancelling) moves it in
+      // the database, through the orders_stock_sync trigger, so the guest
+      // checkout and any other path behave the same way. Doing it here as
+      // well would hand the stock back twice.
 
       setOrders(
         orders.map((order) =>
@@ -359,11 +406,87 @@ export function Orders() {
       setPendingStatus(null);
       setLRNumber("");
       setLRError("");
+
+      // Confirming and cancelling both move stock in the database. Reload so
+      // confirmed_at and anything derived from it match what was written.
+      if (
+        pendingStatus.newStatus === "Order Confirmed" ||
+        pendingStatus.newStatus === "Cancelled"
+      ) {
+        fetchOrders();
+      }
     } catch (error) {
       console.error("Error updating order status:", error);
-      setLRError("Failed to update order status. Please try again.");
+      // The database refuses moves the workflow does not allow ("Confirm
+      // this order before moving it to Packing") -- that sentence is the
+      // useful part, so it is shown instead of a generic failure.
+      const message =
+        (error as { message?: string } | null)?.message ??
+        "Failed to update order status. Please try again.";
+      setLRError(message);
     } finally {
       setUpdatingStatus(false);
+    }
+  };
+
+  /** Opens the receipt form, pre-filled with whatever is still outstanding. */
+  const openPaymentModal = (order: Order) => {
+    const outstanding =
+      Number(order.total_amount || 0) - Number(order.amount_received || 0);
+    setPaymentOrder(order);
+    setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
+    setPaymentMethodInput(order.payment_method || "UPI");
+    setPaymentReference("");
+    setPaymentNote("");
+    setPaymentError("");
+  };
+
+  /**
+   * Records money received against an order.
+   *
+   * Deliberately separate from the status dropdown: payment can arrive before
+   * packing, during shipping, or after delivery, and none of those should
+   * move the order backwards in fulfilment.
+   */
+  const handleRecordPayment = async () => {
+    if (!paymentOrder) return;
+    const amount = Number(paymentAmount);
+    if (!Number.isFinite(amount) || amount === 0) {
+      setPaymentError("Enter the amount received.");
+      return;
+    }
+
+    setSavingPayment(true);
+    setPaymentError("");
+    try {
+      const { data, error } = await supabase.rpc("record_order_payment", {
+        p_order_id: paymentOrder.id,
+        p_amount: amount,
+        p_method: paymentMethodInput || null,
+        p_reference: paymentReference || null,
+        p_note: paymentNote || null,
+      });
+      if (error) throw error;
+
+      const result = data as any;
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === paymentOrder.id
+            ? {
+                ...order,
+                amount_received: result?.amount_received ?? order.amount_received,
+                payment_status: result?.payment_status ?? order.payment_status,
+              }
+            : order
+        )
+      );
+      setPaymentOrder(null);
+    } catch (err) {
+      setPaymentError(
+        err instanceof Error ? err.message : "Failed to record the payment"
+      );
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -469,11 +592,72 @@ export function Orders() {
     XLSX.writeFile(wb, "all-orders.xlsx");
   };
 
+  /**
+   * Sends the invoice to the customer on WhatsApp. The dialog builds the
+   * PDF, stores it, and opens WhatsApp on the customer's chat with the
+   * message and the invoice link -- see WhatsAppShareDialog.
+   */
+  const handleShareOrder = (order: Order) => {
+    const business = businessFromSettings(appSettings);
+    const number = order.short_id || order.id.slice(0, 8);
+    const grand = Number(order.total_amount || 0) - Number(order.discount_amt || 0);
+    setShareRequest({
+      kind: "invoice",
+      title: `Invoice ${number}`,
+      customerName: order.full_name,
+      phone: order.phone,
+      fileName: documentFileName("invoice", number),
+      message:
+        `Hello ${order.full_name || ""}, thank you for your order with ${business.name}. ` +
+        `Order ${number}, grand total Rs. ${grand.toFixed(2)}.`,
+      makePdf: async () => {
+        const lines = (order.items || [])
+          .slice()
+          .sort(
+            (a: any, b: any) =>
+              Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0)
+          )
+          .map((item: any) => ({
+            code: item.product?.product_code ?? null,
+            name: item.product?.name ?? "Item",
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            total: Number(item.total_price || 0),
+          }));
+        const pdf = await buildDocumentPdf({
+          kind: "invoice",
+          number,
+          date: order.created_at,
+          status: order.status,
+          customer: {
+            name: order.full_name,
+            phone: order.phone,
+            email: order.email,
+            address: order.address,
+            city: order.city,
+            district: (order as any).district,
+            state: order.state,
+            pincode: order.pincode,
+          },
+          lines,
+          subtotal: Number(order.total_amount || 0),
+          discount: Number(order.discount_amt || 0),
+          paymentMethod: order.payment_method,
+          business,
+        });
+        return pdf.output("blob");
+      },
+    });
+  };
+
   const handleInvoicePrint = (order: Order) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const invoiceContent = InvoiceTemplate({ order });
+    const invoiceContent = InvoiceTemplate({
+      order,
+      business: businessFromSettings(appSettings),
+    });
     printWindow.document.open();
     printWindow.document.write(invoiceContent);
     printWindow.document.close();
@@ -700,6 +884,21 @@ export function Orders() {
     setStatusFilter(statusFilter === status ? "all" : status);
   };
 
+  const readyForPackingCount = orders.filter(isReadyForPacking).length;
+
+  const filtersActive =
+    statusFilter !== "all" ||
+    paymentFilter !== "all" ||
+    customerFilter !== "all" ||
+    searchTerm.trim() !== "";
+
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setPaymentFilter("all");
+    setCustomerFilter("all");
+    setSearchTerm("");
+  };
+
   const filteredOrders = orders
     .filter(
       (order) =>
@@ -709,8 +908,16 @@ export function Orders() {
           order.alternate_phone
             ?.toLowerCase()
             .includes(searchTerm.toLowerCase()) ||
-          order.city?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        (statusFilter === "all" || order.status === statusFilter)
+          order.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          order.short_id?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        (statusFilter === "all" ||
+          (statusFilter === READY_FOR_PACKING
+            ? isReadyForPacking(order)
+            : order.status === statusFilter)) &&
+        (paymentFilter === "all" ||
+          (order.payment_status || "pending") === paymentFilter) &&
+        (customerFilter === "all" ||
+          (customerFilter === "guest" ? !order.user_id : !!order.user_id))
     )
     .sort((a, b) => {
       if (sortField === "created_at") {
@@ -727,6 +934,14 @@ export function Orders() {
     switch (status) {
       case "Order Placed":
         return "bg-blue-500/10 text-blue-500";
+      case "Enquiry Received":
+        return "bg-sky-500/10 text-sky-600";
+      // Confirmation is the point stock is committed, so it reads as a
+      // decision taken rather than another step passed.
+      case "Order Confirmed":
+        return "bg-teal-500/10 text-teal-600";
+      case "Packing":
+        return "bg-amber-500/10 text-amber-600";
       case "Processing":
         return "bg-yellow-500/10 text-yellow-500";
       case "Shipped":
@@ -845,8 +1060,24 @@ export function Orders() {
 
 
 
-        {/* Order Status Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-4 mb-4 sm:mb-8">
+        {/* Order Status Cards. Ready for packing leads: it is the one list
+            the godown works from -- confirmed, paid, nothing left to chase. */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 sm:gap-4 mb-4">
+          <button
+            onClick={() => handleStatusFilterClick(READY_FOR_PACKING)}
+            title="Confirmed and fully paid"
+            className={`p-2 sm:p-4 rounded-lg transition-all text-xs sm:text-base border ${
+              statusFilter === READY_FOR_PACKING
+                ? "bg-green-600 text-white shadow-lg ring-2 ring-green-600/50 border-green-600"
+                : "bg-green-50 dark:bg-green-900/20 border-green-600/30 hover:bg-green-100 dark:hover:bg-green-900/30"
+            }`}
+          >
+            <h3 className="font-montserrat font-bold text-lg flex items-center justify-center gap-1.5">
+              <PackageCheck className="w-5 h-5" />
+              {readyForPackingCount}
+            </h3>
+            <p className="text-sm opacity-80">Ready for packing</p>
+          </button>
           {ORDER_STATUSES.map((status) => (
             <button
               key={status}
@@ -863,6 +1094,69 @@ export function Orders() {
               <p className="text-sm opacity-80">{status}</p>
             </button>
           ))}
+        </div>
+
+        {/* Filters. They combine: "Order Confirmed" + "Part paid" is the list
+            of confirmed orders still owing money. */}
+        <div className="mb-4 sm:mb-6 rounded-xl border border-card-border/10 bg-card/50 px-4 py-3 flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-text/70 shrink-0">
+            <Filter className="w-4 h-4" />
+            <span>Filters</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
+              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+            >
+              <option value="all">Any status</option>
+              <option value={READY_FOR_PACKING}>Ready for packing</option>
+              {ORDER_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            <select
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}
+              aria-label="Filter by payment"
+              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+            >
+              <option value="all">Any payment</option>
+              <option value="pending">Unpaid</option>
+              <option value="partial">Part paid</option>
+              <option value="received">Paid</option>
+              <option value="refunded">Refunded</option>
+            </select>
+            <select
+              value={customerFilter}
+              onChange={(e) => setCustomerFilter(e.target.value as typeof customerFilter)}
+              aria-label="Filter by customer type"
+              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+            >
+              <option value="all">All customers</option>
+              <option value="guest">Guest orders</option>
+              <option value="registered">Registered customers</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-3 md:ml-auto">
+            <span className="text-sm text-text/60">
+              {filtersActive
+                ? `Showing ${filteredOrders.length} of ${orders.length}`
+                : `${orders.length} orders`}
+            </span>
+            {filtersActive && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 hover:bg-card/70 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="bg-card/30 rounded-xl overflow-hidden border border-card-border/10 w-full">
@@ -901,9 +1195,7 @@ export function Orders() {
                   <th className="py-3 px-3 sm:px-6 text-left">Contact</th>
                   <th className="py-3 px-3 sm:px-6 text-left">Status</th>
                   <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Amount</th>
-                  {userRole?.name === "superadmin" && (
-                    <th className="py-3 px-3 sm:px-6 text-right">Profit</th>
-                  )}
+                  <th className="py-3 px-3 sm:px-6 text-left whitespace-nowrap">Payment</th>
                   <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Disc. Amt</th>
                   <th className="py-3 px-3 sm:px-6 text-left">
                     <button
@@ -925,13 +1217,13 @@ export function Orders() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={userRole?.name === "superadmin" ? 9 : 8} className="py-8 text-center text-text/60">
+                    <td colSpan={9} className="py-8 text-center text-text/60">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : filteredOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={userRole?.name === "superadmin" ? 9 : 8} className="py-8 text-center text-text/60">
+                    <td colSpan={9} className="py-8 text-center text-text/60">
                       No orders found
                     </td>
                   </tr>
@@ -961,37 +1253,132 @@ export function Orders() {
                         </div>
                       </td>
                       <td className="py-3 px-3 sm:px-6">
-                        <select
-                          value={order.status}
-                          onChange={(e) =>
-                            handleStatusChange(order.id, e.target.value)
-                          }
-                          disabled={updatingStatus}
-                          className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
-                            order.status
-                          )} bg-opacity-10 border-0 focus:outline-none focus:ring-2 focus:ring-primary-orange max-w-[100px] sm:max-w-none`}
-                        >
-                          {ORDER_STATUSES.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
+                        {/* The status can only move once the order is
+                            confirmed. Before that there is one decision --
+                            confirm it (which checks and takes the stock) or
+                            cancel it -- so that is all the cell offers. */}
+                        {order.status === "Enquiry Received" ? (
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(order.status)}`}
+                            >
+                              {order.status}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => handleStatusChange(order.id, "Order Confirmed")}
+                                disabled={updatingStatus}
+                                title="Check stock, deduct it, and confirm the order"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 whitespace-nowrap"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Confirm order
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(order.id, "Cancelled")}
+                                disabled={updatingStatus}
+                                title="Cancel this enquiry"
+                                className="px-2 py-1 rounded-lg text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : order.status === "Cancelled" ? (
+                          <div className="flex flex-col gap-1.5 items-start">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(order.status)}`}
+                            >
+                              {order.status}
+                            </span>
+                            <button
+                              onClick={() => handleStatusChange(order.id, "Enquiry Received")}
+                              disabled={updatingStatus}
+                              title="Back to an enquiry; it will need confirming again"
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-text/70 hover:bg-card/70 disabled:opacity-50 whitespace-nowrap"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Reopen
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            value={order.status}
+                            onChange={(e) =>
+                              handleStatusChange(order.id, e.target.value)
+                            }
+                            disabled={updatingStatus}
+                            className={`px-2 py-1 rounded-full text-xs ${getStatusColor(
+                              order.status
+                            )} bg-opacity-10 border-0 focus:outline-none focus:ring-2 focus:ring-primary-orange max-w-[120px] sm:max-w-none`}
+                          >
+                            {(CONFIRMED_NEXT.includes(order.status)
+                              ? CONFIRMED_NEXT
+                              : // A status from before the workflow: show it
+                                // so the row reads true, and offer the rest.
+                                [order.status, ...CONFIRMED_NEXT]
+                            ).map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
                         ₹{order.total_amount.toFixed(2)}
                       </td>
-                      {userRole?.name === "superadmin" && (
-                        <td className="py-3 px-3 sm:px-6 text-right">
-                          <button
-                            onClick={() => handleShowProfit(order)}
-                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="View Profit"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                      )}
+                      {/* Payment stands on its own: an order can be paid for
+                          while still being packed, or shipped before the
+                          balance arrives. */}
+                      <td className="py-3 px-3 sm:px-6 whitespace-nowrap">
+                        {(() => {
+                          const received = Number(order.amount_received || 0);
+                          const balance =
+                            Number(order.total_amount || 0) - received;
+                          const state =
+                            PAYMENT_LABELS[order.payment_status || "pending"] ??
+                            PAYMENT_LABELS.pending;
+
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${state.className}`}
+                              >
+                                {state.label}
+                              </span>
+                              <div className="leading-tight">
+                                <p className="text-xs">
+                                  ₹{received.toFixed(2)}
+                                </p>
+                                {balance > 0.01 && (
+                                  <p className="text-[11px] text-red-600">
+                                    ₹{balance.toFixed(2)} due
+                                  </p>
+                                )}
+                              </div>
+                              {/* Shown only while there is money to collect:
+                                  not on a cancelled order, and not once the
+                                  order is fully paid. */}
+                              {["admin", "superadmin"].includes(
+                                userRole?.name || ""
+                              ) &&
+                                order.status !== "Cancelled" &&
+                                order.payment_status !== "received" &&
+                                balance > 0.01 && (
+                                  <button
+                                    onClick={() => openPaymentModal(order)}
+                                    title="Record a payment received"
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap border-green-600/40 text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/40"
+                                  >
+                                    <IndianRupee className="w-3.5 h-3.5" />
+                                    Mark payment
+                                  </button>
+                                )}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
                         ₹{(order.discount_amt || 0).toFixed(2)}
                       </td>
@@ -1008,24 +1395,6 @@ export function Orders() {
                             <Eye className="w-4 h-4" />
                           </button>
 
-                          {userRole?.name === "superadmin" && (
-                          <button
-                            onClick={() => setEditOrder(order)}
-                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="Edit Order"
-                          >
-                            <span className="sr-only">Edit</span>
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"/><path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                          </button>
-                          )}
-                          
-                          <button
-                            onClick={() => exportOrder(order)}
-                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="Export Order"
-                          >
-                            <Download className="w-4 h-4" />
-                          </button>
                           {/* Replace print button with discount button for superadmin */}
                           {userRole?.name === "superadmin" && (
                             <button
@@ -1036,13 +1405,53 @@ export function Orders() {
                               <Percent className="w-4 h-4" />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleInvoicePrint(order)}
-                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
-                            title="Print Invoice"
-                          >
-                            <ReceiptText className="w-4 h-4" />
-                          </button>
+                          {/* Profit, as a symbol: green up for a gain, red
+                              down for a loss, the figure on hover and the
+                              breakdown on click. Superadmin only. */}
+                          {userRole?.name === "superadmin" &&
+                            (() => {
+                              const { profit } = computeProfitBreakdown(order);
+                              const loss = profit < 0;
+                              const Icon = loss ? TrendingDown : TrendingUp;
+                              return (
+                                <button
+                                  onClick={() => handleShowProfit(order)}
+                                  className={`p-1 sm:p-2 hover:bg-card/70 rounded-lg transition-colors ${
+                                    loss ? "text-red-600" : "text-green-600"
+                                  }`}
+                                  title={`Profit ₹${profit.toFixed(2)} — click for breakdown`}
+                                  aria-label={`Profit ${profit.toFixed(2)}`}
+                                >
+                                  <Icon className="w-4 h-4" />
+                                </button>
+                              );
+                            })()}
+                          <RowActionsMenu
+                            label={`More actions for ${order.short_id || "order"}`}
+                            actions={[
+                              {
+                                label: "Print invoice",
+                                icon: <ReceiptText className="w-4 h-4" />,
+                                onClick: () => handleInvoicePrint(order),
+                              },
+                              {
+                                label: "Share on WhatsApp",
+                                icon: <MessageCircle className="w-4 h-4" />,
+                                onClick: () => handleShareOrder(order),
+                              },
+                              {
+                                label: "Edit order",
+                                icon: <Pencil className="w-4 h-4" />,
+                                onClick: () => setEditOrder(order),
+                                hidden: userRole?.name !== "superadmin",
+                              },
+                              {
+                                label: "Download",
+                                icon: <Download className="w-4 h-4" />,
+                                onClick: () => exportOrder(order),
+                              },
+                            ]}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -1053,6 +1462,136 @@ export function Orders() {
           </div>
         </div>
       </div>
+
+      {/* Record payment. Confirmed explicitly, because money received is not
+          something to correct casually afterwards. */}
+      {paymentOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-background rounded-xl max-w-md w-full p-6">
+            <h2 className="font-heading text-2xl mb-1">Record payment</h2>
+            <p className="text-sm text-text/70 mb-4">
+              Order{" "}
+              <span className="font-mono">
+                {paymentOrder.short_id || paymentOrder.id.slice(0, 8)}
+              </span>{" "}
+              — {paymentOrder.full_name}
+            </p>
+
+            <div className="bg-card/40 rounded-lg p-3 mb-4 text-sm space-y-1">
+              <div className="flex justify-between">
+                <span className="text-text/70">Order total</span>
+                <span>₹{Number(paymentOrder.total_amount).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text/70">Already received</span>
+                <span>
+                  ₹{Number(paymentOrder.amount_received || 0).toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span>Outstanding</span>
+                <span className="text-primary-orange">
+                  ₹
+                  {(
+                    Number(paymentOrder.total_amount) -
+                    Number(paymentOrder.amount_received || 0)
+                  ).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Amount received *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  autoFocus
+                  className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
+                />
+                {/* Part payments are normal here: an advance now, the
+                    balance on delivery. A refund is a negative amount. */}
+                <p className="text-xs text-text/50 mt-1">
+                  Part payments are fine. Use a negative amount for a refund.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Method
+                  </label>
+                  <select
+                    value={paymentMethodInput}
+                    onChange={(e) => setPaymentMethodInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange"
+                  >
+                    <option value="UPI">UPI</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Cheque">Cheque</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Reference
+                  </label>
+                  <input
+                    value={paymentReference}
+                    onChange={(e) => setPaymentReference(e.target.value)}
+                    placeholder="UPI ref / cheque no."
+                    className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Note</label>
+                <input
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange"
+                />
+              </div>
+            </div>
+
+            {paymentError && (
+              <p className="mt-3 text-sm text-red-600">{paymentError}</p>
+            )}
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => setPaymentOrder(null)}
+                disabled={savingPayment}
+                className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 disabled:opacity-40"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRecordPayment}
+                disabled={savingPayment || !paymentAmount}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
+              >
+                {savingPayment && (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                )}
+                <span>
+                  {savingPayment
+                    ? "Recording…"
+                    : `Confirm ₹${Number(paymentAmount || 0).toFixed(2)} received`}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Order Details Modal */}
       {selectedOrder && (
@@ -1232,6 +1771,18 @@ export function Orders() {
               </span>
               ?
             </p>
+            {/* The two changes that move stock say so before they happen. */}
+            {pendingStatus.newStatus === "Order Confirmed" && (
+              <p className="mb-4 text-sm text-center text-teal-700 bg-teal-50 rounded-lg px-3 py-2">
+                Stock is checked and deducted for every item in this order,
+                including the products inside any family pack.
+              </p>
+            )}
+            {pendingStatus.newStatus === "Cancelled" && (
+              <p className="mb-4 text-sm text-center text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                Any stock this order holds is returned.
+              </p>
+            )}
             {pendingStatus.newStatus === "Shipped" && (
               <div className="mb-4">
                 <label className="block mb-2 font-medium">
@@ -1248,9 +1799,13 @@ export function Orders() {
                   placeholder="LR Number"
                   required
                 />
-                {lrError && (
-                  <div className="text-red-500 text-sm mt-1">{lrError}</div>
-                )}
+              </div>
+            )}
+            {/* Shown for every status, not only Shipped: a confirmation
+                refused for lack of stock reports here, and used to vanish. */}
+            {lrError && (
+              <div className="text-red-600 text-sm mb-2 bg-red-50 rounded-lg px-3 py-2">
+                {lrError}
               </div>
             )}
             <div className="flex justify-end gap-3 mt-6">
@@ -1513,7 +2068,8 @@ export function Orders() {
                           name,
                           product_code,
                           categories:categories ( name )
-                        )
+                        ),
+                        pack:combo_packs ( id, name, pack_code )
                       )
                     `
                       )
@@ -1521,6 +2077,7 @@ export function Orders() {
                       .single();
 
                     if (error) throw error;
+                    attachPackDetails([freshOrder] as any[]);
                     if (freshOrder) {
                        setOrders((orders) =>
                         orders.map((o) => (o.id === freshOrder.id ? freshOrder : o))
@@ -1544,6 +2101,10 @@ export function Orders() {
               />
             )}
       
+      <WhatsAppShareDialog
+        request={shareRequest}
+        onClose={() => setShareRequest(null)}
+      />
           </div>
         );
       }

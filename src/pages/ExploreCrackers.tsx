@@ -13,15 +13,18 @@ import {
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
+import { WishlistButton } from "../components/WishlistButton";
 import { useProducts } from "../hooks/useProducts";
 import { useCategories } from "../hooks/useCategories";
 import { Cart } from "../components/Cart";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 import { boolean } from "zod";
+import { crackerImage } from "../lib/productImage";
 
 export function ExploreCrackers() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const { addToCart, items, totalQuantity, totalAmount } = useCartStore();
+  // Family packs arrive as products once listed in Stock Management.
   const { products, loading: productsLoading } = useProducts();
   const { categories } = useCategories();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -70,7 +73,7 @@ export function ExploreCrackers() {
         image: p.image_url
           ? p.image_url
               .split(",")
-              .map((img: string) => `/assets/img/crackers/${img.trim()}`)
+              .map((img: string) => crackerImage(img.trim()))
           : [`/assets/img/logo/logo-product.png`],
         actual_price: p.actual_price,
         offer_price: p.offer_price,
@@ -78,6 +81,7 @@ export function ExploreCrackers() {
         content: p.content,
         stock: p.stock,
         yt_link: p.yt_link,
+        combo_pack_id: p.combo_pack_id ?? null,
       }));
 
       setDisplayProducts(mappedProducts);
@@ -169,6 +173,159 @@ export function ExploreCrackers() {
     setVideoUrl(videoUrl);
     setIsVideoModalOpen(true);
   };
+
+  const packProducts = displayProducts.filter((product) => product.combo_pack_id);
+  const otherProducts = displayProducts.filter((product) => !product.combo_pack_id);
+  const gridClass =
+    viewMode === "grid"
+      ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6"
+      : "space-y-6";
+
+  /** One product card; family packs use the same card. */
+  const renderCard = (product: any) => (
+                <motion.div
+                  key={product.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className={`card group p-2 ${
+                    viewMode === "list" ? "flex space-x-2 md:space-x-6" : ""
+                  }`}
+                  style={
+                    viewMode !== "list"
+                      ? { display: "flex", flexDirection: "column", height: "100%" }
+                      : {}
+                  }
+                >
+                  <div
+                    className={`relative overflow-hidden rounded-lg ${
+                      viewMode === "list"
+                        ? "w-24 h-24 md:w-48 md:h-auto flex-shrink-0"
+                        : "block mb-4"
+                    }`}
+                  >
+                    <Link to={`/product/${product.id}`}>
+                      {product.image && product.image.length >= 2 ? (
+                        <ProductImageSlider
+                          images={product.image}
+                          alt={product.name}
+                          className="w-full h-50 object-cover rounded-lg"
+                        />
+                      ) : (
+                        <img
+                          src={
+                            product.image[0] ||
+                            `/assets/img/logo/logo-product.png`
+                          }
+                          alt={product.name}
+                          className="w-full h-50 object-cover rounded-lg transform group-hover:scale-110 transition-transform duration-500"
+                        />
+                      )}
+                    </Link>
+                    {/* The heart takes the free corner; the discount has the other. */}
+                    <div className="absolute top-2 left-2 z-[2]">
+                      <WishlistButton product={product} />
+                    </div>
+                    {product.discount > 0 && <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
+                      {product.discount}% OFF
+                    </div>}
+                    {
+                      product.yt_link && (
+                        <button
+                          onClick={() => openVideoModal(product.yt_link)}
+                          className="absolute bottom-2 right-2 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
+                          aria-label="Youtube"
+                          title="Watch video in youtube"
+                        >
+                          <Youtube className="w-6 h-6 text-red-500 hover:fill-red-500 hover:text-black" />
+                        </button>
+                      )}
+                    {product.stock !== undefined && product.stock <= 0 && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                        <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
+                          OUT OF STOCK
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <Link to={`/product/${product.id}`}>
+                            <h3 className="font-montserrat font-bold text-sm sm:text-xs md:text-sm lg:text-sm">
+                              {product.name}
+                            </h3>
+                          </Link>
+                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60">
+                            {product.category}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-start justify-between mb-2">
+                        <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
+                          {product.content}
+                        </p>
+                        <div className="text-right">
+                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
+                            ₹{product.actual_price}
+                          </p>
+                          <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
+                            ₹{product.offer_price}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      className={`flex items-center mt-auto ${
+                        viewMode !== "list"
+                          ? "justify-center"
+                          : "justify-center md:justify-end w-full md:w-auto"
+                      }`}
+                    >
+                      {quantities[product.id] ? (
+                        <div className="flex items-center space-x-2 ">
+                          <button
+                            onClick={() => handleDecrement(product)}
+                            className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                            aria-label="Decrease quantity"
+                          >
+                            <Minus className="w-4 h-4" />
+                          </button>
+                          <input
+                            type="text"
+                            pattern="[0-9]*"
+                            inputMode="numeric"
+                            value={quantities[product.id] || 0}
+                            onChange={(e) =>
+                              handleQuantityChange(product, e.target.value)
+                            }
+                            className="quantity-input"
+                            aria-label="Quantity"
+                          />
+                          <button
+                            onClick={() => handleIncrement(product)}
+                            className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
+                            aria-label="Increase quantity"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleAddToCart(product)}
+                          className={`btn-primary ${
+                            viewMode !== "list" ? "w-full" : "w-full md:w-auto"
+                          } `}
+                          style={{ marginTop: "auto" }}
+                        >
+                          Add to Cart
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+  );
 
   if (productsLoading) {
     return (
@@ -285,154 +442,33 @@ export function ExploreCrackers() {
               </button>
             </div>
           ) : (
-            <div
-              className={
-                viewMode === "grid"
-                  ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6"
-                  : "space-y-6"
-              }
-            >
-              {displayProducts.map((product) => (
-                <motion.div
-                  key={product.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className={`card group p-2 ${
-                    viewMode === "list" ? "flex space-x-2 md:space-x-6" : ""
-                  }`}
-                  style={
-                    viewMode !== "list"
-                      ? { display: "flex", flexDirection: "column", height: "100%" }
-                      : {}
-                  }
-                >
-                  <div
-                    className={`relative overflow-hidden rounded-lg ${
-                      viewMode === "list"
-                        ? "w-24 h-24 md:w-48 md:h-auto flex-shrink-0"
-                        : "block mb-4"
-                    }`}
-                  >
-                    <Link to={`/product/${product.id}`}>
-                      {product.image && product.image.length >= 2 ? (
-                        <ProductImageSlider
-                          images={product.image}
-                          alt={product.name}
-                          className="w-full h-50 object-cover rounded-lg"
-                        />
-                      ) : (
-                        <img
-                          src={
-                            product.image[0] ||
-                            `/assets/img/logo/logo-product.png`
-                          }
-                          alt={product.name}
-                          className="w-full h-50 object-cover rounded-lg transform group-hover:scale-110 transition-transform duration-500"
-                        />
-                      )}
-                    </Link>
-                    {product.discount > 0 && <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
-                      {product.discount}% OFF
-                    </div>}
-                    {
-                      product.yt_link && (
-                        <button
-                          onClick={() => openVideoModal(product.yt_link)}
-                          className="absolute bottom-2 right-2 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
-                          aria-label="Youtube"
-                          title="Watch video in youtube"
-                        >
-                          <Youtube className="w-6 h-6 text-red-500 hover:fill-red-500 hover:text-black" />
-                        </button>
-                      )}
-                    {product.stock !== undefined && product.stock <= 0 && (
-                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                        <div className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
-                          OUT OF STOCK
-                        </div>
-                      </div>
-                    )}
+            <>
+              {/* Family packs lead, under their own heading: they are the
+                  recommendation, and a season without packs shows none. */}
+              {packProducts.length > 0 && (
+                <section className="mb-10">
+                  <div className="flex items-center gap-3 mb-4">
+                    <h2 className="font-heading text-2xl md:text-3xl">Family Packs</h2>
+                    <span className="text-sm text-text/60">
+                      Everything you need, at one rate
+                    </span>
                   </div>
-
-                  <div className="flex-1 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <Link to={`/product/${product.id}`}>
-                            <h3 className="font-montserrat font-bold text-sm sm:text-xs md:text-sm lg:text-sm">
-                              {product.name}
-                            </h3>
-                          </Link>
-                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60">
-                            {product.category}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-start justify-between mb-2">
-                        <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/80 mb-4">
-                          {product.content}
-                        </p>
-                        <div className="text-right">
-                          <p className="text-sm sm:text-xs md:text-sm lg:text-sm text-text/60 line-through">
-                            ₹{product.actual_price}
-                          </p>
-                          <p className="font-bold text-primary-orange text-lg sm:text-sm md:text-sm lg:text-xl">
-                            ₹{product.offer_price}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      className={`flex items-center mt-auto ${
-                        viewMode !== "list"
-                          ? "justify-center"
-                          : "justify-center md:justify-end w-full md:w-auto"
-                      }`}
-                    >
-                      {quantities[product.id] ? (
-                        <div className="flex items-center space-x-2 ">
-                          <button
-                            onClick={() => handleDecrement(product)}
-                            className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
-                            aria-label="Decrease quantity"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <input
-                            type="text"
-                            pattern="[0-9]*"
-                            inputMode="numeric"
-                            value={quantities[product.id] || 0}
-                            onChange={(e) =>
-                              handleQuantityChange(product, e.target.value)
-                            }
-                            className="quantity-input"
-                            aria-label="Quantity"
-                          />
-                          <button
-                            onClick={() => handleIncrement(product)}
-                            className="p-2 rounded-lg bg-card hover:bg-card/70 transition-colors"
-                            aria-label="Increase quantity"
-                          >
-                            <Plus className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleAddToCart(product)}
-                          className={`btn-primary ${
-                            viewMode !== "list" ? "w-full" : "w-full md:w-auto"
-                          } `}
-                          style={{ marginTop: "auto" }}
-                        >
-                          Add to Cart
-                        </button>
-                      )}
-                    </div>
+                  <div className={gridClass}>
+                    {packProducts.map((product) => renderCard(product))}
                   </div>
-                </motion.div>
-              ))}
-            </div>
+                </section>
+              )}
+              {otherProducts.length > 0 && (
+                <>
+                  {packProducts.length > 0 && (
+                    <h2 className="font-heading text-2xl md:text-3xl mb-4">All Crackers</h2>
+                  )}
+                  <div className={gridClass}>
+                    {otherProducts.map((product) => renderCard(product))}
+                  </div>
+                </>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -109,6 +109,13 @@ export interface Database {
           state: string | null
           pincode: string | null
           season_id: string | null
+          /** Payment is its own axis; see 20260913000000_order_confirmation_and_payment. */
+          amount_received: number
+          payment_status: string
+          payment_received_at: string | null
+          payment_note: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
         }
         Insert: {
           id?: string

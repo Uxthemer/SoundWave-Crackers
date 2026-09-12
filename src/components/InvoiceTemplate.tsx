@@ -1,4 +1,9 @@
 import { format } from 'date-fns';
+import {
+  DEFAULT_BUSINESS,
+  escapeHtml,
+  type BusinessDetails,
+} from '../lib/businessDetails';
 import { PrintHeader } from './PrintHeader';
 import { PrintFooter } from './PrintFooter';
 
@@ -38,7 +43,20 @@ interface InvoiceTemplateProps {
   order: Order;
 }
 
-export function InvoiceTemplate({ order }: { order: any }) {
+/**
+ * The printed invoice, as an HTML page.
+ *
+ * `business` comes from Admin Settings. Its GSTIN is printed only while
+ * "Show GST on invoice" is on; with it off the invoice carries no GST line at
+ * all, rather than an empty one.
+ */
+export function InvoiceTemplate({
+  order,
+  business = DEFAULT_BUSINESS,
+}: {
+  order: any;
+  business?: BusinessDetails;
+}) {
   // ensure items are rendered ordered by product.order column
   const items = (order.items || []).slice().sort((a: any, b: any) => {
     return Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0);
@@ -56,6 +74,9 @@ export function InvoiceTemplate({ order }: { order: any }) {
         body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #FF5722; }
         .logo { height: 100px; }
+        .business p { margin: 2px 0; font-size: 0.9rem; }
+        .business-name { font-weight: bold; font-size: 1rem !important; }
+        .gstin { font-weight: bold; letter-spacing: 0.5px; }
         .invoice-details { text-align: right; }
         .section { margin-bottom: 30px; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -71,9 +92,15 @@ export function InvoiceTemplate({ order }: { order: any }) {
     </head>
     <body>
       <div class="header">
-        <img src="/assets/img/logo/logo_2.png" alt="SoundWave Crackers" class="logo" />
+        <div class="business">
+          <img src="/assets/img/logo/logo_2.png" alt="${escapeHtml(business.name)}" class="logo" />
+          <p class="business-name">${escapeHtml(business.name)}</p>
+          ${business.address ? `<p>${escapeHtml(business.address)}</p>` : ''}
+          ${business.state ? `<p>${escapeHtml(business.state)}</p>` : ''}
+          ${business.showGst && business.gstin ? `<p class="gstin">GSTIN: ${escapeHtml(business.gstin)}</p>` : ''}
+        </div>
         <div class="invoice-details">
-          <h2>INVOICE</h2>
+          <h2>${business.showGst ? 'TAX INVOICE' : 'INVOICE'}</h2>
           <p>Order ID: ${order.short_id || order.id}</p>
           <p>Date: ${format(new Date(order.created_at), 'PPpp')}</p>
           <p>Status: ${order.status}</p>
@@ -110,8 +137,8 @@ export function InvoiceTemplate({ order }: { order: any }) {
           <thead>
             <tr>
               <th>S.No.</th>
+              <th>Code</th>
               <th>Product</th>
-              <th>Category</th>
               <th>Quantity</th>
               <th>Price</th>
               <th>Total</th>
@@ -140,9 +167,9 @@ export function InvoiceTemplate({ order }: { order: any }) {
       </div>
 
       <div class="footer">
-        <p>Thank you for shopping with SoundWave Crackers!</p>
-        <p>Website: www.soundwavecrackers.com | Email: soundwavecrackers@gmail.com</p>
-        <p>Phone: +91 9789794518, +91 9363515184</p>
+        <p>Thank you for shopping with ${escapeHtml(business.name)}!</p>
+        <p>Website: ${escapeHtml(business.website)} | Email: ${escapeHtml(business.email)}</p>
+        <p>Phone: ${escapeHtml(business.phone)}</p>
       </div>
 
       <div class="no-print" style="margin-top: 20px; text-align: center;">

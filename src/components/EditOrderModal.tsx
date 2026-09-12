@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
+import { NumberInput } from "./NumberInput";
 
 type ProductOption = {
   id: string;
@@ -263,17 +264,16 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
       const changes = buildChangesAudit(order, updatedOrder);
 
       // compute stock deltas: newQty - oldQty per product
-      const oldQtyMap = (order.items || []).reduce((acc: any, it: any) => {
-        acc[it.product_id] = (acc[it.product_id] || 0) + (it.quantity || 0);
-        return acc;
-      }, {});
-      const newQtyMap = (updatedOrder.items || []).reduce(
-        (acc: any, it: any) => {
+      // Pack lines are skipped: what they consume lives in the pack, and the
+      // database works it out. Only plain product lines are checked here.
+      const countByProduct = (items: any[]) =>
+        (items || []).reduce((acc: any, it: any) => {
+          if (!it.product_id) return acc;
           acc[it.product_id] = (acc[it.product_id] || 0) + (it.quantity || 0);
           return acc;
-        },
-        {}
-      );
+        }, {});
+      const oldQtyMap = countByProduct(order.items as any[]);
+      const newQtyMap = countByProduct(updatedOrder.items as any[]);
       const productDelta: Record<string, number> = {};
       const allPids = Array.from(
         new Set([...Object.keys(oldQtyMap), ...Object.keys(newQtyMap)])
@@ -337,7 +337,10 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
 
       const itemsToInsert = (updatedOrder.items || []).map((it) => ({
         order_id: updatedOrder.id,
-        product_id: it.product_id,
+        // A line is a product or a pack, never both — the rows are rewritten
+        // wholesale here, so a pack line has to keep its pack.
+        product_id: (it as any).combo_pack_id ? null : it.product_id,
+        combo_pack_id: (it as any).combo_pack_id ?? null,
         quantity: it.quantity,
         price: it.price,
         total_price: it.total_price,
@@ -350,41 +353,11 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         if (insErr) throw insErr;
       }
 
-      // 3) Update stock for the order's season based on productDelta.
-      //    A closed season rejects this at the database level, so surface that
-      //    as a readable message rather than a raw Postgres error.
-      for (const pid of Object.keys(productDelta)) {
-        const delta = productDelta[pid];
-        if (delta === 0) continue;
-        if (!orderSeasonId) continue;
-        // delta > 0 => reduce stock by delta
-        // delta < 0 => increase stock by -delta
-        const { data: prod, error: pErr } = await supabase
-          .from("product_seasons")
-          .select("stock")
-          .eq("product_id", pid)
-          .eq("season_id", orderSeasonId)
-          .single();
-        if (pErr) {
-          console.error("Failed to read product for stock update:", pErr);
-          continue;
-        }
-        const currentStock = prod?.stock || 0;
-        const newStock = Math.max(0, currentStock - delta);
-        const { error: updErr } = await supabase
-          .from("product_seasons")
-          .update({ stock: newStock })
-          .eq("product_id", pid)
-          .eq("season_id", orderSeasonId);
-        if (updErr) {
-          console.error("Failed to update product stock:", updErr);
-          throw new Error(
-            updErr.message.includes("closed")
-              ? "This order belongs to a closed season. A superadmin must unlock it before stock can change."
-              : `Failed to update stock: ${updErr.message}`
-          );
-        }
-      }
+      // Stock is not written here. Deleting the old lines gives their stock
+      // back and inserting the new ones takes it again, both through the
+      // order_items triggers, so the difference settles itself — and a pack
+      // line settles on the products inside the pack, which this code could
+      // not have known about.
 
       // 4) Insert audit record
       const auditPayload = {
@@ -575,14 +548,13 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
                         <tr key={idx} className="border-t">
                           <td className="p-2">{it.product.name}</td>
                           <td className="p-2 text-center">
-                            <input
-                              type="number"
+                            <NumberInput
                               min={1}
                               value={it.quantity}
-                              onChange={(e) =>
+                              onValueChange={(n) =>
                                 updateItemQty(
                                   idx,
-                                  Math.max(1, Number(e.target.value))
+                                  Math.max(1, n)
                                 )
                               }
                               className="w-20 p-1 border rounded text-center"
@@ -634,12 +606,11 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="number"
+                  <NumberInput
                     min={1}
                     value={addingQty}
-                    onChange={(e) =>
-                      setAddingQty(Math.max(1, Number(e.target.value)))
+                    onValueChange={(n) =>
+                      setAddingQty(Math.max(1, n))
                     }
                     className="p-2 border rounded"
                     placeholder="Qty"

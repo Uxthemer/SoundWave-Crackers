@@ -2,9 +2,15 @@ import React, { useEffect, useState } from "react";
 import { useAppSettings } from "../context/AppSettingsContext";
 import toast from "react-hot-toast";
 import { PushNotificationManager } from "../components/PushNotificationManager";
+import { useAuth } from "../context/AuthContext";
+
+/** 2-digit state, 10-character PAN, entity number, "Z", check character. */
+const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 
 export function AdminSettings() {
   const { settings, updateSettings, refreshSettings } = useAppSettings();
+  const { userRole } = useAuth();
+  const isSuperadmin = userRole?.name === "superadmin";
   const [formData, setFormData] = useState<any>({});
   const [loading, setLoading] = useState(false);
 
@@ -19,11 +25,23 @@ export function AdminSettings() {
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
+  const gstin = String(formData.gstin ?? "").trim().toUpperCase();
+  const gstinInvalid = gstin !== "" && !GSTIN_PATTERN.test(gstin);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Same two rules the database enforces, said in words before it refuses.
+    if (gstinInvalid) {
+      toast.error("That GSTIN does not look right — it should be 15 characters, e.g. 33ABCDE1234F1Z5");
+      return;
+    }
+    if (formData.gst_on_invoice && !gstin) {
+      toast.error("Enter the GSTIN before switching GST on for invoices");
+      return;
+    }
     setLoading(true);
     try {
-      await updateSettings(formData);
+      await updateSettings({ ...formData, gstin: gstin || null });
       toast.success("Settings updated successfully");
       await refreshSettings();
     } catch (err: any) {
@@ -227,6 +245,132 @@ export function AdminSettings() {
             </div>
           </div>
         </div>
+
+        {/* Business & GST. Superadmin only: these details go on every
+            invoice a customer receives. */}
+        {isSuperadmin && (
+          <div className="bg-card p-6 rounded-xl shadow border border-card-border/10">
+            <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
+              🧾 Business &amp; GST
+            </h2>
+            <p className="text-sm text-text/60 mb-4">
+              Printed on invoices and quotations. The GSTIN appears on invoices
+              only while the switch below is on.
+            </p>
+
+            <div className="flex items-center justify-between p-3 border rounded-lg bg-background mb-5">
+              <div>
+                <label htmlFor="toggle-gst" className="font-semibold block">
+                  Show GST on invoice
+                </label>
+                <p className="text-xs text-text/60">
+                  {formData.gst_on_invoice
+                    ? `On — invoices print GSTIN ${gstin || "(not entered)"}`
+                    : "Off — invoices are printed without a GSTIN"}
+                </p>
+              </div>
+              <div className="relative inline-block w-12 h-6 transition duration-200 ease-in-out">
+                <input
+                  type="checkbox"
+                  id="toggle-gst"
+                  className="peer absolute opacity-0 w-0 h-0"
+                  checked={formData.gst_on_invoice ?? false}
+                  onChange={(e) =>
+                    setFormData((prev: any) => ({ ...prev, gst_on_invoice: e.target.checked }))
+                  }
+                />
+                <label
+                  htmlFor="toggle-gst"
+                  className="block cursor-pointer overflow-hidden h-6 rounded-full bg-gray-300 dark:bg-zinc-700 peer-checked:bg-green-500 transition-colors"
+                >
+                  <span className="absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform peer-checked:translate-x-6"></span>
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  GSTIN {formData.gst_on_invoice && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="text"
+                  name="gstin"
+                  value={formData.gstin || ""}
+                  onChange={(e) =>
+                    setFormData((prev: any) => ({ ...prev, gstin: e.target.value.toUpperCase() }))
+                  }
+                  maxLength={15}
+                  placeholder="33ABCDE1234F1Z5"
+                  className={`w-full border rounded px-3 py-2 bg-background font-mono tracking-wide ${
+                    gstinInvalid ? "border-red-500" : ""
+                  }`}
+                />
+                {gstinInvalid && (
+                  <p className="text-xs text-red-500 mt-1">
+                    15 characters: state code, PAN, entity number, Z, check character.
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Legal business name</label>
+                <input
+                  type="text"
+                  name="business_legal_name"
+                  value={formData.business_legal_name || ""}
+                  onChange={handleChange}
+                  placeholder="As registered for GST"
+                  className="w-full border rounded px-3 py-2 bg-background"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">Business address</label>
+                <textarea
+                  value={formData.business_address || ""}
+                  onChange={(e) =>
+                    setFormData((prev: any) => ({ ...prev, business_address: e.target.value }))
+                  }
+                  rows={2}
+                  placeholder="Door no, street, town, district, PIN"
+                  className="w-full border rounded px-3 py-2 bg-background"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">State</label>
+                <input
+                  type="text"
+                  name="business_state"
+                  value={formData.business_state || ""}
+                  onChange={handleChange}
+                  placeholder="Tamil Nadu"
+                  className="w-full border rounded px-3 py-2 bg-background"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Phone</label>
+                <input
+                  type="text"
+                  name="business_phone"
+                  value={formData.business_phone || ""}
+                  onChange={handleChange}
+                  placeholder="+91 9789794518"
+                  className="w-full border rounded px-3 py-2 bg-background"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">Email</label>
+                <input
+                  type="email"
+                  name="business_email"
+                  value={formData.business_email || ""}
+                  onChange={handleChange}
+                  placeholder="soundwavecrackers@gmail.com"
+                  className="w-full border rounded px-3 py-2 bg-background"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Notification Channels Section */}
         <div className="bg-card p-6 rounded-xl shadow border border-card-border/10">

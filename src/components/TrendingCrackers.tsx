@@ -13,6 +13,8 @@ import { useCartStore } from "../store/cartStore";
 import { useProducts } from "../hooks/useProducts";
 import { useState, useEffect } from "react";
 import { ProductImageSlider } from "../components/ProductImageSlider";
+import { NumberInput } from "./NumberInput";
+import { crackerImage } from "../lib/productImage";
 
 export function TrendingCrackers() {
   const { addToCart, items } = useCartStore();
@@ -136,7 +138,7 @@ export function TrendingCrackers() {
                   <ProductImageSlider
                     images={
                       product.image_url
-                        ? product.image_url.split(',').map((img: string) => `/assets/img/crackers/${img.trim()}`)
+                        ? product.image_url.split(',').map((img: string) => crackerImage(img.trim()))
                         : [`/assets/img/logo/logo-product.png`]
                     }
                     alt={product.name}
@@ -185,11 +187,10 @@ export function TrendingCrackers() {
                       >
                         <Minus className="w-4 h-4" />
                       </button>
-                      <input
-                        type="number"
+                      <NumberInput
                         min="0"
                         value={quantities[product.id] || 0}
-                        onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                        onValueChange={(n) => handleQuantityChange(product.id, String(n))}
                         className="w-16 px-2 py-1 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                         aria-label="Quantity"
                         disabled={productStock[product.id] !== undefined && productStock[product.id] <= 0}
