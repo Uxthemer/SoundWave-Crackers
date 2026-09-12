@@ -17,6 +17,19 @@ import { useState, useEffect, useCallback } from 'react';
   // actually convert logic is likely better in the component or a dedicated function.
   // For now let's just remove the unused import.
   
+    /**
+     * Loads every quotation with its lines.
+     *
+     * Products and packs are fetched by id and stitched on here rather than
+     * embedded in the select. PostgREST resolves an embed like
+     * `pack:combo_packs(...)` from its cached view of the foreign keys, so the
+     * whole query fails -- taking the quotation list with it -- whenever that
+     * cache is stale or the combo_pack_id column has not reached an
+     * environment yet. Two flat lookups cannot fail that way.
+     *
+     * It is also four queries in total instead of one per quotation: the old
+     * shape issued a round trip for every row on the page.
+     */
     const fetchQuotations = useCallback(async () => {
       setLoading(true);
       try {
@@ -24,25 +37,85 @@ import { useState, useEffect, useCallback } from 'react';
           .from('quotations')
           .select('*')
           .order('created_at', { ascending: false });
-  
+
         if (quotesError) throw quotesError;
-  
-        const quotesWithItems = await Promise.all(
-          quotes.map(async (quote) => {
-            const { data: items, error: itemsError } = await supabase
-              .from('quotation_items')
-              .select('*, product:products(*)') // fetch product details
-              .eq('quotation_id', quote.id);
-  
-            if (itemsError) throw itemsError;
-            return { ...quote, items: items || [] };
-          })
+        if (!quotes?.length) {
+          setQuotations([]);
+          return;
+        }
+
+        const { data: items, error: itemsError } = await supabase
+          .from('quotation_items')
+          .select('*')
+          .in('quotation_id', quotes.map((quote) => quote.id));
+
+        if (itemsError) throw itemsError;
+
+        const lines = items ?? [];
+        const productIds = [
+          ...new Set(lines.map((line: any) => line.product_id).filter(Boolean)),
+        ];
+        const packIds = [
+          ...new Set(lines.map((line: any) => line.combo_pack_id).filter(Boolean)),
+        ];
+
+        // A quotation saved before packs existed has no combo_pack_id column
+        // to read, so an empty list here is normal rather than a problem.
+        const [productsRes, packsRes] = await Promise.all([
+          productIds.length
+            ? supabase.from('products').select('*').in('id', productIds)
+            : Promise.resolve({ data: [], error: null }),
+          packIds.length
+            ? supabase
+                .from('combo_packs')
+                .select('id, name, pack_code')
+                .in('id', packIds)
+            : Promise.resolve({ data: [], error: null }),
+        ]);
+
+        // A missing product or pack must not lose the quotation it is on --
+        // the line still has its own name, price and quantity.
+        if (productsRes.error) console.error(productsRes.error);
+        if (packsRes.error) console.error(packsRes.error);
+
+        const productById = new Map(
+          (productsRes.data ?? []).map((product: any) => [product.id, product])
         );
-  
-        setQuotations(quotesWithItems);
+        const packById = new Map(
+          (packsRes.data ?? []).map((pack: any) => [pack.id, pack])
+        );
+
+        const linesByQuotation = new Map<string, any[]>();
+        lines.forEach((line: any) => {
+          const enriched = {
+            ...line,
+            product: line.product_id
+              ? productById.get(line.product_id) ?? null
+              : null,
+            pack: line.combo_pack_id
+              ? packById.get(line.combo_pack_id) ?? null
+              : null,
+          };
+          const bucket = linesByQuotation.get(line.quotation_id);
+          if (bucket) bucket.push(enriched);
+          else linesByQuotation.set(line.quotation_id, [enriched]);
+        });
+
+        setQuotations(
+          quotes.map((quote) => ({
+            ...quote,
+            items: linesByQuotation.get(quote.id) ?? [],
+          })) as QuotationWithItems[]
+        );
       } catch (error) {
         console.error('Error fetching quotations:', error);
-        toast.error('Failed to fetch quotations');
+        // The message used to be the same sentence whatever went wrong, which
+        // left "failed to fetch quotations" as the only clue on screen.
+        toast.error(
+          error instanceof Error
+            ? `Failed to fetch quotations: ${error.message}`
+            : 'Failed to fetch quotations'
+        );
       } finally {
         setLoading(false);
       }

@@ -3,12 +3,13 @@ import {
   X,
   QrCode,
   Wallet,
-  CreditCard,
   Loader2,
   Trash2,
   LogIn,
   UserPlus,
   ArrowRight,
+  Copy,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
@@ -22,6 +23,11 @@ import Select from "react-select";
 import { useCartStore } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
+import { NumberInput } from "./NumberInput";
+import { crackerImage } from "../lib/productImage";
+
+/** The single place the UPI id is written down. */
+const UPI_ID = "selvakumar541989@oksbi";
 
 interface CartProps {
   isOpen: boolean;
@@ -71,6 +77,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   >([]);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState(false); // <-- New state
+  const [upiCopied, setUpiCopied] = useState(false);
   // Shown to a signed-out customer at checkout: sign in, create an account,
   // or skip both. Skipping is a first-class option, not a fallback.
   const [showAuthGate, setShowAuthGate] = useState(false);
@@ -180,8 +187,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
         total_amount: totalAmount
       };
       
+      // As on an order, a quoted line is a product or a family pack. Sending
+      // a pack id as a product_id would be rejected by the foreign key.
       const quotationItems = items.map(item => ({
-        product_id: item.id,
+        product_id: item.is_pack ? null : item.id,
+        combo_pack_id: item.is_pack ? item.id : null,
         quantity: item.quantity,
         price: item.offer_price,
         total_price: item.totalPrice
@@ -197,6 +207,24 @@ export function Cart({ isOpen, onClose }: CartProps) {
        console.error(error);
     } finally {
       setIsQuotationSaving(false);
+    }
+  };
+
+  /**
+   * Copies the UPI id.
+   *
+   * clipboard.writeText needs a secure context and permission, neither of
+   * which is guaranteed on a customer's phone, so a failure falls back to
+   * telling them to select it by hand rather than silently doing nothing.
+   */
+  const handleCopyUpiId = async () => {
+    try {
+      await navigator.clipboard.writeText(UPI_ID);
+      setUpiCopied(true);
+      toast.success("UPI ID copied");
+      setTimeout(() => setUpiCopied(false), 2500);
+    } catch {
+      toast.error("Could not copy — please select the UPI ID and copy it");
     }
   };
 
@@ -302,9 +330,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
       //   }
       // }
 
-      // Create order
+      // Create order. A pack line carries the pack rather than a product —
+      // the database expands it into its contents when it moves the stock.
       const orderItems = items.map((item) => ({
-        product_id: item.id,
+        product_id: item.is_pack ? null : item.id,
+        combo_pack_id: item.is_pack ? item.id : null,
         quantity: item.quantity,
         price: item.offer_price,
         total_price: item.totalPrice,
@@ -326,7 +356,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
         const guestOrder = await createGuestOrder({
           delivery,
           items: items.map((item) => ({
-            product_id: item.id,
+            product_id: item.is_pack ? null : item.id,
+            combo_pack_id: item.is_pack ? item.id : null,
             quantity: item.quantity,
           })),
           paymentMethod,
@@ -771,69 +802,94 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   </div>
                 }
               </div>
+              {/* Payment, on the screen where it is actually acted on.
+                  Two ways to pay, both large: someone reading this has their
+                  phone in hand and is about to scan or paste. Bank transfer
+                  used to sit alongside and pulled attention away from the two
+                  that complete in seconds. */}
               <div className="w-full">
-                <div className="bg-card/30 rounded-xl p-4 md:p-6 w-full">
-                  <h3 className="font-montserrat font-bold text-lg md:text-xl mb-4">
-                    Payment Options
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-card p-6 rounded-xl">
+                <div className="bg-card/30 rounded-xl p-4 md:p-8 w-full border-2 border-primary-orange/30">
+                  <div className="text-center mb-6">
+                    <h3 className="font-montserrat font-bold text-2xl md:text-3xl mb-1">
+                      Pay Now
+                    </h3>
+                    <p className="text-text/70">
+                      Scan the code or pay to our UPI ID, then send us the
+                      screenshot with your order number.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* QR */}
+                    <div className="bg-card p-6 rounded-xl flex flex-col items-center">
                       <div className="flex items-center gap-3 mb-4">
-                        <QrCode className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          Scan QR Code
+                        <QrCode className="w-7 h-7 text-primary-orange" />
+                        <h4 className="font-montserrat font-bold text-xl">
+                          Scan &amp; Pay
                         </h4>
                       </div>
-                      <div className="bg-white p-4 rounded-lg mb-4">
+                      <div className="bg-white p-4 rounded-lg w-full max-w-xs">
                         <img
                           src="/assets/img/payment/QR-Code-payment.jpg"
-                          alt="QR Code"
-                          className="w-full aspect-square object-cover rounded"
+                          alt="UPI QR code for Soundwave Crackers"
+                          className="w-full aspect-square object-contain rounded"
                         />
                       </div>
-                      <p className="text-sm text-text/60 text-center">
-                        Scan to pay instantly
+                      <p className="text-sm text-text/60 text-center mt-4">
+                        Works with GPay, PhonePe, Paytm and any UPI app
                       </p>
                     </div>
-                    <div className="bg-card p-6 rounded-xl">
+
+                    {/* UPI ID */}
+                    <div className="bg-card p-6 rounded-xl flex flex-col items-center justify-center">
                       <div className="flex items-center gap-3 mb-4">
-                        <Wallet className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          UPI Payment
+                        <Wallet className="w-7 h-7 text-primary-orange" />
+                        <h4 className="font-montserrat font-bold text-xl">
+                          UPI ID
                         </h4>
                       </div>
-                      <p className="text-sm text-text/60 mb-4">
-                        Pay using any UPI app
-                      </p>
-                      <div className="bg-background p-4 rounded-lg">
-                        <p className="font-mono text-center select-all">
-                          selvakumar541989@oksbi
+                      <div className="bg-background w-full rounded-lg p-5 text-center">
+                        <p className="font-mono text-lg md:text-2xl font-bold break-all select-all">
+                          {UPI_ID}
                         </p>
                       </div>
-                    </div>
-                    <div className="bg-card p-6 rounded-xl">
-                      <div className="flex items-center gap-3 mb-4">
-                        <CreditCard className="w-6 h-6 text-primary-orange" />
-                        <h4 className="font-montserrat font-bold">
-                          Bank Transfer
-                        </h4>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <p className="text-sm text-text/60">Account Name</p>
-                          <p className="font-mono">Selvakumar</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-text/60">Account Number</p>
-                          <p className="font-mono">1234 5678 9012 3456</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-text/60">IFSC Code</p>
-                          <p className="font-mono">SBIN0013833</p>
-                        </div>
-                      </div>
+                      {/* Reading a UPI id off a screen and typing it into
+                          another app is where payments go wrong. */}
+                      <button
+                        type="button"
+                        onClick={handleCopyUpiId}
+                        className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-primary-orange text-white font-semibold hover:bg-primary-orange/90 transition-colors"
+                      >
+                        {upiCopied ? (
+                          <>
+                            <Check className="w-5 h-5" />
+                            <span>Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-5 h-5" />
+                            <span>Copy UPI ID</span>
+                          </>
+                        )}
+                      </button>
+                      <p className="text-sm text-text/60 text-center mt-4">
+                        Paste this in your UPI app to pay
+                      </p>
                     </div>
                   </div>
+
+                  <p className="text-center text-sm text-text/70 mt-6">
+                    Paid already? Send the screenshot on{" "}
+                    <a
+                      href="https://wa.me/919363515184"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary-orange font-semibold underline"
+                    >
+                      WhatsApp
+                    </a>{" "}
+                    and we will confirm your order.
+                  </p>
                 </div>
               </div>
             </div>
@@ -877,9 +933,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                     ? item.image[0]
                                     : item.image?.split(",")[0]
                                   : item.image_url
-                                  ? `/assets/img/crackers/${
-                                      item.image_url.split(",")[0]
-                                    }`
+                                  ? crackerImage(item.image_url.split(",")[0])
                                   : "/assets/img/logo/logo-product.png"
                               }
                               alt={item.name}
@@ -897,14 +951,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         </td>
                         <td className="py-4 px-2 sm:px-4">
                           <div className="flex justify-center">
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.quantity}
-                              onChange={(e) =>
+                              onValueChange={(n) =>
                                 updateQuantity(
                                   item.id,
-                                  parseInt(e.target.value) || 0
+                                  Math.floor(n)
                                 )
                               }
                               className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
@@ -944,9 +997,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               ? item.image[0]
                               : item.image?.split(",")[0]
                             : item.image_url
-                            ? `/assets/img/crackers/${
-                                item.image_url.split(",")[0]
-                              }`
+                            ? crackerImage(item.image_url.split(",")[0])
                             : "/assets/img/logo/logo-product.png"
                         }
                         alt={item.name}
@@ -972,14 +1023,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         <div className="flex items-center justify-between mt-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-text/60">Qty:</span>
-                            <input
-                              type="number"
+                            <NumberInput
                               min="0"
                               value={item.quantity}
-                              onChange={(e) =>
+                              onValueChange={(n) =>
                                 updateQuantity(
                                   item.id,
-                                  parseInt(e.target.value) || 0
+                                  Math.floor(n)
                                 )
                               }
                               className="w-12 px-2 py-1 text-center rounded-lg border border-card-border/10 focus:outline-none focus:border-primary-orange text-sm"

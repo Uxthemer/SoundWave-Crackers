@@ -27,8 +27,10 @@ export interface OrderWithItems extends OrderDB {
 export async function createOrder(order: {
   total_amount: number;
   payment_method: string;
+  /** A line is a product or a family pack, never both. */
   items: {
-    product_id: string;
+    product_id?: string | null;
+    combo_pack_id?: string | null;
     quantity: number;
     price: number;
     total_price: number;
@@ -44,24 +46,11 @@ export async function createOrder(order: {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
-  // 1. Generate next short_id (atomic, safe for concurrency)
-  const { data: lastOrder, error: lastOrderError } = await supabase
-    .from('orders')
-    .select('short_id')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single();
+  // The order number (SWC-O-<year>-<random>-<seq>) is issued by the database
+  // on insert. Working it out here from "the latest order + 1" let two
+  // customers checking out together receive the same number.
 
-  let nextNumber = 1;
-  if (lastOrder && lastOrder.short_id) {
-    const match = lastOrder.short_id.match(/SWC-(\d+)/);
-    if (match) {
-      nextNumber = parseInt(match[1], 10) + 1;
-    }
-  }
-  const shortId = `SWC-${String(nextNumber).padStart(3, "0")}`;
-
-  // 2. Insert order with short_id
+  // Insert the order; short_id comes back from the database.
   const { data: orderData, error: orderError } = await supabase
     .from('orders')
     .insert({
@@ -83,7 +72,6 @@ export async function createOrder(order: {
       state: order.delivery_details.state,
       pincode: order.delivery_details.pincode,
       country: order.delivery_details.country,
-      short_id: shortId // <-- Add this
     })
     .select()
     .single();

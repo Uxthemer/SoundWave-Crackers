@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "../lib/supabase";
 import { Download, Plus, Trash2, Edit2, Loader2 } from "lucide-react";
 import { format } from "date-fns";
@@ -11,38 +11,112 @@ import { EXPENSE_TYPE_COLORS, EXPENSE_TYPE_ORDER } from "../config/chartConfig";
 import { useAuth } from "../context/AuthContext";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { personNameKey } from "../lib/personName";
+import { NumberInput } from "../components/NumberInput";
 
 interface Expense {
   id: string;
   date: string;
   details: string;
+  /** Display name, kept in step with spend_by_id by a database trigger. */
   spend_by: string;
+  /** The person who spent it. Null only on rows that predate the people list. */
+  spend_by_id?: string | null;
   amount: number;
   reason: string;
   type: "credit" | "spend" | "purchase" | "rent"; // Added "rent"
   created_at: string;
   image_path?: string | null;
+  reference_no?: string | null;
 }
+
+/** Someone money can be spent by: an owner, a partner, an employee. */
+interface StaffMember {
+  id: string;
+  name: string;
+  role: "owner" | "partner" | "employee" | "contractor" | "other";
+  phone?: string | null;
+  note?: string | null;
+  is_active: boolean;
+}
+
+const STAFF_ROLES: StaffMember["role"][] = [
+  "owner",
+  "partner",
+  "employee",
+  "contractor",
+  "other",
+];
 
 Chart.register(BarElement, CategoryScale, LinearScale, Legend, Tooltip);
 
+type ExpenseForm = Omit<Expense, "id" | "created_at" | "amount"> & {
+  /** Null while the box is empty, so a new entry does not start at 0. */
+  amount: number | null;
+  image?: string | null;
+};
+
+const blankExpenseForm = (): ExpenseForm => ({
+  date: "",
+  details: "",
+  spend_by: "",
+  spend_by_id: "",
+  amount: null,
+  reason: "",
+  type: "spend",
+  image: null,
+  reference_no: "",
+});
+
 export function Expenses() {
   const { userRole } = useAuth();
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  // Rows as stored. The page reads `expenses` (below), where every spelling
+  // of a person's name has been folded into one.
+  const [rawExpenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Expense | null>(null);
-  const [form, setForm] = useState<Omit<Expense, "id" | "created_at"> & { image?: string | null }>({
-    date: "",
-    details: "",
-    spend_by: "",
-    amount: 0,
-    reason: "",
-    type: "spend",
-    image: null,
-  });
+  const [form, setForm] = useState<ExpenseForm>(blankExpenseForm);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [savingExpense, setSavingExpense] = useState(false);
+
+  /**
+   * Clears everything the popup holds, including the file picker.
+   *
+   * The popup used to be reset in two places with two different lists of
+   * fields, and not at all after a save -- so "Add Entry" reopened with the
+   * last entry's values, and the file input (which React does not control)
+   * kept the previous attachment selected.
+   */
+  const resetExpenseForm = () => {
+    setEditing(null);
+    setForm(blankExpenseForm());
+    setImageFile(null);
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const openNewExpense = () => {
+    resetExpenseForm();
+    setShowForm(true);
+  };
+
+  const closeExpenseForm = () => {
+    setShowForm(false);
+    resetExpenseForm();
+  };
+
+  // The people money can be spent by, and the panel for maintaining them.
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [staffForm, setStaffForm] = useState<{
+    id?: string;
+    name: string;
+    role: StaffMember["role"];
+    phone: string;
+    note: string;
+  }>({ name: "", role: "employee", phone: "", note: "" });
+  const [savingStaff, setSavingStaff] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<"all" | "spend" | "credit" | "purchase" | "rent">("all");
@@ -51,11 +125,17 @@ export function Expenses() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // Date range filter logic
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange } = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
   const [isApplying, setIsApplying] = useState(false);
+
+  // Only the newest request may write the table. The period can change while
+  // a slow all-years query is still in flight, and its late answer used to
+  // overwrite the season's.
+  const latestRequest = useRef(0);
 
   // Fetch expenses
   const fetchExpenses = async (startDate?: Date, endDate?: Date) => {
+    const request = ++latestRequest.current;
     setLoading(true);
     let query = supabase
       .from("expenses")
@@ -69,16 +149,28 @@ export function Expenses() {
      }
 
     const { data, error } = await query;
+    if (request !== latestRequest.current) return;
     if (!error && data) setExpenses(data as Expense[]);
     setLoading(false);
   };
 
+  /** Reloads whatever period the dropdown is showing. */
+  const reloadExpenses = () => {
+    const { startDate, endDate } = getDateRange();
+    return fetchExpenses(startDate, endDate);
+  };
+
+  // `ready` holds the first fetch until the season list has loaded and the
+  // dropdown has settled on the live season. Fetching before that asked for
+  // every year first, which is what the table showed while the dropdown
+  // already said the current season.
   useEffect(() => {
+    if (!ready) return;
     if (range !== "custom") {
-      const { startDate, endDate } = getDateRange();
-      fetchExpenses(startDate, endDate);
+      reloadExpenses();
     }
-  }, [range]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, ready]);
 
   const handleApplyCustom = async () => {
     setIsApplying(true);
@@ -87,25 +179,174 @@ export function Expenses() {
     setIsApplying(false);
   };
 
-  // Upload helper - stores file in Supabase storage 'expenses' bucket and returns public url + path
-  async function uploadDocument(file: File): Promise<{ publicUrl: string | null; path: string | null }> {
-    try {
-      const id = (crypto && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}`);
-      const filename = `${id}_${file.name.replace(/\s+/g, "_")}`;
-      const path = `expenses/${filename}`;
-      const { error: uploadError } = await supabase.storage.from("expenses").upload(path, file, { upsert: true });
-      if (uploadError) {
-        console.error("Upload error", uploadError);
-        toast.error("File upload failed");
-        return { publicUrl: null, path: null };
-      }
-      const { data: urlData } = supabase.storage.from("expenses").getPublicUrl(path);
-      return { publicUrl: urlData.publicUrl || null, path };
-    } catch (err) {
-      console.error(err);
-      toast.error("File upload failed");
-      return { publicUrl: null, path: null };
+  /**
+   * Loads the people list.
+   *
+   * Inactive members are loaded too: someone who has left still appears on
+   * the expenses they made, and hiding them would show those rows as blank.
+   * The picker offers only the active ones.
+   */
+  const fetchStaff = async () => {
+    const { data, error } = await supabase
+      .from("staff_members")
+      .select("*")
+      .order("is_active", { ascending: false })
+      .order("name");
+    if (error) {
+      console.error("Failed to load people:", error);
+      return;
     }
+    setStaff((data as StaffMember[]) ?? []);
+  };
+
+  useEffect(() => {
+    fetchStaff();
+  }, []);
+
+  const activeStaff = staff.filter((member) => member.is_active);
+
+  /**
+   * Every row under one spelling per person.
+   *
+   * Totals, the chart and "Sort by Person" all group on `spend_by`, so
+   * "Sankar Raj" and "sankarraj" used to be two bars. A row is filed under the
+   * person on the list with the same name key; a name nobody has added yet
+   * falls back to the spelling used most often in the loaded rows.
+   */
+  const expenses = useMemo(() => {
+    const listed = new Map(
+      staff.map((member) => [personNameKey(member.name), member.name])
+    );
+
+    const spellings = new Map<string, Map<string, number>>();
+    rawExpenses.forEach((row) => {
+      const key = personNameKey(row.spend_by);
+      if (!key || listed.has(key)) return;
+      const counts = spellings.get(key) ?? new Map<string, number>();
+      const label = (row.spend_by ?? "").trim();
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+      spellings.set(key, counts);
+    });
+
+    const unlisted = new Map<string, string>();
+    spellings.forEach((counts, key) => {
+      const [mostUsed] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+      unlisted.set(key, mostUsed);
+    });
+
+    return rawExpenses.map((row) => {
+      const key = personNameKey(row.spend_by);
+      const name = listed.get(key) ?? unlisted.get(key);
+      return name && name !== row.spend_by ? { ...row, spend_by: name } : row;
+    });
+  }, [rawExpenses, staff]);
+
+  const handleSaveStaff = async () => {
+    // Runs of spaces are collapsed so "Sankar  Raj" is stored tidily.
+    const name = staffForm.name.trim().replace(/\s+/g, " ");
+    if (!name) {
+      toast.error("Enter a name");
+      return;
+    }
+
+    // Same letters, different case or spacing, is the same person. Said here
+    // with the existing name, rather than as a bare database error.
+    const clash = staff.find(
+      (member) =>
+        member.id !== staffForm.id &&
+        personNameKey(member.name) === personNameKey(name)
+    );
+    if (clash) {
+      toast.error(`${name} is the same person as ${clash.name}, already on the list`);
+      return;
+    }
+
+    setSavingStaff(true);
+    try {
+      const payload = {
+        name,
+        role: staffForm.role,
+        phone: staffForm.phone.trim() || null,
+        note: staffForm.note.trim() || null,
+      };
+
+      const { error } = staffForm.id
+        ? await supabase
+            .from("staff_members")
+            .update(payload)
+            .eq("id", staffForm.id)
+        : await supabase.from("staff_members").insert(payload);
+
+      if (error) throw error;
+
+      toast.success(staffForm.id ? "Person updated" : "Person added");
+      setStaffForm({ name: "", role: "employee", phone: "", note: "" });
+      await fetchStaff();
+      // A rename propagates to every expense, so the list behind this modal
+      // is now out of date.
+      if (staffForm.id) reloadExpenses();
+    } catch (err: any) {
+      // The unique index on the name is the likely failure, and saying so is
+      // more use than "failed to save".
+      toast.error(
+        /duplicate|unique/i.test(err?.message ?? "")
+          ? `${name} is already on the list`
+          : err?.message || "Failed to save"
+      );
+    } finally {
+      setSavingStaff(false);
+    }
+  };
+
+  /**
+   * Deactivates rather than deletes.
+   *
+   * Expenses reference the person, so removing the row would either fail on
+   * the foreign key or orphan the history behind it.
+   */
+  const handleToggleStaffActive = async (member: StaffMember) => {
+    const { error } = await supabase
+      .from("staff_members")
+      .update({ is_active: !member.is_active })
+      .eq("id", member.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    fetchStaff();
+  };
+
+  /**
+   * Stores an attachment in the 'expenses' bucket and returns its path.
+   *
+   * Throws rather than returning null: the caller used to carry on and save
+   * the expense without its attachment, which looked like success and lost
+   * the receipt. The storage error is passed through because "upload failed"
+   * alone says nothing about whether it was the bucket, a permission or the
+   * file.
+   */
+  async function uploadDocument(file: File): Promise<string> {
+    const id =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}`;
+    // Anything outside a safe set is replaced: storage keys reject some
+    // characters that are perfectly legal in a phone's file names.
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const path = `expenses/${id}_${safeName}`;
+
+    const { error } = await supabase.storage
+      .from("expenses")
+      .upload(path, file, {
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+
+    if (error) {
+      console.error("Attachment upload failed:", error);
+      throw new Error(`Attachment could not be uploaded: ${error.message}`);
+    }
+    return path;
   }
 
   // Totals
@@ -133,50 +374,51 @@ export function Expenses() {
   // Add or update expense
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.date || !form.details || !form.spend_by || !form.amount || !form.type) {
-      toast.error("Please fill all required fields");
+    if (savingExpense) return;
+    if (!form.date || !form.details || !form.spend_by_id || !form.amount || !form.type) {
+      toast.error("Please fill all required fields, including who spent it");
       return;
     }
-    // Prepare payload
+    // Prepare payload. spend_by (the name) is filled in by the database
+    // trigger from spend_by_id, so it is never sent from here -- that is what
+    // stops the two drifting apart.
     const payload: any = {
       date: form.date,
       details: form.details,
-      spend_by: form.spend_by,
+      spend_by_id: form.spend_by_id,
       amount: form.amount,
       reason: form.reason,
       type: form.type,
+      reference_no: form.reference_no || null,
     };
 
-    // If a new file is selected upload it first and set image_path
-    if (imageFile) {
-      const { path } = await uploadDocument(imageFile);
-      if (path) payload.image_path = path;
-    } else if (form.image) {
-      // keep existing image path (when editing and not replacing)
-      payload.image_path = form.image;
-    }
+    setSavingExpense(true);
+    try {
+      // The attachment goes first, and a failed upload stops the save: an
+      // expense saved without the receipt the user just attached is worse
+      // than one not saved yet, because nobody notices it is missing.
+      if (imageFile) {
+        payload.image_path = await uploadDocument(imageFile);
+      } else if (form.image) {
+        // Editing without replacing: keep the attachment already there.
+        payload.image_path = form.image;
+      }
 
-    if (editing) {
-      // Update
-      const { error } = await supabase.from("expenses").update(payload).eq("id", editing.id);
-      if (!error) {
-        toast.success("Expense updated");
-        setShowForm(false);
-        setEditing(null);
-        setImageFile(null);
-        setForm((f) => ({ ...f, image: null }));
-        fetchExpenses();
-      }
-    } else {
-      // Insert
-      const { error } = await supabase.from("expenses").insert(payload);
-      if (!error) {
-        toast.success("Expense added");
-        setShowForm(false);
-        setImageFile(null);
-        setForm((f) => ({ ...f, image: null }));
-        fetchExpenses();
-      }
+      const { error } = editing
+        ? await supabase.from("expenses").update(payload).eq("id", editing.id)
+        : await supabase.from("expenses").insert(payload);
+
+      if (error) throw error;
+
+      toast.success(editing ? "Expense updated" : "Expense added");
+      closeExpenseForm();
+      reloadExpenses();
+    } catch (err) {
+      // The popup stays open with everything still filled in, so fixing the
+      // problem does not mean typing the entry again.
+      toast.error(err instanceof Error ? err.message : "Could not save the expense");
+    } finally {
+      setSavingExpense(false);
     }
   };
 
@@ -186,7 +428,7 @@ export function Expenses() {
     const { error } = await supabase.from("expenses").delete().eq("id", id);
     if (!error) {
       toast.success("Deleted");
-      fetchExpenses();
+      reloadExpenses();
     }
   };
 
@@ -275,7 +517,7 @@ export function Expenses() {
           </div>
           <div className="flex gap-2 items-start">
             <button
-              onClick={() => setShowForm(true)}
+              onClick={openNewExpense}
               className="btn-primary flex items-center gap-2"
             >
               <Plus className="w-4 h-4" /> Add Entry
@@ -409,12 +651,15 @@ export function Expenses() {
                             date: e.date,
                             details: e.details,
                             spend_by: e.spend_by,
+                            spend_by_id: e.spend_by_id || "",
                             amount: e.amount,
                             reason: e.reason,
                             type: e.type,
                             image: e.image_path || null,
+                            reference_no: e.reference_no || "",
                           });
                           setImageFile(null);
+                          if (imageInputRef.current) imageInputRef.current.value = "";
                           setShowForm(true);
                         }}
                       >
@@ -440,20 +685,7 @@ export function Expenses() {
             <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
               <button
                 className="absolute top-2 right-2 text-gray-500 hover:text-red-500 text-2xl"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditing(null);
-                  setForm({
-                    date: "",
-                    details: "",
-                    spend_by: "",
-                    amount: 0,
-                    reason: "",
-                    type: "spend",
-                    image: null,
-                  });
-                  setImageFile(null);
-                }}
+                onClick={closeExpenseForm}
                 aria-label="Close"
               >
                 ×
@@ -486,21 +718,69 @@ export function Expenses() {
                   />
                 </div>
                 <div>
-                  <label className="block mb-1 font-medium">Spend By</label>
-                  <input
-                    type="text"
-                    value={form.spend_by}
-                    onChange={e => setForm(f => ({ ...f, spend_by: e.target.value }))}
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-medium">Spent by *</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowStaffModal(true)}
+                      className="text-xs text-primary-orange font-semibold hover:underline"
+                    >
+                      + Add / manage people
+                    </button>
+                  </div>
+                  <select
+                    value={form.spend_by_id || ""}
+                    onChange={e =>
+                      setForm(f => ({ ...f, spend_by_id: e.target.value }))
+                    }
                     className="w-full px-3 py-2 border rounded"
                     required
+                  >
+                    <option value="">Select a person</option>
+                    {activeStaff.map(member => (
+                      <option key={member.id} value={member.id}>
+                        {member.name} ({member.role})
+                      </option>
+                    ))}
+                    {/* An expense being edited may name someone who has since
+                        left. Keeping them selectable means opening the form
+                        does not silently reassign the spend. */}
+                    {form.spend_by_id &&
+                      !activeStaff.some(m => m.id === form.spend_by_id) && (
+                        <option value={form.spend_by_id}>
+                          {form.spend_by} (inactive)
+                        </option>
+                      )}
+                  </select>
+                  {activeStaff.length === 0 && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      No people added yet — add one to record who spent the
+                      money.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1 font-medium">
+                    Reference / bill no.
+                  </label>
+                  <input
+                    type="text"
+                    value={form.reference_no || ""}
+                    onChange={e =>
+                      setForm(f => ({ ...f, reference_no: e.target.value }))
+                    }
+                    placeholder="Optional"
+                    className="w-full px-3 py-2 border rounded"
                   />
                 </div>
                 <div>
                   <label className="block mb-1 font-medium">Amount</label>
-                  <input
-                    type="number"
+                  <NumberInput
                     value={form.amount}
-                    onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))}
+                    onValueChange={amount => setForm(f => ({ ...f, amount }))}
+                    onClear={() => setForm(f => ({ ...f, amount: null }))}
+                    min={0}
+                    step="0.01"
                     className="w-full px-3 py-2 border rounded"
                     required
                   />
@@ -556,29 +836,25 @@ export function Expenses() {
                 <div className="flex justify-end gap-4 mt-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowForm(false);
-                      setEditing(null);
-                      setForm({
-                        date: "",
-                        details: "",
-                        spend_by: "",
-                        amount: 0,
-                        reason: "",
-                        type: "spend",
-                        image: null,
-                      });
-                      setImageFile(null);
-                    }}
-                    className="px-6 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                    onClick={closeExpenseForm}
+                    disabled={savingExpense}
+                    className="px-6 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90"
+                    disabled={savingExpense}
+                    className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 disabled:opacity-60 disabled:cursor-wait"
                   >
-                    {editing ? "Update" : "Add"}
+                    {savingExpense && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {savingExpense
+                      ? imageFile
+                        ? "Uploading…"
+                        : "Saving…"
+                      : editing
+                      ? "Update"
+                      : "Add"}
                   </button>
                 </div>
               </form>
@@ -653,6 +929,203 @@ export function Expenses() {
           </div>
         )}
       </div>
+
+      {/* People who can spend money. Kept here rather than on a page of its
+          own: it is only ever needed while recording an expense. */}
+      {showStaffModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-start justify-between p-5 border-b">
+              <div>
+                <h2 className="text-xl font-bold">People</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Owners, partners and employees who spend on the business.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowStaffModal(false);
+                  setStaffForm({
+                    name: "",
+                    role: "employee",
+                    phone: "",
+                    note: "",
+                  });
+                }}
+                aria-label="Close"
+                className="text-gray-500 hover:text-red-500 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-5 border-b bg-gray-50">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Name *
+                  </label>
+                  <input
+                    value={staffForm.name}
+                    onChange={(e) =>
+                      setStaffForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                    placeholder="Full name"
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Role</label>
+                  <select
+                    value={staffForm.role}
+                    onChange={(e) =>
+                      setStaffForm((f) => ({
+                        ...f,
+                        role: e.target.value as StaffMember["role"],
+                      }))
+                    }
+                    className="w-full px-3 py-2 border rounded capitalize"
+                  >
+                    {STAFF_ROLES.map((role) => (
+                      <option key={role} value={role} className="capitalize">
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Phone
+                  </label>
+                  <input
+                    value={staffForm.phone}
+                    onChange={(e) =>
+                      setStaffForm((f) => ({ ...f, phone: e.target.value }))
+                    }
+                    placeholder="Optional"
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Note</label>
+                  <input
+                    value={staffForm.note}
+                    onChange={(e) =>
+                      setStaffForm((f) => ({ ...f, note: e.target.value }))
+                    }
+                    placeholder="Optional"
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-3">
+                {staffForm.id && (
+                  <button
+                    onClick={() =>
+                      setStaffForm({
+                        name: "",
+                        role: "employee",
+                        phone: "",
+                        note: "",
+                      })
+                    }
+                    className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-sm"
+                  >
+                    Cancel edit
+                  </button>
+                )}
+                <button
+                  onClick={handleSaveStaff}
+                  disabled={savingStaff || !staffForm.name.trim()}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 text-sm disabled:opacity-40"
+                >
+                  {savingStaff && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <span>{staffForm.id ? "Save changes" : "Add person"}</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto p-5">
+              {staff.length === 0 ? (
+                <p className="text-center text-gray-500 py-6">
+                  Nobody added yet.
+                </p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b">
+                      <th className="py-2 font-medium">Name</th>
+                      <th className="py-2 font-medium">Role</th>
+                      <th className="py-2 font-medium">Phone</th>
+                      <th className="py-2 font-medium text-right">Spent</th>
+                      <th className="py-2 font-medium text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {staff.map((member) => (
+                      <tr
+                        key={member.id}
+                        className={`border-b ${
+                          member.is_active ? "" : "opacity-50"
+                        }`}
+                      >
+                        <td className="py-2">
+                          {member.name}
+                          {!member.is_active && (
+                            <span className="ml-2 text-xs text-gray-500">
+                              (inactive)
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2 capitalize">{member.role}</td>
+                        <td className="py-2">{member.phone || "-"}</td>
+                        {/* The total each person is carrying, over whatever
+                            date range is currently filtered. */}
+                        <td className="py-2 text-right">
+                          ₹
+                          {expenses
+                            .filter((e) => e.spend_by_id === member.id)
+                            .reduce((sum, e) => sum + Number(e.amount), 0)
+                            .toFixed(2)}
+                        </td>
+                        <td className="py-2 text-center whitespace-nowrap">
+                          <button
+                            onClick={() =>
+                              setStaffForm({
+                                id: member.id,
+                                name: member.name,
+                                role: member.role,
+                                phone: member.phone || "",
+                                note: member.note || "",
+                              })
+                            }
+                            title="Edit"
+                            className="p-1 text-primary-orange hover:bg-gray-100 rounded"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleToggleStaffActive(member)}
+                            title={
+                              member.is_active
+                                ? "Deactivate — keeps their past expenses"
+                                : "Reactivate"
+                            }
+                            className="p-1 text-gray-600 hover:bg-gray-100 rounded ml-1 text-xs font-semibold"
+                          >
+                            {member.is_active ? "Deactivate" : "Reactivate"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

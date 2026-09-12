@@ -12,6 +12,7 @@ import {
 import {
   Sparkles,
   ShoppingCart,
+  Heart,
   Menu,
   X,
   Sun,
@@ -47,6 +48,9 @@ import { Dashboard } from "./pages/Dashboard";
 import { Orders } from "./pages/Orders";
 import { MyOrders } from "./pages/MyOrders";
 import { StockManagement } from "./pages/StockManagement";
+import { ComboPacks } from "./pages/ComboPacks";
+import { Wishlist } from "./pages/Wishlist";
+import { useWishlistStore } from "./store/wishlistStore";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { Profile } from "./pages/Profile";
@@ -68,6 +72,7 @@ import QuickPurchaseButton from "./components/QuickButton";
 import { TrackOrder } from "./pages/TrackOrder";
 import { Payment } from "./pages/Payment";
 import { Expenses } from "./pages/Expenses";
+import { Customers } from "./pages/Customers";
 import { UpdatePassword } from "./pages/UpdatePassword";
 import { Vendors } from "./pages/Vendors";
 import { VendorDetails } from "./pages/VendorDetails";
@@ -236,6 +241,7 @@ export function AppContent() {
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalQuantity, items, isCartOpen, openCart, closeCart } = useCartStore();
+  const wishlistCount = useWishlistStore((state) => state.items.length);
   const { settings } = useAppSettings();
 
   const handleMenuItemClick = () => {
@@ -343,6 +349,21 @@ export function AppContent() {
             >
               Chit Scheme
             </NavLink>
+            {/* Open to everyone: a guest tracks with the order number and
+                the phone they ordered with. It used to be reachable only
+                from the footer and the post-checkout screen. */}
+            <NavLink
+              to="/track-order"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
+            >
+              Track Order
+            </NavLink>
             <button
               onClick={handleDownloadPriceList}
               disabled={priceListLoading}
@@ -362,6 +383,20 @@ export function AppContent() {
               )}
             </button>
             <UserMenu />
+            {/* Saved for later, next to the cart it empties into. */}
+            <Link
+              to="/wishlist"
+              className="relative"
+              aria-label={`Wishlist${wishlistCount ? `, ${wishlistCount} saved` : ""}`}
+              title="Wishlist"
+            >
+              <Heart className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 transition-colors" />
+              {wishlistCount > 0 && (
+                <span className="absolute -top-2 -right-2 bg-primary-red text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {wishlistCount}
+                </span>
+              )}
+            </Link>
             <div className="relative">
               <button onClick={openCart} className="relative" id="cart-button">
                 <ShoppingCart className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
@@ -429,6 +464,20 @@ export function AppContent() {
               >
                 Chit Scheme
               </Link>
+              <Link
+                to="/track-order"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Track Order
+              </Link>
+              <Link
+                to="/wishlist"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Wishlist{wishlistCount > 0 ? ` (${wishlistCount})` : ""}
+              </Link>
               <button
                 onClick={() => {
                   handleDownloadPriceList();
@@ -477,6 +526,7 @@ export function AppContent() {
         />
         <Route path="/quick-online-cracker" element={<QuickPurchase />} />
         <Route path="/buy-cracker-online" element={<ExploreCrackers />} />
+        <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/product/:productId" element={<ProductDetails />} />
         <Route path="/monthly-installment" element={<MonthlyInstallment />} />
         <Route path="/login" element={<Login />} />
@@ -523,6 +573,14 @@ export function AppContent() {
           }
         />
         <Route
+          path="/family-packs"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <ComboPacks />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/settings"
           element={
             <ProtectedRoute requiredRole="admin">
@@ -559,6 +617,14 @@ export function AppContent() {
           element={
             <ProtectedRoute requiredRole="admin">
               <Expenses />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customers"
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Customers />
             </ProtectedRoute>
           }
         />

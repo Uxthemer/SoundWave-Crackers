@@ -20,11 +20,29 @@ export interface Product extends Categories{
   rating?: number;
   reviews?: number;
   stock?: number;
+  /** Set on a family / combo pack; see {@link CartItem}. */
+  is_pack?: boolean;
+  pack_components?: PackComponentSummary[];
+}
+
+/**
+ * A family / combo pack behaves as a product everywhere the cart and the
+ * listing are concerned — it has a name, a rate and a struck-out "worth" —
+ * so it travels as one. `is_pack` is the single place the difference shows:
+ * at checkout the id goes to order_items.combo_pack_id instead of product_id,
+ * and the database moves the stock of the products inside it.
+ */
+export interface PackComponentSummary {
+  product_id: string;
+  name: string;
+  quantity: number;
 }
 
 export interface CartItem extends Product {
   quantity: number;
   totalPrice: number;
+  is_pack?: boolean;
+  pack_components?: PackComponentSummary[];
 }
 
 export interface UserDetails {

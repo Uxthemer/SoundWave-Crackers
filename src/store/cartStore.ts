@@ -136,6 +136,24 @@ export const useCartStore = create<CartStore>()(
         const cartItems: CartItem[] = quotation.items.map((qItem: any) => {
            // qItem.product is the joined product object
            // We need to construct a CartItem which is Product & { quantity, totalPrice }
+           // A quoted family pack has no product row; it comes back through
+           // the pack join and goes into the cart as a pack again, so
+           // converting the quote to an order keeps it as one line.
+           if (qItem.combo_pack_id) {
+             const pack = qItem.pack;
+             return {
+               id: qItem.combo_pack_id,
+               name: pack?.name ?? "Family pack",
+               content: "",
+               actual_price: qItem.price,
+               offer_price: qItem.price,
+               discount_percentage: 0,
+               quantity: qItem.quantity,
+               totalPrice: qItem.total_price,
+               is_pack: true,
+             };
+           }
+
            const product = qItem.product; 
            if (!product) return null; // Should not happen if data integrity is good
 

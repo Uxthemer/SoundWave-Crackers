@@ -40,7 +40,7 @@ const money = (value: number | null | undefined) =>
  * A missing banner is not worth failing the whole list over — the caller
  * falls back to a plain heading.
  */
-async function loadImage(
+export async function loadImage(
   url: string
 ): Promise<{ dataUrl: string; width: number; height: number } | null> {
   try {

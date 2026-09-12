@@ -13,8 +13,12 @@ import { Link } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
 import { Cart } from "../components/Cart";
 import { useProducts } from "../hooks/useProducts";
+import { WishlistButton } from "../components/WishlistButton";
 import { useCategories } from "../hooks/useCategories";
 import { ProductImageSlider } from "../components/ProductImageSlider";
+import { NumberInput } from "../components/NumberInput";
+import { crackerImage } from "../lib/productImage";
+
 import { useAuth } from "../context/AuthContext"; // Import your auth context
 
 export function QuickPurchase() {
@@ -82,13 +86,14 @@ export function QuickPurchase() {
           image: product.image_url
             ? product.image_url
                 .split(",")
-                .map((img: string) => `/assets/img/crackers/${img.trim()}`)
+                .map((img: string) => crackerImage(img.trim()))
             : [`/assets/img/logo/logo-product.png`],
           actual_price: product.actual_price,
           offer_price: product.offer_price,
           discount: product.discount_percentage,
           content: product.content,
           stock: product.stock,
+          combo_pack_id: product.combo_pack_id ?? null,
         });
         return acc;
       }, {} as Record<string, any[]>);
@@ -307,9 +312,16 @@ export function QuickPurchase() {
                               {/* </Link> */}
                               <div className="flex-1 min-w-0">
                                 {/* <Link to={`/product/${product.id}`}> */}
-                                <h3 className="font-montserrat font-bold text-sm truncate">
-                                  {product.name}
-                                </h3>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <h3 className="font-montserrat font-bold text-sm truncate">
+                                    {product.name}
+                                  </h3>
+                                  <WishlistButton
+                                    product={product}
+                                    variant="inline"
+                                    className="!p-1 !bg-transparent shrink-0"
+                                  />
+                                </div>
                                 {/* </Link> */}
                                 <div className="flex flex-wrap items-center gap-2 mt-1">
                                   <span className="text-xs text-text/60">
@@ -367,16 +379,15 @@ export function QuickPurchase() {
                                   >
                                     <Minus className="w-4 h-4" />
                                   </button>
-                                  <input
+                                  <NumberInput
                                     disabled={!quantities[product.id]}
-                                    type="number"
                                     min="0"
                                     max={product.stock}
                                     value={quantities[product.id] || 0}
-                                    onChange={(e) =>
+                                    onValueChange={(n) =>
                                       handleQuantityChange(
                                         product.id,
-                                        e.target.value
+                                        String(n)
                                       )
                                     }
                                     className="w-16 px-1 py-1 text-center border-x border-card-border/10 bg-card"

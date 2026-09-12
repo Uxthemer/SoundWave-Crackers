@@ -12,7 +12,25 @@ type CatalogRow = Database['public']['Views']['season_catalog']['Row'];
  * commercial fields for one season, flattened by the season_catalog view.
  * `id` is still products.id, so it remains a stable key across seasons.
  */
-export type ProductWithCategory = CatalogRow;
+export type ProductWithCategory = CatalogRow & {
+  /**
+   * Set when this product is a family pack listed in the shop. It is a
+   * packed box with its own stock, sold and stocked like any product.
+   */
+  combo_pack_id?: string | null;
+};
+
+/** One line of a pack, as the product page lists it. */
+export interface PackComponentDetail {
+  product_id: string;
+  name: string;
+  product_code: string | null;
+  content: string | null;
+  quantity: number;
+  offer_price: number;
+  actual_price: number;
+  image_url: string | null;
+}
 
 /**
  * Reads the catalog for one season.
@@ -37,6 +55,8 @@ export function useProducts(seasonIdOverride?: string | null) {
 
     try {
       setLoading(true);
+      // Family packs come through here like any product once they have been
+      // added to the product list in Stock Management.
       const { data, error } = await supabase
         .from('season_catalog')
         .select('*')

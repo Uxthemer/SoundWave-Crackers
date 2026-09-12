@@ -109,6 +109,13 @@ export interface Database {
           state: string | null
           pincode: string | null
           season_id: string | null
+          /** Payment is its own axis; see 20260913000000_order_confirmation_and_payment. */
+          amount_received: number
+          payment_status: string
+          payment_received_at: string | null
+          payment_note: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
         }
         Insert: {
           id?: string
@@ -213,6 +220,10 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified: boolean
+          alternate_phone: string | null
+          /** Base64 mirror of the password, replayed by phone sign-in. */
+          pwd: string | null
           created_at: string
         }
         Insert: {
@@ -227,6 +238,9 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified?: boolean
+          alternate_phone?: string | null
+          pwd?: string | null
           created_at?: string
         }
         Update: {
@@ -241,6 +255,9 @@ export interface Database {
           state: string | null
           pincode: string | null
           country: string | null
+          phone_verified?: boolean
+          alternate_phone?: string | null
+          pwd?: string | null
           created_at?: string
         }
       }

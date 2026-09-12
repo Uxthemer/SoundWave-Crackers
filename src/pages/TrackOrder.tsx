@@ -128,7 +128,7 @@ export function TrackOrder() {
           <input
             type="text"
             placeholder={
-              user ? "Enter Order ID or Phone Number" : "Order number, e.g. SWC-014"
+              user ? "Enter Order ID or Phone Number" : "Order number, e.g. SWC-O-2026-K7P2QX9A-0001"
             }
             value={input}
             onChange={e => setInput(e.target.value)}

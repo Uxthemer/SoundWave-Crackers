@@ -1,8 +1,15 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
   import { useQuotations } from "../hooks/useQuotations";
   import { useCartStore } from "../store/cartStore";
-  import { Eye, Trash2, ShoppingCart } from "lucide-react";
+  import { Eye, Trash2, ShoppingCart, MessageCircle } from "lucide-react";
   import { format } from "date-fns";
+  import { useAppSettings } from "../context/AppSettingsContext";
+  import { businessFromSettings } from "../lib/businessDetails";
+  import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
+  import {
+    WhatsAppShareDialog,
+    type WhatsAppShareRequest,
+  } from "../components/WhatsAppShareDialog";
   
   // interface QuotationsListProps {
   //   onOpenCart: () => void;
@@ -11,7 +18,53 @@ import { useEffect } from "react";
   export function QuotationsList() {
     const { quotations, loading, fetchQuotations, deleteQuotation } = useQuotations();
     const { loadQuotation, openCart } = useCartStore();
-  
+    const { settings } = useAppSettings();
+
+    const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
+
+    /** Sends the quotation on WhatsApp; see WhatsAppShareDialog. */
+    const handleShare = (quote: any) => {
+      const business = businessFromSettings(settings);
+      const number = quote.short_id || String(quote.id).slice(0, 8);
+      setShareRequest({
+        kind: "quotation",
+        title: `Quotation ${number}`,
+        customerName: quote.customer_name,
+        phone: quote.phone,
+        fileName: documentFileName("quotation", number),
+        message:
+          `Hello ${quote.customer_name || ""}, here is your quotation ${number} ` +
+          `from ${business.name}. Total Rs. ${Number(quote.total_amount || 0).toFixed(2)}.`,
+        makePdf: async () => {
+          const lines = (quote.items || []).map((item: any) => ({
+            code: item.product?.product_code ?? item.pack?.pack_code ?? null,
+            name: item.product?.name ?? item.pack?.name ?? "Item",
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            total: Number(item.total_price || 0),
+          }));
+          const pdf = await buildDocumentPdf({
+            kind: "quotation",
+            number,
+            date: quote.created_at,
+            customer: {
+              name: quote.customer_name,
+              phone: quote.phone,
+              email: quote.email,
+              address: quote.address,
+              city: quote.city,
+              state: quote.state,
+              pincode: quote.pincode,
+            },
+            lines,
+            subtotal: Number(quote.total_amount || 0),
+            business,
+          });
+          return pdf.output("blob");
+        },
+      });
+    };
+
     useEffect(() => {
       fetchQuotations();
     }, [fetchQuotations]);
@@ -40,6 +93,11 @@ import { useEffect } from "react";
     }
   
     return (
+      <>
+      <WhatsAppShareDialog
+        request={shareRequest}
+        onClose={() => setShareRequest(null)}
+      />
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -81,6 +139,13 @@ import { useEffect } from "react";
                         <Eye className="w-5 h-5" />
                       </button>
                       <button
+                        onClick={() => handleShare(quote)}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                        title="Send quotation on WhatsApp"
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                      </button>
+                      <button
                         onClick={() => deleteQuotation(quote.id)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
                         title="Delete Quotation"
@@ -95,6 +160,7 @@ import { useEffect } from "react";
           </table>
         </div>
       </div>
+      </>
     );
   }
   
