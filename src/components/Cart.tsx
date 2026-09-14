@@ -48,7 +48,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
     clearDelivery,
 
     editingQuotationId,
-    clearQuotationMode
+    clearQuotationMode,
   } = useCartStore();
 
   const { saveQuotation, deleteQuotation } = useQuotations();
@@ -70,7 +70,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const { user, userRole } = useAuth();
   const navigate = useNavigate();
   const [statesList, setStatesList] = useState<{ id: number; name: string }[]>(
-    []
+    [],
   );
   const [districtsList, setDistrictsList] = useState<
     { id: number; name: string }[]
@@ -141,9 +141,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
   useEffect(() => {
     if (showPhoneVerification && verifyingPhone) {
       (async () => {
-        const { verificationId: vId, error } = await signInWithPhone(
-          verifyingPhone
-        );
+        const { verificationId: vId, error } =
+          await signInWithPhone(verifyingPhone);
         if (!error && vId) {
           setVerificationId(vId);
         } else {
@@ -152,7 +151,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
           clearRecaptcha(); // <-- Clear recaptcha on error
           toast.success(
             "Order placed successfully! We will contact you shortly through phone or whatsapp for further details.",
-            { duration: 10000 }
+            { duration: 10000 },
           );
           clearCart();
           onClose();
@@ -161,7 +160,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
       })();
     }
   }, [showPhoneVerification, verifyingPhone]);
-
 
   const handleSaveQuotation = async () => {
     if ((items || []).length === 0) {
@@ -173,7 +171,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       toast.error("Please enter customer details (Name & Phone)");
       return;
     }
-    
+
     setIsQuotationSaving(true);
     try {
       const quotationData = {
@@ -184,27 +182,31 @@ export function Cart({ isOpen, onClose }: CartProps) {
         city: delivery.city,
         state: delivery.state,
         pincode: delivery.pincode,
-        total_amount: totalAmount
+        total_amount: totalAmount,
       };
-      
+
       // As on an order, a quoted line is a product or a family pack. Sending
       // a pack id as a product_id would be rejected by the foreign key.
-      const quotationItems = items.map(item => ({
+      const quotationItems = items.map((item) => ({
         product_id: item.is_pack ? null : item.id,
         combo_pack_id: item.is_pack ? item.id : null,
         quantity: item.quantity,
         price: item.offer_price,
-        total_price: item.totalPrice
+        total_price: item.totalPrice,
       }));
 
-      await saveQuotation(quotationData, quotationItems, editingQuotationId || undefined);
-      
-      clearCart(); 
+      await saveQuotation(
+        quotationData,
+        quotationItems,
+        editingQuotationId || undefined,
+      );
+
+      clearCart();
       // clearQuotationMode is handled by clearCart if implemented, but let's be safe or if clearCart logic changes
       // In store I added editingQuotationId: null to clearCart, so it's fine.
       onClose();
     } catch (error) {
-       console.error(error);
+      console.error(error);
     } finally {
       setIsQuotationSaving(false);
     }
@@ -239,7 +241,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }, 100);
   };
 
-  const handlePlaceOrder = async (paymentMethod: string) => { // Reverted to original signature to maintain syntactical correctness
+  const handlePlaceOrder = async (paymentMethod: string) => {
+    // Reverted to original signature to maintain syntactical correctness
     try {
       setIsProcessing(true);
       setOrderError(null);
@@ -279,14 +282,14 @@ export function Cart({ isOpen, onClose }: CartProps) {
       if (delivery.alternatePhone) {
         if (!phoneRegex.test(delivery.alternatePhone)) {
           throw new Error(
-            "Please enter a valid 10-digit alternate phone number"
+            "Please enter a valid 10-digit alternate phone number",
           );
         }
       }
       if (delivery.referralPhone) {
         if (!phoneRegex.test(delivery.referralPhone)) {
           throw new Error(
-            "Please enter a valid 10-digit referral phone number"
+            "Please enter a valid 10-digit referral phone number",
           );
         }
       }
@@ -305,7 +308,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
       // check minimum order amount
       const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
-      
+
       if (!isAdmin) {
         if (totalAmount < 3000) {
           throw new Error("Minimum order amount is ₹3000");
@@ -383,15 +386,15 @@ export function Cart({ isOpen, onClose }: CartProps) {
       clearRecaptcha(); // <-- Clear recaptcha on error
       toast.success(
         "Order placed successfully! We will contact you shortly through phone or whatsapp for further details.",
-        { duration: 10000 }
+        { duration: 10000 },
       );
       clearCart();
       setOrderSuccess(true);
-      
+
       // If we are converting a quotation, delete the original quotation
       if (editingQuotationId) {
-          await deleteQuotation(editingQuotationId);
-          clearQuotationMode();
+        await deleteQuotation(editingQuotationId);
+        clearQuotationMode();
       }
 
       // clear cart
@@ -441,12 +444,12 @@ export function Cart({ isOpen, onClose }: CartProps) {
             <td>${item.name}</td>
             <td style="text-align:center;">${item.quantity}</td>
             <td style="text-align:right;">₹${Number(
-              item.offer_price ?? 0
+              item.offer_price ?? 0,
             ).toFixed(2)}</td>
             <td style="text-align:right;">₹${Number(
-              item.totalPrice ?? item.quantity * Number(item.offer_price ?? 0)
+              item.totalPrice ?? item.quantity * Number(item.offer_price ?? 0),
             ).toFixed(2)}</td>
-          </tr>`
+          </tr>`,
       )
       .join("");
 
@@ -478,8 +481,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
           <div><strong>Phone:</strong> ${delivery.phone || "-"}</div>
           <div><strong>Email:</strong> ${delivery.email || "-"}</div>
           <div><strong>Address:</strong> ${delivery.address || "-"}, ${
-      delivery.city || ""
-    } ${delivery.pincode || ""}</div>
+            delivery.city || ""
+          } ${delivery.pincode || ""}</div>
         </div>
         </div>
         <div style=""><img style="height:100px" src="/assets/img/logo/logo_2.png" alt="logo"/></div>
@@ -646,7 +649,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       return;
     }
     const ok = window.confirm(
-      "Clear cart — This will permanently remove all items from your cart. Do you want to continue?"
+      "Clear cart — This will permanently remove all items from your cart. Do you want to continue?",
     );
     if (!ok) return;
     clearCart();
@@ -687,7 +690,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
           <div className="flex items-center gap-3">
             {/* Informational message about payment */}
             <div className="text-sm ml-2 text-center px-3 text-text/60 ">
-              No payment is required to place an order. Submit it now — our team will contact you within 24 hours to confirm stock and payment. For urgent help call +91 9789794518 or +91 9363515184.
+              Submit your order now — our team will contact you within 24 hours
+              to confirm stock and payment. For urgent help call +91 9789794518
+              or +91 9363515184.
             </div>
             {/* Clear Cart button (top) - only show when cart has items */}
             {items && items.length > 0 && (
@@ -720,8 +725,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       {guestOrderRef.short_id}
                     </p>
                     <p className="text-xs mt-2">
-                      Keep this safe. Track your order any time with this
-                      number and{" "}
+                      Keep this safe. Track your order any time with this number
+                      and{" "}
                       <span className="font-semibold">
                         {guestOrderRef.phone}
                       </span>
@@ -933,8 +938,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                     ? item.image[0]
                                     : item.image?.split(",")[0]
                                   : item.image_url
-                                  ? crackerImage(item.image_url.split(",")[0])
-                                  : "/assets/img/logo/logo-product.png"
+                                    ? crackerImage(item.image_url.split(",")[0])
+                                    : "/assets/img/logo/logo-product.png"
                               }
                               alt={item.name}
                               className="w-12 h-12 sm:w-16 sm:h-16 object-cover rounded-lg"
@@ -955,10 +960,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               min="0"
                               value={item.quantity}
                               onValueChange={(n) =>
-                                updateQuantity(
-                                  item.id,
-                                  Math.floor(n)
-                                )
+                                updateQuantity(item.id, Math.floor(n))
                               }
                               className="w-16 sm:w-20 px-2 sm:px-3 py-2 text-center rounded-lg bg-background border border-card-border/10 focus:outline-none focus:border-primary-orange"
                             />
@@ -997,8 +999,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               ? item.image[0]
                               : item.image?.split(",")[0]
                             : item.image_url
-                            ? crackerImage(item.image_url.split(",")[0])
-                            : "/assets/img/logo/logo-product.png"
+                              ? crackerImage(item.image_url.split(",")[0])
+                              : "/assets/img/logo/logo-product.png"
                         }
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-lg"
@@ -1027,10 +1029,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               min="0"
                               value={item.quantity}
                               onValueChange={(n) =>
-                                updateQuantity(
-                                  item.id,
-                                  Math.floor(n)
-                                )
+                                updateQuantity(item.id, Math.floor(n))
                               }
                               className="w-12 px-2 py-1 text-center rounded-lg border border-card-border/10 focus:outline-none focus:border-primary-orange text-sm"
                             />
@@ -1110,8 +1109,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
                   <p className="text-sm text-text/70 mb-5">
                     An account keeps your address ready for next time and lets
                     you see all your orders in one place. It is not required —
-                    you can order as a guest and track it with your order
-                    number and phone.
+                    you can order as a guest and track it with your order number
+                    and phone.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
@@ -1246,7 +1245,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         options={stateOptions}
                         value={
                           stateOptions.find(
-                            (opt) => opt.value === delivery.state
+                            (opt) => opt.value === delivery.state,
                           ) || null
                         }
                         onChange={(option) =>
@@ -1271,7 +1270,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         options={districtOptions}
                         value={
                           districtOptions.find(
-                            (opt) => opt.value === delivery.district
+                            (opt) => opt.value === delivery.district,
                           ) || null
                         }
                         onChange={(option) =>
@@ -1355,7 +1354,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                             Place Order
                           </button>
                           {["admin", "superadmin"].includes(
-                            userRole?.name || ""
+                            userRole?.name || "",
                           ) && (
                             <button
                               type="button"
@@ -1365,14 +1364,20 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               Estimate Report
                             </button>
                           )}
-                           {["admin", "superadmin"].includes(userRole?.name || "") && (
-                             <button
+                          {["admin", "superadmin"].includes(
+                            userRole?.name || "",
+                          ) && (
+                            <button
                               type="button"
                               onClick={handleSaveQuotation}
                               disabled={isQuotationSaving || isProcessing}
                               className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
                             >
-                              {isQuotationSaving ? "Saving..." : (editingQuotationId ? "Update Quote" : "Save Quote")}
+                              {isQuotationSaving
+                                ? "Saving..."
+                                : editingQuotationId
+                                  ? "Update Quote"
+                                  : "Save Quote"}
                             </button>
                           )}
                         </div>
@@ -1444,7 +1449,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                             try {
                               const { error } = await verifyOTP(
                                 verificationId,
-                                otp
+                                otp,
                               );
                               if (error) throw error;
                               if (lastOrderId) {
@@ -1457,7 +1462,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
                               clearRecaptcha();
                               fireworkConfetti();
                               toast.success(
-                                "Phone number verified successfully!"
+                                "Phone number verified successfully!",
                               );
                               setOrderSuccess(true); // <-- Show success message in cart
                               clearCart();
