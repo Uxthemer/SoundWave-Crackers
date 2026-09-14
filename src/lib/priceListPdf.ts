@@ -41,7 +41,7 @@ const money = (value: number | null | undefined) =>
  * falls back to a plain heading.
  */
 export async function loadImage(
-  url: string
+  url: string,
 ): Promise<{ dataUrl: string; width: number; height: number } | null> {
   try {
     const response = await fetch(url);
@@ -62,7 +62,7 @@ export async function loadImage(
           resolve({ width: image.naturalWidth, height: image.naturalHeight });
         image.onerror = reject;
         image.src = dataUrl;
-      }
+      },
     );
 
     return { dataUrl, ...size };
@@ -145,7 +145,7 @@ export async function buildPriceListPdf({
         bannerBox.width,
         bannerBox.height,
         undefined,
-        "FAST"
+        "FAST",
       );
     } else {
       doc.setFont("helvetica", "bold");
@@ -157,9 +157,14 @@ export async function buildPriceListPdf({
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(90);
-      doc.text(subtitle || `Price List ${seasonName}`, pageWidth / 2, margin + 40, {
-        align: "center",
-      });
+      doc.text(
+        subtitle || `Price List ${seasonName}`,
+        pageWidth / 2,
+        margin + 40,
+        {
+          align: "center",
+        },
+      );
     }
   };
 
@@ -171,7 +176,7 @@ export async function buildPriceListPdf({
     doc.text(
       `Soundwave Crackers  |  Price List ${seasonName}`,
       margin,
-      pageHeight - 16
+      pageHeight - 16,
     );
     doc.text(`Page ${page}`, pageWidth - margin, pageHeight - 16, {
       align: "right",
@@ -187,7 +192,7 @@ export async function buildPriceListPdf({
     body.push([
       {
         content: group.category,
-        colSpan: 5,
+        colSpan: 7,
         styles: {
           halign: "center",
           fontStyle: "bold",
@@ -204,6 +209,8 @@ export async function buildPriceListPdf({
         money(product.actual_price),
         money(product.offer_price),
         product.content || "-",
+        "",
+        "",
       ]);
     });
   });
@@ -220,7 +227,15 @@ export async function buildPriceListPdf({
 
   autoTable(doc, {
     head: [
-      ["S.No", "Product", "Actual Price (Rs.)", offerHeading, "Quantity"],
+      [
+        "S.No",
+        "Product",
+        "Price (Rs.)",
+        offerHeading,
+        "Quantity",
+        "Requirement",
+        "Amount",
+      ],
     ],
     body,
     startY: headerHeight + 10,
@@ -242,11 +257,13 @@ export async function buildPriceListPdf({
       halign: "center",
     },
     columnStyles: {
-      0: { cellWidth: 34, halign: "center" },
+      0: { cellWidth: 28, halign: "center" },
       1: { halign: "left" },
-      2: { cellWidth: 82, halign: "center", textColor: [130, 130, 130] },
-      3: { cellWidth: 96, halign: "center", fontStyle: "bold" },
-      4: { cellWidth: 74, halign: "center" },
+      2: { cellWidth: 62, halign: "center", textColor: [130, 130, 130] },
+      3: { cellWidth: 62, halign: "center", fontStyle: "bold" },
+      4: { cellWidth: 70, halign: "center" },
+      5: { cellWidth: 58, halign: "center" },
+      6: { cellWidth: 65, halign: "center" },
     },
     // The struck-through original price, drawn by hand: autoTable has no
     // line-through style.
@@ -255,7 +272,7 @@ export async function buildPriceListPdf({
         data.section !== "body" ||
         data.column.index !== 2 ||
         data.row.raw == null ||
-        (data.row.raw as unknown[]).length !== 5
+        (data.row.raw as unknown[]).length !== 7
       )
         return;
       const text = String(data.cell.text?.[0] ?? "");
@@ -280,12 +297,13 @@ export async function buildPriceListPdf({
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   const wrapped = FOOTER_NOTE.flatMap((line) =>
-    doc.splitTextToSize(line, lineWidth)
+    doc.splitTextToSize(line, lineWidth),
   ) as string[];
   const noteHeight = wrapped.length * 12 + 16;
 
-  let y = ((doc as unknown as { lastAutoTable?: { finalY: number } })
-    .lastAutoTable?.finalY ?? headerHeight) + 22;
+  let y =
+    ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
+      ?.finalY ?? headerHeight) + 22;
   if (y + noteHeight > pageHeight - 34) {
     doc.addPage();
     drawFooter();
@@ -312,7 +330,7 @@ export async function buildPriceListPdf({
  */
 export async function openPriceListPdf(
   options: PriceListPdfOptions,
-  target: Window | null
+  target: Window | null,
 ): Promise<void> {
   const doc = await buildPriceListPdf(options);
   const url = doc.output("bloburl") as unknown as string;

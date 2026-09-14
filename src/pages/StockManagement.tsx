@@ -1279,6 +1279,8 @@ Offer prices are not changed.`
           Content: product.content || "-",
           Stock: product.stock ?? 0,
           APR: product.apr || "-",
+          Requirement: "",
+          Amount: "",
         });
       });
     });
@@ -1609,6 +1611,8 @@ Offer prices are not changed.`
             <th>Actual Price</th>
             <th>Offer Price</th>
             <th>Quantity</th>
+            <th>Requirement</th>
+            <th>Amount</th>
           </tr>
         </thead>
         <tbody>
@@ -1622,6 +1626,8 @@ Offer prices are not changed.`
                 <td>₹${product.actual_price}</td>
                 <td>₹${product.offer_price}</td>
                 <td>${product.content || "-"}</td>
+                <td></td>
+                <td></td>
               </tr>
             `
             )
