@@ -34,7 +34,12 @@ export interface DocumentParty {
 }
 
 export interface BusinessDocument {
-  kind: "invoice" | "quotation";
+  /**
+   * "order" is the summary a customer gets the moment they check out: the
+   * order exists but nothing is confirmed or paid yet, so it is neither a
+   * bill nor a quotation.
+   */
+  kind: "invoice" | "quotation" | "order";
   number: string;
   date: string | Date;
   status?: string | null;
@@ -65,8 +70,9 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
 
   const { business } = doc;
   const isInvoice = doc.kind === "invoice";
-  // The GST switch is about invoices. A quotation is not a tax document, so
-  // it never claims to be one.
+  const isOrder = doc.kind === "order";
+  // The GST switch is about invoices. A quotation or an order summary is not
+  // a tax document, so it never claims to be one.
   const showGst = isInvoice && business.showGst && !!business.gstin;
 
   // ---- business, top left --------------------------------------------------
@@ -112,7 +118,9 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   pdf.setFontSize(20);
   pdf.setTextColor(BRAND[0], BRAND[1], BRAND[2]);
   pdf.text(
-    isInvoice ? (showGst ? "TAX INVOICE" : "INVOICE") : "QUOTATION",
+    isInvoice
+      ? showGst ? "TAX INVOICE" : "INVOICE"
+      : isOrder ? "ORDER SUMMARY" : "QUOTATION",
     right,
     rightY + 18,
     { align: "right" }
@@ -122,7 +130,7 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   pdf.setFontSize(9);
   pdf.setTextColor(60);
   const meta: [string, string][] = [
-    [isInvoice ? "Order No" : "Quote No", doc.number],
+    [isInvoice || isOrder ? "Order No" : "Quote No", doc.number],
     ["Date", format(new Date(doc.date), "dd MMM yyyy, h:mm a")],
   ];
   if (doc.status) meta.push(["Status", doc.status]);
@@ -165,7 +173,11 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   const placeLine = [c.city, c.district, c.state].filter(Boolean).join(", ");
   const shipTo = [c.address ?? "", placeLine, c.pincode ? `PIN: ${c.pincode}` : ""].filter(Boolean);
 
-  const endLeft = column(isInvoice ? "Bill To" : "Quotation For", billTo, margin);
+  const endLeft = column(
+    isInvoice ? "Bill To" : isOrder ? "Customer" : "Quotation For",
+    billTo,
+    margin
+  );
   const endRight = shipTo.length
     ? column("Delivery Address", shipTo, pageWidth / 2 + 10)
     : y;
@@ -234,7 +246,9 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
     pdf.setFontSize(8.5);
     pdf.setTextColor(110);
     pdf.text(
-      "This is a quotation, not a bill. Prices are valid subject to stock availability.",
+      isOrder
+        ? "This is an order summary, not a bill. Our team will contact you to confirm the order and payment."
+        : "This is a quotation, not a bill. Prices are valid subject to stock availability.",
       margin,
       totalsY + 10
     );
@@ -264,5 +278,7 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
 /** A file name a phone will not mangle. */
 export function documentFileName(kind: BusinessDocument["kind"], number: string) {
   const safe = number.replace(/[^A-Za-z0-9-]+/g, "_");
-  return `${kind === "invoice" ? "Invoice" : "Quotation"}_${safe}.pdf`;
+  const prefix =
+    kind === "invoice" ? "Invoice" : kind === "order" ? "Order_Summary" : "Quotation";
+  return `${prefix}_${safe}.pdf`;
 }
