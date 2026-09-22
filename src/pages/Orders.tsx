@@ -1233,8 +1233,19 @@ export function Orders() {
                       key={order.id}
                       className="border-t border-card-border/10"
                     >
-                      <td className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap">
-                        {order.short_id || order.id.slice(0, 8) + "..."}
+                      <td
+                        className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap cursor-help"
+                        title={order.short_id || order.id}
+                      >
+                        {/* The last 4 are the year's sequence, which is what
+                            anyone scanning the list goes by; the full number
+                            is on hover. Old SWC-### numbers are short enough
+                            to show whole. */}
+                        {order.short_id
+                          ? order.short_id.length > 8
+                            ? `SWC…${order.short_id.slice(-4)}`
+                            : order.short_id
+                          : order.id.slice(0, 8) + "…"}
                       </td>
                       <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         {order.full_name}

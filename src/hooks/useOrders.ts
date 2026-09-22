@@ -46,7 +46,7 @@ export async function createOrder(order: {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
 
-  // The order number (SWC-O-<year>-<random>-<seq>) is issued by the database
+  // The order number (SWCO<year><random>-<seq>) is issued by the database
   // on insert. Working it out here from "the latest order + 1" let two
   // customers checking out together receive the same number.
 

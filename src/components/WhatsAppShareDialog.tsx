@@ -32,7 +32,7 @@ import {
 
 export interface WhatsAppShareRequest {
   kind: "invoice" | "quotation";
-  /** "Invoice SWC-O-2026-…" — shown in the header. */
+  /** "Invoice SWCO2026…" — shown in the header. */
   title: string;
   customerName: string;
   phone: string | null | undefined;

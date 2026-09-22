@@ -117,8 +117,9 @@ export const fetchOrders = async (input: string) => {
 
     if (isPhone) {
       query = query.eq("phone", input.trim());
-    } else if (input.trim().toUpperCase().startsWith("SWC-")) {
-      // Covers both SWC-014 and SWC-O-2026-K7P2QX9A-0001, however typed.
+    } else if (input.trim().toUpperCase().startsWith("SWC")) {
+      // Covers SWC-014, SWC-O-2026-K7P2QX9A-0001 and SWCO2026K7P2-0001,
+      // however typed.
       query = query.eq("short_id", input.trim().toUpperCase());
     } else {
       query = query.eq("id", input.trim());

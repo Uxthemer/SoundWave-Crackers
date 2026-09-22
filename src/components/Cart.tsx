@@ -10,6 +10,7 @@ import {
   ArrowRight,
   Copy,
   Check,
+  Download,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
@@ -25,6 +26,13 @@ import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
 import { NumberInput } from "./NumberInput";
 import { crackerImage } from "../lib/productImage";
+import { useAppSettings } from "../context/AppSettingsContext";
+import { businessFromSettings } from "../lib/businessDetails";
+import {
+  buildDocumentPdf,
+  documentFileName,
+  type BusinessDocument,
+} from "../lib/documentPdf";
 
 /** The single place the UPI id is written down. */
 const UPI_ID = "selvakumar541989@oksbi";
@@ -89,6 +97,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
     short_id: string;
     phone: string;
   } | null>(null);
+  const { settings: appSettings } = useAppSettings();
+  // The summary of the order just placed. The cart is cleared on success, so
+  // this is the only copy left to download again from the success screen.
+  const [orderSummary, setOrderSummary] = useState<BusinessDocument | null>(
+    null,
+  );
+  const [isDownloadingSummary, setIsDownloadingSummary] = useState(false);
 
   // ensure when cart empties we clear delivery (optional)
   useEffect(() => {
@@ -230,6 +245,24 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   };
 
+  /**
+   * Saves the order summary PDF to the device. Called straight after the
+   * order is placed and again from the success screen's button, for browsers
+   * that block a download nobody clicked for.
+   */
+  const downloadOrderSummary = async (summary: BusinessDocument) => {
+    setIsDownloadingSummary(true);
+    try {
+      const pdf = await buildDocumentPdf(summary);
+      pdf.save(documentFileName("order", summary.number));
+    } catch (err) {
+      console.error("Order summary PDF failed", err);
+      toast.error("Could not download the order summary");
+    } finally {
+      setIsDownloadingSummary(false);
+    }
+  };
+
   /** Opens the delivery form and brings it into view. */
   const goToDeliveryForm = () => {
     setShowDeliveryForm(true);
@@ -344,7 +377,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       }));
 
       // Create order and get the order data (with id)
-      let orderData: { id: string };
+      let orderData: { id: string; short_id?: string | null };
 
       if (currentUser) {
         orderData = await createOrder({
@@ -365,7 +398,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
           })),
           paymentMethod,
         });
-        orderData = { id: guestOrder.id };
+        orderData = { id: guestOrder.id, short_id: guestOrder.short_id };
         // A guest has no My Orders to come back to, so the order number is
         // put in front of them and kept on the device.
         setGuestOrderRef({
@@ -375,6 +408,37 @@ export function Cart({ isOpen, onClose }: CartProps) {
       }
 
       setLastOrderId(orderData.id);
+
+      // Taken from the cart before it is cleared below: this is exactly what
+      // the customer saw and confirmed.
+      const summary: BusinessDocument = {
+        kind: "order",
+        number: orderData.short_id || orderData.id.slice(0, 8),
+        date: new Date(),
+        customer: {
+          name: customerName,
+          phone,
+          email,
+          address,
+          city,
+          district,
+          state,
+          pincode,
+        },
+        lines: items.map((item) => ({
+          code: (item as any).product_code ?? null,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.offer_price,
+          total: item.totalPrice,
+        })),
+        subtotal: totalAmount,
+        paymentMethod,
+        business: businessFromSettings(appSettings),
+      };
+      setOrderSummary(summary);
+      // Not awaited: the order is placed whatever happens to the PDF.
+      void downloadOrderSummary(summary);
 
       // setVerifyingPhone(deliveryDetails.phone);
       // setShowPhoneVerification(true);
@@ -738,6 +802,23 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     >
                       Track this order
                     </a>
+                  </div>
+                )}
+                {orderSummary && (
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => downloadOrderSummary(orderSummary)}
+                      disabled={isDownloadingSummary}
+                      className="inline-flex items-center gap-2 px-5 py-2 border-2 border-green-600 text-green-700 rounded-lg font-semibold hover:bg-green-100 transition disabled:opacity-60"
+                    >
+                      {isDownloadingSummary ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      Download Order Summary (PDF)
+                    </button>
                   </div>
                 )}
                 <p className="text-base text-green-800 mb-4">
