@@ -375,7 +375,17 @@ export function AppContent() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <button onClick={toggleTheme} className="theme-toggle" id="theme-toggle">
+            {/* Below xl this lives in the menu instead — the header row is
+                tight on a phone, and the theme is a setting rather than
+                something you reach for as often as the cart. */}
+            <button
+              onClick={toggleTheme}
+              className="theme-toggle hidden xl:inline-block"
+              id="theme-toggle"
+              aria-label={
+                theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+              }
+            >
               {theme === "dark" ? (
                 <Sun className="w-6 h-6 text-primary-yellow hover:text-primary-yellow/50" />
               ) : (
@@ -407,10 +417,16 @@ export function AppContent() {
                 )}
               </button>
             </div>
-            {/* Mobile Menu Toggle */}
+            {/* Mobile Menu Toggle.
+
+                This was `hidden sm:flex xl:hidden`, so it disappeared below
+                640px — every phone. The menu behind it, Track Order and Price
+                List included, could not be opened there at all. */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="hidden sm:flex xl:hidden"
+              className="flex xl:hidden"
+              aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={isMobileMenuOpen}
             >
               {isMobileMenuOpen ? (
                 <X className="w-6 h-6 text-primary-orange hover:text-primary-orange/50 cursor-pointer transition-colors" />
@@ -423,7 +439,7 @@ export function AppContent() {
 
         {/* Mobile/Tablet Menu */}
         <div
-          className={`xl:hidden absolute left-0 right-0 top-full bg-background border-t border-card-border/10 shadow-lg transition-all duration-300 ${
+          className={`xl:hidden absolute left-0 right-0 top-full bg-background border-t border-card-border/10 shadow-lg transition-all duration-300 max-h-[calc(100vh-6rem)] overflow-y-auto ${
             isMobileMenuOpen ? "opacity-100 visible" : "opacity-0 invisible"
           }`}
         >
@@ -487,6 +503,27 @@ export function AppContent() {
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange text-left disabled:opacity-60 disabled:cursor-wait"
               >
                 {priceListLoading ? "Preparing…" : "Price List"}
+              </button>
+
+              {/* The theme, moved off the header on small screens. The menu
+                  deliberately stays open: this changes the page behind it, and
+                  closing would hide the thing you just changed. */}
+              <button
+                onClick={toggleTheme}
+                id="theme-toggle-mobile"
+                className="flex items-center gap-2 px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors border-t border-card-border/10 pt-4 text-left"
+              >
+                {theme === "dark" ? (
+                  <>
+                    <Sun className="w-5 h-5 text-primary-yellow" />
+                    Light mode
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-5 h-5 text-primary-orange" />
+                    Dark mode
+                  </>
+                )}
               </button>
             </div>
           </div>
