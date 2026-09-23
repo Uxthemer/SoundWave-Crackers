@@ -135,3 +135,29 @@ export async function trackGuestOrder(
   if (error) throw new Error(error.message);
   return (data ?? []) as TrackedOrder[];
 }
+
+export interface TrackedOrderItem {
+  name: string;
+  code: string | null;
+  quantity: number;
+  price: number;
+  total_price: number;
+}
+
+/**
+ * The lines on a tracked order, so the customer can download the same summary
+ * PDF checkout gave them. The phone is passed again because the database
+ * checks it against the order rather than trusting that we looked it up.
+ */
+export async function trackGuestOrderItems(
+  orderId: string,
+  phone: string
+): Promise<TrackedOrderItem[]> {
+  const { data, error } = await supabase.rpc("track_guest_order_items", {
+    p_order_id: orderId,
+    p_phone: phone.trim(),
+  });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []) as TrackedOrderItem[];
+}

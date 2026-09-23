@@ -24,6 +24,7 @@ import {
   FileText,
   Filter,
   Boxes,
+  Settings2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
@@ -46,6 +47,10 @@ import {
   renumber,
 } from "../lib/ordering";
 import { openPriceListPdf } from "../lib/priceListPdf";
+import {
+  CustomPriceListModal,
+  type CustomPriceListSettings,
+} from "../components/CustomPriceListModal";
 import toast from "react-hot-toast";
 import { NumberInput } from "../components/NumberInput";
 
@@ -272,6 +277,7 @@ export function StockManagement() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showBulkAddModal, setShowBulkAddModal] = useState(false);
   const [showAddPackModal, setShowAddPackModal] = useState(false);
+  const [showCustomPriceList, setShowCustomPriceList] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
   // Order is auto-filled from the chosen category until it is typed over —
   // after that, switching category must not overwrite a deliberate position.
@@ -1649,6 +1655,35 @@ Offer prices are not changed.`
   };
 
   /**
+   * The printed arrangement: categories in their order, products in theirs.
+   * The search box does not narrow a printed price list.
+   */
+  const priceListGroups = () => {
+    const grouped: { [cat: string]: Product[] } = {};
+    products
+      .filter((product) => product.is_active)
+      .forEach((product) => {
+        const catName = product.categories?.name || "Uncategorized";
+        if (!grouped[catName]) grouped[catName] = [];
+        grouped[catName].push(product);
+      });
+
+    Object.keys(grouped).forEach((cat) => {
+      grouped[cat] = byOrder(grouped[cat], (product) => product.name);
+    });
+
+    return orderedCategoryNames(Object.keys(grouped)).map((category) => ({
+      category,
+      products: grouped[category].map((product) => ({
+        name: product.name,
+        actual_price: product.actual_price ?? null,
+        offer_price: product.offer_price ?? null,
+        content: product.content ?? null,
+      })),
+    }));
+  };
+
+  /**
    * Opens the price list as a PDF in the browser's own viewer, which brings
    * print, zoom and save with it. It used to print straight to the dialog and
    * close, so nobody could check the list before it went to paper.
@@ -1666,32 +1701,7 @@ Offer prices are not changed.`
     }
 
     try {
-      // Same arrangement as the screen: categories in their order, products
-      // in theirs. The search box does not narrow a printed price list.
-      const grouped: { [cat: string]: Product[] } = {};
-      products
-        .filter((product) => product.is_active)
-        .forEach((product) => {
-          const catName = product.categories?.name || "Uncategorized";
-          if (!grouped[catName]) grouped[catName] = [];
-          grouped[catName].push(product);
-        });
-
-      Object.keys(grouped).forEach((cat) => {
-        grouped[cat] = byOrder(grouped[cat], (product) => product.name);
-      });
-
-      const groups = orderedCategoryNames(Object.keys(grouped)).map(
-        (category) => ({
-          category,
-          products: grouped[category].map((product) => ({
-            name: product.name,
-            actual_price: product.actual_price ?? null,
-            offer_price: product.offer_price ?? null,
-            content: product.content ?? null,
-          })),
-        })
-      );
+      const groups = priceListGroups();
 
       if (!groups.length) {
         viewer?.close();
@@ -1709,6 +1719,49 @@ Offer prices are not changed.`
       );
     } catch (err) {
       viewer?.close();
+      toast.error(
+        err instanceof Error ? err.message : "Could not build the price list"
+      );
+    }
+  };
+
+  /**
+   * The same list, drawn to the settings a superadmin just chose.
+   *
+   * No viewer window is opened ahead of this one: the click that reaches here
+   * is the modal's button, several awaits after the file dialog, so a popup
+   * would be blocked anyway. This one saves straight to the device.
+   */
+  const handleCustomPriceList = async (settings: CustomPriceListSettings) => {
+    try {
+      const groups = priceListGroups();
+      if (!groups.length) {
+        toast.error("There are no active products to print");
+        return;
+      }
+
+      const { buildPriceListPdf, repriceGroups } = await import(
+        "../lib/priceListPdf"
+      );
+      const doc = await buildPriceListPdf({
+        // The struck-out price follows the discount chosen in the modal, so
+        // the saving the heading claims is the saving the two columns show.
+        // In memory, for this file only — nothing is written back.
+        groups: repriceGroups(groups, settings.discountPercent),
+        seasonName: seasonSlug,
+        // A banner the superadmin uploaded travels as a data URL and is never
+        // stored: this sheet is the only thing it was for.
+        ...(settings.bannerDataUrl
+          ? { headerImageUrl: settings.bannerDataUrl }
+          : {}),
+        discountPercent: settings.discountPercent,
+        columns: settings.columns,
+        strikePrice: settings.strikePrice,
+      });
+      doc.save(`soundwave_price_list_${seasonSlug}_custom.pdf`);
+      setShowCustomPriceList(false);
+      toast.success("Custom price list downloaded");
+    } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "Could not build the price list"
       );
@@ -2864,6 +2917,16 @@ Offer prices are not changed.`
               hint="PDF — opens in the viewer, print or save from there"
               onClick={handlePriceListDownload}
             />
+            {/* A one-off sheet, so only the superadmin who sets the season's
+                prices can decide how a list going out differs from it. */}
+            {isSuperadmin && (
+              <MenuItem
+                icon={<Settings2 className="w-4 h-4" />}
+                label="Custom price list"
+                hint="Choose the banner, columns and discount first"
+                onClick={() => setShowCustomPriceList(true)}
+              />
+            )}
             <MenuItem
               icon={<Download className="w-4 h-4" />}
               label="Excel"
@@ -3838,6 +3901,16 @@ Offer prices are not changed.`
             </div>
           </div>
         </>
+      )}
+
+      {isSuperadmin && (
+        <CustomPriceListModal
+          isOpen={showCustomPriceList}
+          onClose={() => setShowCustomPriceList(false)}
+          onGenerate={handleCustomPriceList}
+          seasonDiscount={discountUsable ? seasonDiscount : null}
+          seasonName={selectedSeason?.name || "this season"}
+        />
       )}
 
       <AddPackProductModal

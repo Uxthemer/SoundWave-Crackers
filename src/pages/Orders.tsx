@@ -17,6 +17,8 @@ import {
   WhatsAppShareDialog,
   type WhatsAppShareRequest,
 } from "../components/WhatsAppShareDialog";
+import { webChatUrl, whatsappNumber } from "../lib/whatsappShare";
+import { FaWhatsapp } from "react-icons/fa";
 import toast from "react-hot-toast";
 
 interface OrderItem {
@@ -65,6 +67,8 @@ interface Order {
   payment_status?: string | null;
   payment_received_at?: string | null;
   confirmed_at?: string | null;
+  /** Lorry receipt, set when the order is marked Shipped. */
+  lr_number?: string | null;
 }
 
 /**
@@ -119,6 +123,9 @@ const isReadyForPacking = (order: { status: string; payment_status?: string | nu
 /** Status filter value for the Ready for packing tile. */
 const READY_FOR_PACKING = "__ready_for_packing";
 
+/** The one status that is hidden unless it is the status being asked for. */
+const CANCELLED = "Cancelled";
+
 const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
   pending: { label: "Unpaid", className: "bg-red-100 text-red-700" },
   partial: { label: "Part paid", className: "bg-amber-100 text-amber-700" },
@@ -126,9 +133,75 @@ const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
   refunded: { label: "Refunded", className: "bg-gray-200 text-gray-700" },
 };
 
+/** The sentence that explains what the status means, in the customer's terms. */
+const STATUS_NOTES: Record<string, string> = {
+  "Enquiry Received":
+    "We have your enquiry and will confirm the details with you shortly.",
+  "Order Confirmed": "Your order is confirmed and is being prepared.",
+  Packing: "Your order is being packed and will be dispatched soon.",
+  Shipped: "Your order has been dispatched and is on its way.",
+  Delivered:
+    "Your order has been delivered. We hope you have a wonderful celebration!",
+  Cancelled:
+    "Your order has been cancelled. Do let us know if this was not expected.",
+};
+
+/**
+ * The status update that WhatsApp opens with already typed.
+ *
+ * Staff answer "where is my order" several times a day, by hand, from
+ * whatever is on screen — so the amounts get retyped wrong and every customer
+ * hears it differently. This puts the row's own figures into the chat and
+ * leaves it there to edit or send as it stands.
+ *
+ * Only what the order actually carries goes in. An LR number before it ships,
+ * or a balance on a fully paid order, is left out rather than printed empty.
+ */
+function statusUpdateMessage(order: Order, businessName: string): string {
+  const number = order.short_id || order.id.slice(0, 8);
+  const grand =
+    Number(order.total_amount || 0) - Number(order.discount_amt || 0);
+  const received = Number(order.amount_received || 0);
+  const balance = grand - received;
+  const lrNumber = String(order.lr_number ?? "").trim();
+  const itemCount = order.items?.length ?? 0;
+
+  const lines = [
+    `Hello ${order.full_name || "there"},`,
+    "",
+    `Here is an update on your order with ${businessName}.`,
+    "",
+    `Order: ${number}`,
+    `Placed: ${format(new Date(order.created_at), "dd MMM yyyy, h:mm a")}`,
+    ...(itemCount ? [`Items: ${itemCount}`] : []),
+    `Total: Rs. ${grand.toFixed(2)}`,
+    `Status: ${order.status}`,
+  ];
+
+  const payment = PAYMENT_LABELS[order.payment_status || "pending"]?.label;
+  if (payment) lines.push(`Payment: ${payment}`);
+  // Worth spelling out only while money is actually outstanding.
+  if (received > 0 && balance > 0) {
+    lines.push(
+      `Received: Rs. ${received.toFixed(2)} | Balance: Rs. ${balance.toFixed(2)}`
+    );
+  }
+  if (order.status === "Shipped" && lrNumber) {
+    lines.push(`LR Number: ${lrNumber}`);
+  }
+
+  const note = STATUS_NOTES[order.status];
+  if (note) lines.push("", note);
+
+  lines.push("", `Thank you for shopping with ${businessName}.`);
+  return lines.join("\n");
+}
+
 export function Orders() {
   const { userRole } = useAuth();
   const { settings: appSettings } = useAppSettings();
+  /** Named in the WhatsApp status updates sent from the rows below. */
+  const businessName = businessFromSettings(appSettings).name;
   const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -899,26 +972,41 @@ export function Orders() {
     setSearchTerm("");
   };
 
-  const filteredOrders = orders
-    .filter(
-      (order) =>
-        (order.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.alternate_phone
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          order.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.short_id?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-        (statusFilter === "all" ||
-          (statusFilter === READY_FOR_PACKING
-            ? isReadyForPacking(order)
-            : order.status === statusFilter)) &&
-        (paymentFilter === "all" ||
-          (order.payment_status || "pending") === paymentFilter) &&
-        (customerFilter === "all" ||
-          (customerFilter === "guest" ? !order.user_id : !!order.user_id))
-    )
+  const matchingOrders = orders.filter(
+    (order) =>
+      (order.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.alternate_phone
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()) ||
+        order.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.short_id?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (statusFilter === "all" ||
+        (statusFilter === READY_FOR_PACKING
+          ? isReadyForPacking(order)
+          : order.status === statusFilter)) &&
+      (paymentFilter === "all" ||
+        (order.payment_status || "pending") === paymentFilter) &&
+      (customerFilter === "all" ||
+        (customerFilter === "guest" ? !order.user_id : !!order.user_id))
+  );
+
+  /**
+   * A cancelled order is finished business: it holds no stock, nothing is
+   * owed on it and nobody is packing it. Leaving them in every list meant
+   * scrolling past dead rows to find live ones, so they are kept out unless
+   * they are what you asked for — the Cancelled filter, from the dropdown or
+   * its tile, shows them and nothing else.
+   */
+  const showingCancelled = statusFilter === CANCELLED;
+
+  const filteredOrders = (
+    showingCancelled
+      ? matchingOrders
+      : matchingOrders.filter((order) => order.status !== CANCELLED)
+  )
+    .slice()
     .sort((a, b) => {
       if (sortField === "created_at") {
         return sortDirection === "asc"
@@ -929,6 +1017,16 @@ export function Orders() {
         ? String(a[sortField]).localeCompare(String(b[sortField]))
         : String(b[sortField]).localeCompare(String(a[sortField]));
     });
+
+  /**
+   * Cancelled orders that match everything else being asked for. Searching an
+   * order number and getting an empty table, because the order turned out to
+   * be cancelled, looks like the order is gone — so the count is offered with
+   * a way through to it.
+   */
+  const hiddenCancelled = showingCancelled
+    ? 0
+    : matchingOrders.length - filteredOrders.length;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1142,10 +1240,12 @@ export function Orders() {
             </select>
           </div>
           <div className="flex items-center gap-3 md:ml-auto">
+            {/* Counts the rows actually on screen. `orders.length` would
+                include the cancelled ones that are being held back. */}
             <span className="text-sm text-text/60">
               {filtersActive
                 ? `Showing ${filteredOrders.length} of ${orders.length}`
-                : `${orders.length} orders`}
+                : `${filteredOrders.length} orders`}
             </span>
             {filtersActive && (
               <button
@@ -1158,6 +1258,19 @@ export function Orders() {
             )}
           </div>
         </div>
+
+        {hiddenCancelled > 0 && (
+          <p className="-mt-2 mb-4 text-sm text-text/60">
+            {hiddenCancelled} cancelled{" "}
+            {hiddenCancelled === 1 ? "order is" : "orders are"} not shown.{" "}
+            <button
+              onClick={() => setStatusFilter(CANCELLED)}
+              className="text-primary-orange font-semibold hover:underline"
+            >
+              Show cancelled
+            </button>
+          </p>
+        )}
 
         <div className="bg-card/30 rounded-xl overflow-hidden border border-card-border/10 w-full">
           <div className="overflow-x-auto w-full">
@@ -1259,7 +1372,40 @@ export function Orders() {
                       </td>
                       <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         <div>
-                          <p className="text-xs sm:text-sm whitespace-nowrap">{order.phone}</p>
+                          {/* The number on the order is how this customer
+                              gets chased — a guest has no account behind it.
+                              Tapping it should dial, not select text to copy
+                              into the phone app by hand. */}
+                          <div className="flex items-center gap-2 whitespace-nowrap">
+                            {order.phone ? (
+                              <>
+                                <a
+                                  href={`tel:${order.phone.replace(/\s+/g, "")}`}
+                                  title={`Call ${order.phone}`}
+                                  className="text-xs sm:text-sm hover:text-primary-orange transition-colors"
+                                >
+                                  {order.phone}
+                                </a>
+                                {whatsappNumber(order.phone) && (
+                                  <a
+                                    href={webChatUrl(
+                                      whatsappNumber(order.phone),
+                                      statusUpdateMessage(order, businessName)
+                                    )}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title={`WhatsApp ${order.full_name || order.phone} a status update`}
+                                    aria-label={`Send ${order.full_name || order.phone} a status update on WhatsApp`}
+                                    className="text-green-600 hover:text-green-500 transition-colors shrink-0"
+                                  >
+                                    <FaWhatsapp className="w-4 h-4" />
+                                  </a>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-xs sm:text-sm text-text/50">-</span>
+                            )}
+                          </div>
                           <p className="text-xs text-text/60 truncate max-w-[100px]">{order.city}</p>
                         </div>
                       </td>
@@ -1393,8 +1539,17 @@ export function Orders() {
                       <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
                         ₹{(order.discount_amt || 0).toFixed(2)}
                       </td>
+                      {/* Date over time rather than side by side: the time
+                          tells two orders on the same day apart, and this
+                          column is already the widest thing that is not the
+                          customer's name. */}
                       <td className="py-3 px-3 sm:px-6 whitespace-nowrap">
-                        {format(new Date(order.created_at), "MMM dd, yyyy")}
+                        <div>
+                          {format(new Date(order.created_at), "MMM dd, yyyy")}
+                        </div>
+                        <div className="text-xs text-text/60">
+                          {format(new Date(order.created_at), "h:mm a")}
+                        </div>
                       </td>
                       <td className="py-3 px-3 sm:px-6">
                         <div className="flex items-center justify-center space-x-1 sm:space-x-2">
