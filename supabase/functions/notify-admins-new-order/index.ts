@@ -136,13 +136,17 @@ serve(async (req) => {
         }
 
         const firebase = getFirebaseAdmin();
+        // Data-only, like the order notification below -- see the comment
+        // there. A `notification` block here would arrive twice as well.
         const message = {
-            notification: {
+            data: {
                 title: '🔔 Test Notification',
-                body: isBroadcast 
-                    ? 'This is a BROADCAST test to ALL admins.' 
+                body: isBroadcast
+                    ? 'This is a BROADCAST test to ALL admins.'
                     : 'This is a test notification to this device.',
+                url: '/orders',
             },
+            webpush: { headers: { Urgency: 'high', TTL: '3600' } },
             tokens: tokensToSend,
         };
         
@@ -170,7 +174,28 @@ serve(async (req) => {
     }
 
     const orderId = order.id;
-    const orderTotal = order.total_amount || order.total || 0; 
+    const orderTotal = order.total_amount || order.total || 0;
+
+    /**
+     * What a person needs to recognise the order without opening anything.
+     *
+     * `order.id` is the row's uuid. It was what every message quoted, which
+     * is unusable: it is not the number printed on the order, not the number
+     * the customer reads out, and not searchable from the orders screen.
+     * `short_id` is the real order number (SWCO2026K7P2-0001).
+     */
+    const orderNumber = order.short_id || String(orderId).slice(0, 8);
+    const orderCustomer = order.full_name || 'Customer';
+    // The billed figure, not the line total -- same as the Amount column.
+    const orderAmount = Number(orderTotal) - Number(order.discount_amt || 0);
+    // Whole rupees print bare; paise print in full. Without this, 3499.50
+    // came out as "3,499.5".
+    const orderAmountText = orderAmount.toLocaleString('en-IN', {
+        minimumFractionDigits: Number.isInteger(orderAmount) ? 0 : 2,
+        maximumFractionDigits: 2,
+    });
+    const orderLocation =
+        [order.city, order.state].filter(Boolean).join(', ') || 'Location not given';
 
     // 4. Get Admin Tokens
     const { data: subscriptions, error: subError } = await supabase
@@ -196,11 +221,33 @@ serve(async (req) => {
         return new Response(JSON.stringify({ message: "No valid tokens found" }), { headers: corsHeaders });
     }
 
+    /**
+     * Data-only, deliberately.
+     *
+     * A message carrying a `notification` block is displayed by the FCM
+     * service worker itself, and then `onBackgroundMessage` runs as well --
+     * so firebase-messaging-sw.js drew a second one for the same push. One
+     * row in admin_push_subscriptions, one push, two notifications on the
+     * phone. With data only there is nothing for the SDK to display and the
+     * service worker is the single place a notification is created.
+     *
+     * The fields travel separately as well as pre-rendered, so the service
+     * worker can lay them out and the click can open the right order.
+     */
     const message = {
-        notification: {
+        data: {
             title: '🎉 New Order Received!',
-            body: `Order #${orderId} for ₹${orderTotal} has been placed.`,
+            body:
+                `${orderNumber} · ${orderCustomer}\n` +
+                `₹${orderAmountText} · ${orderLocation}`,
+            orderId: String(orderId),
+            orderNumber,
+            customerName: orderCustomer,
+            amount: orderAmountText,
+            location: orderLocation,
+            url: '/orders',
         },
+        webpush: { headers: { Urgency: 'high', TTL: '3600' } },
         tokens: uniqueTokens,
     };
     
@@ -216,7 +263,14 @@ serve(async (req) => {
         const adminPhoneNumbers = Deno.env.get('ADMIN_PHONE_NUMBERS'); // Comma separated
         if (adminPhoneNumbers) {
            const phones = adminPhoneNumbers.split(',').map(p => p.trim()).filter(p => p);
-           const whatsappBody = `🎉 New Order Received!\nOrder #${orderId} for ₹${orderTotal} has been placed. Check dashboard for details.`;
+           // The same order number and figures as the push above, rather than
+           // the row's uuid.
+           const whatsappBody =
+               `🎉 New Order Received!\n` +
+               `Order ${orderNumber}\n` +
+               `${orderCustomer} - ₹${orderAmountText}\n` +
+               `${orderLocation}\n\n` +
+               `Check the dashboard for details.`;
            
            console.log(`Sending WhatsApp to ${phones.length} admins...`);
            await Promise.all(phones.map(phone => sendWhatsApp(phone, whatsappBody)));
@@ -233,7 +287,7 @@ serve(async (req) => {
                 cleanPhone = '91' + cleanPhone;
             }
     
-            const customerMsg = `Hello ${customerName}, 👋\n\nThank you for your order (Order #${orderId}) with Soundwave Crackers! 🎆\n\nTotal Amount: ₹${orderTotal}\n\nWe have received your order and will process it shortly.`;
+            const customerMsg = `Hello ${customerName}, 👋\n\nThank you for your order (Order ${orderNumber}) with Soundwave Crackers! 🎆\n\nTotal Amount: ₹${orderAmountText}\n\nWe have received your order and will process it shortly.`;
             
             console.log(`Sending WhatsApp to customer ${cleanPhone}...`);
             await sendWhatsApp(cleanPhone, customerMsg);
