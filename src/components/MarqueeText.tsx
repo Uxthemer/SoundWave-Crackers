@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 export function MarqueeText() {
   const messages = [
-    "🎆 Special Diwali Offer - <b>Up to 80% OFF!</b>",
+    "🎆 Special Diwali Offer - <b>Up to 90% OFF!</b>",
     "🚚 Minimum Orders Above <b>₹3000 for Tamilnadu</b>",
     "🚚 Minimum Orders Above <b>₹5000 for other states</b>",
     "🚚 All Over India, Major Cities Delivery Available",
@@ -23,7 +23,9 @@ export function MarqueeText() {
   useEffect(() => {
     if (isMobile) {
       const interval = setInterval(() => {
-        setCurrentMessageIndex((prevIndex) => (prevIndex + 1) % messages.length);
+        setCurrentMessageIndex(
+          (prevIndex) => (prevIndex + 1) % messages.length,
+        );
       }, 3000);
       return () => clearInterval(interval);
     }
@@ -33,14 +35,22 @@ export function MarqueeText() {
     <div className="bg-gradient-to-r from-primary-red via-primary-orange to-primary-yellow text-white py-1 overflow-hidden">
       {isMobile ? (
         // Mobile View: Sliding fade-in-out text
-        <div className="text-center font-semibold animate-fadeInOut text-xs sm:text-sm md:text-base lg:text-lg" dangerouslySetInnerHTML={{ __html: messages[currentMessageIndex] }} style={{ transition: 'opacity 0.5s ease-in-out' }}>
+        <div
+          className="text-center font-semibold animate-fadeInOut text-xs sm:text-sm md:text-base lg:text-lg"
+          dangerouslySetInnerHTML={{ __html: messages[currentMessageIndex] }}
+          style={{ transition: "opacity 0.5s ease-in-out" }}
+        >
           {/* {messages[currentMessageIndex]} */}
         </div>
       ) : (
         // Desktop View: Continuous marquee effect
         <div className="whitespace-nowrap flex space-x-4 animate-marquee text-xs sm:text-sm md:text-base lg:text-lg">
           {messages.map((message, index) => (
-            <span key={index} className="mx-4" dangerouslySetInnerHTML={{ __html: message }}></span>
+            <span
+              key={index}
+              className="mx-4"
+              dangerouslySetInnerHTML={{ __html: message }}
+            ></span>
           ))}
         </div>
       )}

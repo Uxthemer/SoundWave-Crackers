@@ -11,7 +11,10 @@ import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { useAppSettings } from "../context/AppSettingsContext";
-import { businessFromSettings } from "../lib/businessDetails";
+import {
+  businessFromSettings,
+  type BusinessDetails,
+} from "../lib/businessDetails";
 import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
 import {
   WhatsAppShareDialog,
@@ -157,23 +160,21 @@ const STATUS_NOTES: Record<string, string> = {
  * Only what the order actually carries goes in. An LR number before it ships,
  * or a balance on a fully paid order, is left out rather than printed empty.
  */
-function statusUpdateMessage(order: Order, businessName: string): string {
+function statusUpdateMessage(order: Order, business: BusinessDetails): string {
   const number = order.short_id || order.id.slice(0, 8);
   const grand =
     Number(order.total_amount || 0) - Number(order.discount_amt || 0);
   const received = Number(order.amount_received || 0);
   const balance = grand - received;
   const lrNumber = String(order.lr_number ?? "").trim();
-  const itemCount = order.items?.length ?? 0;
 
   const lines = [
     `Hello ${order.full_name || "there"},`,
     "",
-    `Here is an update on your order with ${businessName}.`,
+    `Here is an update on your order with ${business.name}.`,
     "",
     `Order: ${number}`,
     `Placed: ${format(new Date(order.created_at), "dd MMM yyyy, h:mm a")}`,
-    ...(itemCount ? [`Items: ${itemCount}`] : []),
     `Total: Rs. ${grand.toFixed(2)}`,
     `Status: ${order.status}`,
   ];
@@ -193,15 +194,22 @@ function statusUpdateMessage(order: Order, businessName: string): string {
   const note = STATUS_NOTES[order.status];
   if (note) lines.push("", note);
 
-  lines.push("", `Thank you for shopping with ${businessName}.`);
+  lines.push("", `Thank you for shopping with ${business.name}.`);
+
+  // How to reach us, signed off the way the invoices are. Both come from
+  // Admin Settings, so a number changes in one place rather than in every
+  // message that quotes it.
+  if (business.website) lines.push("", business.website);
+  if (business.phone) lines.push(`Contact: ${business.phone}`);
+
   return lines.join("\n");
 }
 
 export function Orders() {
   const { userRole } = useAuth();
   const { settings: appSettings } = useAppSettings();
-  /** Named in the WhatsApp status updates sent from the rows below. */
-  const businessName = businessFromSettings(appSettings).name;
+  /** Named and signed off in the WhatsApp status updates sent from the rows below. */
+  const business = businessFromSettings(appSettings);
   const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1390,7 +1398,7 @@ export function Orders() {
                                   <a
                                     href={webChatUrl(
                                       whatsappNumber(order.phone),
-                                      statusUpdateMessage(order, businessName)
+                                      statusUpdateMessage(order, business)
                                     )}
                                     target="_blank"
                                     rel="noopener noreferrer"
