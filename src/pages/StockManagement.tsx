@@ -35,11 +35,7 @@ import { AddPackProductModal } from "../components/AddPackProductModal";
 import * as XLSX from "xlsx";
 import { useProducts } from "../hooks/useProducts";
 import { useSeasons, useSeasonActions } from "../context/SeasonContext";
-import {
-  actualFromOffer,
-  formatPrice,
-  isUsableDiscount,
-} from "../lib/pricing";
+import { actualFromOffer, formatPrice, isUsableDiscount } from "../lib/pricing";
 import {
   byOrder,
   nextOrderInCategory,
@@ -226,7 +222,9 @@ function MenuItem({
       <span className="min-w-0">
         <span className="block text-sm font-medium">{label}</span>
         {hint && (
-          <span className="block text-xs text-text/60 leading-snug">{hint}</span>
+          <span className="block text-xs text-text/60 leading-snug">
+            {hint}
+          </span>
         )}
       </span>
     </button>
@@ -315,7 +313,9 @@ export function StockManagement() {
   // row is actually touched, so the save writes the handful of rows that
   // changed rather than every product in the season.
   const [bulkEditMode, setBulkEditMode] = useState(false);
-  const [bulkForm, setBulkForm] = useState<Record<string, Partial<Product>>>({});
+  const [bulkForm, setBulkForm] = useState<Record<string, Partial<Product>>>(
+    {},
+  );
   const [bulkAutoActual, setBulkAutoActual] = useState(true);
   const [savingBulk, setSavingBulk] = useState(false);
 
@@ -336,7 +336,7 @@ export function StockManagement() {
 
   /** The discount every derived actual price on this page is calculated at. */
   const seasonDiscount = Number(
-    selectedSeason?.price_list_discount_percentage ?? 0
+    selectedSeason?.price_list_discount_percentage ?? 0,
   );
   const discountUsable = isUsableDiscount(seasonDiscount);
 
@@ -362,7 +362,9 @@ export function StockManagement() {
 
   useEffect(() => {
     setDiscountInput(
-      selectedSeason ? String(selectedSeason.price_list_discount_percentage ?? 0) : ""
+      selectedSeason
+        ? String(selectedSeason.price_list_discount_percentage ?? 0)
+        : "",
     );
     // Only the identity and the discount matter here; re-running on every
     // other season field would fight the field while it is being typed in.
@@ -393,14 +395,14 @@ export function StockManagement() {
       if (costsRes.error) throw costsRes.error;
 
       const aprByProduct = new Map(
-        (costsRes.data || []).map((c: any) => [c.product_id, c.apr])
+        (costsRes.data || []).map((c: any) => [c.product_id, c.apr]),
       );
 
       setProducts(
         (catalogRes.data || []).map((row: any) => ({
           ...row,
           apr: aprByProduct.get(row.id) ?? "",
-        }))
+        })),
       );
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -431,7 +433,7 @@ export function StockManagement() {
     // modal must not silently overwrite it.
     const derived = deriveActual(product.offer_price);
     setEditAutoActual(
-      derived === null || Number(product.actual_price) === derived
+      derived === null || Number(product.actual_price) === derived,
     );
     setEditModalOpen(true);
   };
@@ -446,7 +448,7 @@ export function StockManagement() {
     if (!editingProduct || !selectedSeasonId) return;
     if (isSelectedReadOnly) {
       alert(
-        "This season is closed and read-only. A superadmin must unlock it first."
+        "This season is closed and read-only. A superadmin must unlock it first.",
       );
       return;
     }
@@ -498,7 +500,7 @@ export function StockManagement() {
             product_id: editingProduct.id,
             apr: editForm.apr ? Number(Number(editForm.apr).toFixed(2)) : null,
           },
-          { onConflict: "season_id,product_id" }
+          { onConflict: "season_id,product_id" },
         );
 
       if (costError) throw costError;
@@ -510,7 +512,7 @@ export function StockManagement() {
     } catch (error) {
       console.error("Error updating product:", error);
       alert(
-        error instanceof Error ? error.message : "Failed to update product"
+        error instanceof Error ? error.message : "Failed to update product",
       );
     }
   };
@@ -551,7 +553,7 @@ export function StockManagement() {
     if (!selectedSeasonId || !selectedSeason) return;
     if (isSelectedReadOnly) {
       alert(
-        "This season is closed and read-only. A superadmin must unlock it first."
+        "This season is closed and read-only. A superadmin must unlock it first.",
       );
       return;
     }
@@ -565,10 +567,10 @@ export function StockManagement() {
     if (
       !confirm(
         `Recalculate actual prices for ${scope} in season ${selectedSeason.name} at ${formatPrice(
-          seasonDiscount
+          seasonDiscount,
         )}% ?
 
-Offer prices are not changed.`
+Offer prices are not changed.`,
       )
     )
       return;
@@ -577,7 +579,7 @@ Offer prices are not changed.`
     try {
       const updated = await applyPriceListDiscount(
         selectedSeasonId,
-        onlyMissing
+        onlyMissing,
       );
       await fetchProducts();
       alert(`${updated} product${updated === 1 ? "" : "s"} re-priced.`);
@@ -606,7 +608,7 @@ Offer prices are not changed.`
     });
     const derived = deriveActual(product.offer_price);
     setInlineAutoActual(
-      derived === null || Number(product.actual_price) === derived
+      derived === null || Number(product.actual_price) === derived,
     );
   };
 
@@ -643,7 +645,7 @@ Offer prices are not changed.`
     if (!inlineEditId || !selectedSeasonId) return;
     if (isSelectedReadOnly) {
       alert(
-        "This season is closed and read-only. A superadmin must unlock it first."
+        "This season is closed and read-only. A superadmin must unlock it first.",
       );
       return;
     }
@@ -680,7 +682,7 @@ Offer prices are not changed.`
                   ? null
                   : Number(Number(inlineForm.apr).toFixed(2)),
             },
-            { onConflict: "season_id,product_id" }
+            { onConflict: "season_id,product_id" },
           );
         if (costError) throw costError;
       }
@@ -697,11 +699,11 @@ Offer prices are not changed.`
                 actual_price: Number(inlineForm.actual_price ?? 0),
                 apr:
                   userRole?.name === "superadmin"
-                    ? (inlineForm.apr as string) ?? ""
+                    ? ((inlineForm.apr as string) ?? "")
                     : p.apr,
               }
-            : p
-        )
+            : p,
+        ),
       );
       cancelInlineEdit();
     } catch (err) {
@@ -759,7 +761,10 @@ Offer prices are not changed.`
   };
 
   /** True when a draft differs from the row it was seeded from. */
-  const bulkRowChanged = (product: Product | undefined, draft: Partial<Product>) => {
+  const bulkRowChanged = (
+    product: Product | undefined,
+    draft: Partial<Product>,
+  ) => {
     if (!product) return false;
     return BULK_FIELDS.some((field) => {
       const before = product[field];
@@ -782,8 +787,8 @@ Offer prices are not changed.`
   const bulkChangedIds = Object.keys(bulkForm).filter((id) =>
     bulkRowChanged(
       products.find((p) => p.id === id),
-      bulkForm[id]
-    )
+      bulkForm[id],
+    ),
   );
 
   const enterBulkEdit = () => {
@@ -800,7 +805,7 @@ Offer prices are not changed.`
       !confirm(
         `Discard unsaved changes to ${bulkChangedIds.length} product${
           bulkChangedIds.length === 1 ? "" : "s"
-        }?`
+        }?`,
       )
     )
       return;
@@ -820,7 +825,7 @@ Offer prices are not changed.`
     if (!selectedSeasonId) return;
     if (isSelectedReadOnly) {
       alert(
-        "This season is closed and read-only. A superadmin must unlock it first."
+        "This season is closed and read-only. A superadmin must unlock it first.",
       );
       return;
     }
@@ -882,7 +887,7 @@ Offer prices are not changed.`
                   ? null
                   : Number(Number(draft.apr).toFixed(2)),
             },
-            { onConflict: "season_id,product_id" }
+            { onConflict: "season_id,product_id" },
           );
         if (costError) throw costError;
       }
@@ -906,7 +911,7 @@ Offer prices are not changed.`
               result.reason instanceof Error
                 ? result.reason.message
                 : "failed to save"
-            }`
+            }`,
           );
         }
       });
@@ -937,9 +942,11 @@ Offer prices are not changed.`
           offer_price: Number(draft.offer_price ?? 0),
           is_active: Boolean(draft.is_active),
           apr:
-            userRole?.name === "superadmin" ? (draft.apr as string) ?? "" : p.apr,
+            userRole?.name === "superadmin"
+              ? ((draft.apr as string) ?? "")
+              : p.apr,
         };
-      })
+      }),
     );
 
     setBulkForm((prev) => {
@@ -955,7 +962,7 @@ Offer prices are not changed.`
       alert(
         `${saved.size} product${saved.size === 1 ? "" : "s"} saved.\n\n` +
           `${failures.length} failed and are still open for editing:\n` +
-          failures.slice(0, 10).join("\n")
+          failures.slice(0, 10).join("\n"),
       );
       return;
     }
@@ -976,8 +983,10 @@ Offer prices are not changed.`
   /** One category's products, in the order they print. */
   const productsInCategory = (categoryId: string | null) =>
     byOrder(
-      products.filter((product) => (product.category_id ?? null) === categoryId),
-      (product) => product.name
+      products.filter(
+        (product) => (product.category_id ?? null) === categoryId,
+      ),
+      (product) => product.name,
     );
 
   /**
@@ -987,7 +996,7 @@ Offer prices are not changed.`
    * rather than leaving the screen disagreeing with it.
    */
   const persistProductOrder = async (
-    updates: { id: string; order: number; category_id?: string }[]
+    updates: { id: string; order: number; category_id?: string }[],
   ) => {
     if (!selectedSeasonId || updates.length === 0) return;
 
@@ -1003,12 +1012,15 @@ Offer prices are not changed.`
             ? {
                 category_id: update.category_id,
                 categories: categories.find((c) => c.id === update.category_id)
-                  ? { name: categories.find((c) => c.id === update.category_id)!.name }
+                  ? {
+                      name: categories.find((c) => c.id === update.category_id)!
+                        .name,
+                    }
                   : product.categories,
               }
             : {}),
         };
-      })
+      }),
     );
 
     setSavingOrder(true);
@@ -1032,12 +1044,12 @@ Offer prices are not changed.`
               .eq("id", update.id);
             if (categoryError) throw categoryError;
           }
-        })
+        }),
       );
     } catch (err) {
       setProducts(previous);
       alert(
-        err instanceof Error ? err.message : "Failed to save the new order"
+        err instanceof Error ? err.message : "Failed to save the new order",
       );
       fetchProducts();
     } finally {
@@ -1055,14 +1067,14 @@ Offer prices are not changed.`
   const moveProduct = (
     productId: string,
     targetCategoryId: string | null,
-    insertAt: number
+    insertAt: number,
   ) => {
     const moved = products.find((product) => product.id === productId);
     if (!moved) return;
 
     const sourceCategoryId = moved.category_id ?? null;
     const target = productsInCategory(targetCategoryId).filter(
-      (product) => product.id !== productId
+      (product) => product.id !== productId,
     );
     target.splice(Math.max(0, Math.min(insertAt, target.length)), 0, moved);
 
@@ -1072,7 +1084,7 @@ Offer prices are not changed.`
     if (sourceCategoryId !== targetCategoryId) {
       // Close the gap the product left behind, and record its new category.
       const source = productsInCategory(sourceCategoryId).filter(
-        (product) => product.id !== productId
+        (product) => product.id !== productId,
       );
       updates.push(...renumber(source));
 
@@ -1095,7 +1107,7 @@ Offer prices are not changed.`
   /** Reorders the categories themselves, which reorders every printed list. */
   const moveCategory = async (categoryId: string, insertAt: number) => {
     const ordered = byOrder(categories, (category) => category.name).filter(
-      (category) => category.id !== categoryId
+      (category) => category.id !== categoryId,
     );
     const moved = categories.find((category) => category.id === categoryId);
     if (!moved) return;
@@ -1109,7 +1121,7 @@ Offer prices are not changed.`
       prev.map((category) => {
         const update = updates.find((u) => u.id === category.id);
         return update ? { ...category, order: update.order } : category;
-      })
+      }),
     );
 
     setSavingOrder(true);
@@ -1121,14 +1133,14 @@ Offer prices are not changed.`
             .update({ order: update.order })
             .eq("id", update.id);
           if (error) throw error;
-        })
+        }),
       );
     } catch (err) {
       setCategories(previous);
       alert(
         err instanceof Error
           ? err.message
-          : "Failed to save the new category order"
+          : "Failed to save the new category order",
       );
       fetchCategories();
     } finally {
@@ -1138,7 +1150,7 @@ Offer prices are not changed.`
 
   /** Which half of a row the pointer is over — insert above it, or below. */
   const edgeFromPointer = (
-    e: React.DragEvent<HTMLElement>
+    e: React.DragEvent<HTMLElement>,
   ): "before" | "after" => {
     const rect = e.currentTarget.getBoundingClientRect();
     return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
@@ -1154,13 +1166,13 @@ Offer prices are not changed.`
     const edge = dropTarget?.id === over.id ? dropTarget.edge : "before";
     const targetCategoryId = over.category_id ?? null;
     const list = productsInCategory(targetCategoryId).filter(
-      (product) => product.id !== dragging.id
+      (product) => product.id !== dragging.id,
     );
     const index = list.findIndex((product) => product.id === over.id);
     moveProduct(
       dragging.id,
       targetCategoryId,
-      edge === "before" ? index : index + 1
+      edge === "before" ? index : index + 1,
     );
     setDropTarget(null);
     setDragging(null);
@@ -1172,14 +1184,13 @@ Offer prices are not changed.`
 
     if (dragging.kind === "product") {
       const list = productsInCategory(categoryId).filter(
-        (product) => product.id !== dragging.id
+        (product) => product.id !== dragging.id,
       );
       moveProduct(dragging.id, categoryId, list.length);
     } else if (categoryId && dragging.id !== categoryId) {
-      const edge =
-        dropTarget?.id === categoryId ? dropTarget.edge : "before";
+      const edge = dropTarget?.id === categoryId ? dropTarget.edge : "before";
       const ordered = byOrder(categories, (category) => category.name).filter(
-        (category) => category.id !== dragging.id
+        (category) => category.id !== dragging.id,
       );
       const index = ordered.findIndex((category) => category.id === categoryId);
       moveCategory(dragging.id, edge === "before" ? index : index + 1);
@@ -1238,17 +1249,16 @@ Offer prices are not changed.`
    */
   const orderedCategoryNames = (names: string[]): string[] => {
     const position = new Map(
-      byOrder(categories, (category) => category.name).map((category, index) => [
-        category.name,
-        index,
-      ])
+      byOrder(categories, (category) => category.name).map(
+        (category, index) => [category.name, index],
+      ),
     );
     // A name with no category row behind it (deleted category, stale row)
     // sorts to the end instead of jumping to the front on a missing 0.
     return [...names].sort(
       (a, b) =>
         (position.get(a) ?? Number.MAX_SAFE_INTEGER) -
-        (position.get(b) ?? Number.MAX_SAFE_INTEGER)
+        (position.get(b) ?? Number.MAX_SAFE_INTEGER),
     );
   };
 
@@ -1367,8 +1377,8 @@ Offer prices are not changed.`
           <td>${product.name}</td>
           <td>${product.content || "-"}</td>
           <td class="${product.stock <= 20 ? "text-red-500 font-bold" : ""}">${
-          product.stock
-        }</td>
+            product.stock
+          }</td>
           <td><del>₹${product.actual_price}</del></td>
           <td>₹${product.offer_price}</td>
           <td>${product.apr || "-"}</td>
@@ -1595,14 +1605,14 @@ Offer prices are not changed.`
         </div>
       </div>
       <div class="company-header-section">
-        <!-- <div> <img src="gift-box-new.png" alt="upto 80% off" /></div> -->
+        <!-- <div> <img src="gift-box-new.png" alt="upto 90% off" /></div> -->
         <div class="brand-info">
           <h1>Soundwave Crackers</h1>
           <p class="slogan">"The Rhythm Of Celebration"</p>
           <p>📅 Price List - 2025</p>
-          <p><strong>Upto 80% Off</strong></p>
+          <p><strong>Upto 90% Off</strong></p>
         </div>
-        <!-- <div> <img src="gift-box-new.png" alt="upto 80% off" /></div> -->
+        <!-- <div> <img src="gift-box-new.png" alt="upto 90% off" /></div> -->
       </div>
   </header>
 
@@ -1635,7 +1645,7 @@ Offer prices are not changed.`
                 <td></td>
                 <td></td>
               </tr>
-            `
+            `,
             )
             .join("")}
         </tbody>
@@ -1695,7 +1705,7 @@ Offer prices are not changed.`
       viewer.document.write(
         `<!doctype html><title>Price List ${seasonSlug}</title>` +
           `<body style="font:14px sans-serif;padding:24px;color:#555">` +
-          `Preparing the price list…</body>`
+          `Preparing the price list…</body>`,
       );
       viewer.document.close();
     }
@@ -1715,12 +1725,12 @@ Offer prices are not changed.`
           seasonName: seasonSlug,
           discountPercent: discountUsable ? seasonDiscount : null,
         },
-        viewer
+        viewer,
       );
     } catch (err) {
       viewer?.close();
       toast.error(
-        err instanceof Error ? err.message : "Could not build the price list"
+        err instanceof Error ? err.message : "Could not build the price list",
       );
     }
   };
@@ -1740,9 +1750,8 @@ Offer prices are not changed.`
         return;
       }
 
-      const { buildPriceListPdf, repriceGroups } = await import(
-        "../lib/priceListPdf"
-      );
+      const { buildPriceListPdf, repriceGroups } =
+        await import("../lib/priceListPdf");
       const doc = await buildPriceListPdf({
         // The struck-out price follows the discount chosen in the modal, so
         // the saving the heading claims is the saving the two columns show.
@@ -1763,7 +1772,7 @@ Offer prices are not changed.`
       toast.success("Custom price list downloaded");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Could not build the price list"
+        err instanceof Error ? err.message : "Could not build the price list",
       );
     }
   };
@@ -1792,7 +1801,8 @@ Offer prices are not changed.`
   const stockOf = (product: Product) => Number(product.stock ?? 0);
   /** Only an explicit false is inactive; a row with nothing set is live. */
   const isInactive = (product: Product) => product.is_active === false;
-  const isUnpriced = (product: Product) => Number(product.offer_price ?? 0) <= 0;
+  const isUnpriced = (product: Product) =>
+    Number(product.offer_price ?? 0) <= 0;
 
   const matchesStock = (product: Product) => {
     const stock = stockOf(product);
@@ -1818,7 +1828,7 @@ Offer prices are not changed.`
     (product) =>
       matchesStock(product) &&
       matchesStatus(product) &&
-      (!needsPricing || isUnpriced(product))
+      (!needsPricing || isUnpriced(product)),
   );
 
   /** Counts shown on the filter buttons, against the searched slice. */
@@ -1858,7 +1868,7 @@ Offer prices are not changed.`
    */
   const hiddenChangedIds = bulkEditMode
     ? bulkChangedIds.filter(
-        (id) => !filteredProducts.some((product) => product.id === id)
+        (id) => !filteredProducts.some((product) => product.id === id),
       )
     : [];
 
@@ -1878,7 +1888,7 @@ Offer prices are not changed.`
   // Helper to safely get the value for sorting
   const getSortValue = (
     product: Product,
-    field: string
+    field: string,
   ): string | number | boolean => {
     switch (field) {
       case "order":
@@ -1927,7 +1937,6 @@ Offer prices are not changed.`
       : String(bValue).localeCompare(String(aValue));
   });
 
-
   /**
    * One product row. Shared by the grouped view and the flat sorted view, so
    * bulk edit, inline edit and drag-to-reorder behave identically in both.
@@ -1937,15 +1946,10 @@ Offer prices are not changed.`
     // every row via bulk edit. Bulk covers every column the
     // table displays; inline stays on the price-pass fields.
     const editingInline = inlineEditId === product.id;
-    const draft = bulkEditMode
-      ? bulkDraftFor(product)
-      : inlineForm;
+    const draft = bulkEditMode ? bulkDraftFor(product) : inlineForm;
     const editingPrices = bulkEditMode || editingInline;
-    const rowDirty =
-      bulkEditMode && bulkChangedIds.includes(product.id);
-    const autoActual = bulkEditMode
-      ? bulkAutoActual
-      : inlineAutoActual;
+    const rowDirty = bulkEditMode && bulkChangedIds.includes(product.id);
+    const autoActual = bulkEditMode ? bulkAutoActual : inlineAutoActual;
 
     /** Routes a cell edit to whichever draft is in play. */
     const patch = (fields: Partial<Product>) =>
@@ -1975,351 +1979,331 @@ Offer prices are not changed.`
         : null;
 
     return (
-    <tr
-      key={product.id}
-      draggable={dndEnabled}
-      onDragStart={() => {
-        if (!dndEnabled) return;
-        setDragging({ kind: "product", id: product.id });
-      }}
-      onDragOver={(e) => {
-        if (!dndEnabled || dragging?.kind !== "product") return;
-        e.preventDefault();
-        setDropTarget({
-          kind: "product",
-          id: product.id,
-          edge: edgeFromPointer(e),
-        });
-      }}
-      onDragLeave={() =>
-        setDropTarget((current) =>
-          current?.id === product.id ? null : current
-        )
-      }
-      onDrop={(e) => {
-        if (!dndEnabled) return;
-        e.preventDefault();
-        handleDropOnProduct(product);
-      }}
-      onDragEnd={() => {
-        setDragging(null);
-        setDropTarget(null);
-      }}
-      className={`border-t border-card-border/10 ${
-        isDragged ? "opacity-40" : ""
-      } ${
-        dropEdge === "before"
-          ? "shadow-[inset_0_3px_0_0_rgb(var(--primary-orange))]"
-          : dropEdge === "after"
-          ? "shadow-[inset_0_-3px_0_0_rgb(var(--primary-orange))]"
-          : ""
-      } ${
-        rowDirty
-          ? "bg-amber-500/10"
-          : editingPrices
-          ? "bg-primary-orange/5"
-          : ""
-      }`}
-    >
-      {dndEnabled && (
-        <td className={`${cellPad} cursor-grab text-text/40`}>
-          <GripVertical className="w-4 h-4" />
-        </td>
-      )}
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <NumberInput
-            min={0}
-            value={draft.order ?? ""}
-            onValueChange={(n) => patch({ order: n })}
-            // Empty means "no position set", as it did before.
-            onClear={() => patch({ order: undefined })}
-            aria-label={`Display order for ${product.name}`}
-            className={cellInputClass}
-          />
-        ) : (
-          product.order ?? "-"
-        )}
-      </td>
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <input
-            type="text"
-            value={draft.product_code ?? ""}
-            onChange={(e) =>
-              patch({ product_code: e.target.value })
-            }
-            aria-label={`Product code for ${product.name}`}
-            className={cellInputClass}
-          />
-        ) : (
-          product.product_code || "-"
-        )}
-      </td>
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <input
-            type="text"
-            value={draft.name ?? ""}
-            onChange={(e) => patch({ name: e.target.value })}
-            aria-label="Product name"
-            className={cellInputClass}
-          />
-        ) : (
-          <span className="inline-flex items-center gap-1.5">
-            {product.name}
-            {/* A family pack is a packed box with its own stock, edited
-                here like any product's. */}
-            {product.combo_pack_id && (
-              <span
-                title="Family pack — a packed box with its own stock"
-                className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-orange/10 text-primary-orange"
-              >
-                PACK
-              </span>
-            )}
-          </span>
-        )}
-      </td>
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <select
-            value={draft.category_id ?? ""}
-            onChange={(e) =>
-              patch({ category_id: e.target.value })
-            }
-            aria-label={`Category for ${product.name}`}
-            className={cellInputClass}
-          >
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          product.categories?.name
-        )}
-      </td>
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <input
-            type="text"
-            value={draft.content ?? ""}
-            onChange={(e) => patch({ content: e.target.value })}
-            aria-label={`Content for ${product.name}`}
-            className={cellInputClass}
-          />
-        ) : (
-          product.content
-        )}
-      </td>
-      <td
-        className={`${cellPad} ${
-          !editingPrices && product.stock <= 20
-            ? "text-red-500 font-bold"
-            : ""
+      <tr
+        key={product.id}
+        draggable={dndEnabled}
+        onDragStart={() => {
+          if (!dndEnabled) return;
+          setDragging({ kind: "product", id: product.id });
+        }}
+        onDragOver={(e) => {
+          if (!dndEnabled || dragging?.kind !== "product") return;
+          e.preventDefault();
+          setDropTarget({
+            kind: "product",
+            id: product.id,
+            edge: edgeFromPointer(e),
+          });
+        }}
+        onDragLeave={() =>
+          setDropTarget((current) =>
+            current?.id === product.id ? null : current,
+          )
+        }
+        onDrop={(e) => {
+          if (!dndEnabled) return;
+          e.preventDefault();
+          handleDropOnProduct(product);
+        }}
+        onDragEnd={() => {
+          setDragging(null);
+          setDropTarget(null);
+        }}
+        className={`border-t border-card-border/10 ${
+          isDragged ? "opacity-40" : ""
+        } ${
+          dropEdge === "before"
+            ? "shadow-[inset_0_3px_0_0_rgb(var(--primary-orange))]"
+            : dropEdge === "after"
+              ? "shadow-[inset_0_-3px_0_0_rgb(var(--primary-orange))]"
+              : ""
+        } ${
+          rowDirty
+            ? "bg-amber-500/10"
+            : editingPrices
+              ? "bg-primary-orange/5"
+              : ""
         }`}
       >
-        {editingPrices ? (
-          <NumberInput
-            min={0}
-            value={draft.stock ?? ""}
-            onValueChange={(n) =>
-              patch({ stock: n })
-            }
-            onKeyDown={
-              bulkEditMode ? undefined : handleInlineKeyDown
-            }
-            aria-label={`Stock for ${product.name}`}
-            autoFocus={editingInline}
-            className={cellInputClass}
-          />
-        ) : (
-          product.stock
+        {dndEnabled && (
+          <td className={`${cellPad} cursor-grab text-text/40`}>
+            <GripVertical className="w-4 h-4" />
+          </td>
         )}
-      </td>
-      <td className={cellPad}>
-        {editingPrices ? (
-          <div className="flex flex-col gap-1">
+        <td className={cellPad}>
+          {bulkEditMode ? (
             <NumberInput
               min={0}
-              step="0.01"
-              value={draft.actual_price ?? ""}
-              onValueChange={(n) =>
-                patch({ actual_price: n })
-              }
-              onKeyDown={
-                bulkEditMode ? undefined : handleInlineKeyDown
-              }
-              readOnly={autoActual && discountUsable}
-              aria-label={`Actual price for ${product.name}`}
-              title={
-                autoActual && discountUsable
-                  ? `Calculated from the offer price at ${formatPrice(
-                      seasonDiscount
-                    )}%`
-                  : undefined
-              }
-              className={`${cellInputClass} ${
-                autoActual && discountUsable
-                  ? "bg-card/40 text-text/70 cursor-not-allowed"
-                  : ""
-              }`}
-            />
-            {/* Bulk edit has one auto switch in the toolbar;
-                inline edit carries its own, per row. */}
-            {discountUsable && !bulkEditMode && (
-              <label className="flex items-center gap-1 text-xs text-text/60 whitespace-nowrap">
-                <input
-                  type="checkbox"
-                  checked={autoActual}
-                  onChange={(e) => syncActual(e.target.checked)}
-                />
-                auto
-              </label>
-            )}
-          </div>
-        ) : (
-          `₹${formatPrice(product.actual_price)}`
-        )}
-      </td>
-      <td className={cellPad}>
-        {editingPrices ? (
-          <NumberInput
-            min={0}
-            step="0.01"
-            value={draft.offer_price ?? ""}
-            onValueChange={(n) => onOfferChange(String(n))}
-            onKeyDown={
-              bulkEditMode ? undefined : handleInlineKeyDown
-            }
-            aria-label={`Offer price for ${product.name}`}
-            className={cellInputClass}
-          />
-        ) : (
-          `₹${formatPrice(product.offer_price)}`
-        )}
-      </td>
-      {userRole?.name === "superadmin" && (
-        <td className={cellPad}>
-          {editingPrices ? (
-            <input
-              type="number"
-              onWheel={(e) => e.currentTarget.blur()}
-              min={0}
-              step="0.01"
-              value={draft.apr ?? ""}
-              onChange={(e) => patch({ apr: e.target.value })}
-              onKeyDown={
-                bulkEditMode ? undefined : handleInlineKeyDown
-              }
-              aria-label={`APR for ${product.name}`}
+              value={draft.order ?? ""}
+              onValueChange={(n) => patch({ order: n })}
+              // Empty means "no position set", as it did before.
+              onClear={() => patch({ order: undefined })}
+              aria-label={`Display order for ${product.name}`}
               className={cellInputClass}
             />
           ) : (
-            product.apr || "-"
+            (product.order ?? "-")
           )}
         </td>
-      )}
-      <td className={cellPad}>
-        {bulkEditMode ? (
-          <select
-            value={draft.is_active ? "true" : "false"}
-            onChange={(e) =>
-              patch({ is_active: e.target.value === "true" })
-            }
-            aria-label={`Active status for ${product.name}`}
-            className={cellInputClass}
-          >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
-        ) : (
-          <span
-            className={`px-3 py-1 rounded-full text-xs font-bold ${
-              product.is_active
-                ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-700"
-            }`}
-          >
-            {product.is_active ? "Active" : "Inactive"}
-          </span>
-        )}
-      </td>
-      {userRole?.name === "superadmin" && (
         <td className={cellPad}>
-          <div className="flex items-center justify-center space-x-2">
-            {bulkEditMode ? (
-              // Saving is one action for the whole table, so
-              // the only per-row control is undoing this row.
-              <button
-                onClick={() => revertBulkRow(product.id)}
-                disabled={!rowDirty || savingBulk}
-                title={
-                  rowDirty
-                    ? "Revert this row"
-                    : "No changes on this row"
-                }
-                className="p-2 text-text/60 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            ) : editingInline ? (
-              <>
-                <button
-                  onClick={saveInlineEdit}
-                  disabled={savingInline}
-                  title="Save row"
-                  className="p-2 text-green-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
-                >
-                  {savingInline ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4" />
-                  )}
-                </button>
-                <button
-                  onClick={cancelInlineEdit}
-                  disabled={savingInline}
-                  title="Cancel"
-                  className="p-2 text-red-500 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => handleEdit(product)}
-                  disabled={isSelectedReadOnly}
-                  title={
-                    isSelectedReadOnly
-                      ? "This season is closed and read-only"
-                      : "Edit product"
-                  }
-                  className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => startInlineEdit(product)}
-                  disabled={isSelectedReadOnly}
-                  title={
-                    isSelectedReadOnly
-                      ? "This season is closed and read-only"
-                      : "Inline edit — stock, prices and APR"
-                  }
-                  className="p-2 text-blue-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <PencilLine className="w-4 h-4" />
-                </button>
-              </>
-            )}
-          </div>
+          {bulkEditMode ? (
+            <input
+              type="text"
+              value={draft.product_code ?? ""}
+              onChange={(e) => patch({ product_code: e.target.value })}
+              aria-label={`Product code for ${product.name}`}
+              className={cellInputClass}
+            />
+          ) : (
+            product.product_code || "-"
+          )}
         </td>
-      )}
-    </tr>
+        <td className={cellPad}>
+          {bulkEditMode ? (
+            <input
+              type="text"
+              value={draft.name ?? ""}
+              onChange={(e) => patch({ name: e.target.value })}
+              aria-label="Product name"
+              className={cellInputClass}
+            />
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              {product.name}
+              {/* A family pack is a packed box with its own stock, edited
+                here like any product's. */}
+              {product.combo_pack_id && (
+                <span
+                  title="Family pack — a packed box with its own stock"
+                  className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-primary-orange/10 text-primary-orange"
+                >
+                  PACK
+                </span>
+              )}
+            </span>
+          )}
+        </td>
+        <td className={cellPad}>
+          {bulkEditMode ? (
+            <select
+              value={draft.category_id ?? ""}
+              onChange={(e) => patch({ category_id: e.target.value })}
+              aria-label={`Category for ${product.name}`}
+              className={cellInputClass}
+            >
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            product.categories?.name
+          )}
+        </td>
+        <td className={cellPad}>
+          {bulkEditMode ? (
+            <input
+              type="text"
+              value={draft.content ?? ""}
+              onChange={(e) => patch({ content: e.target.value })}
+              aria-label={`Content for ${product.name}`}
+              className={cellInputClass}
+            />
+          ) : (
+            product.content
+          )}
+        </td>
+        <td
+          className={`${cellPad} ${
+            !editingPrices && product.stock <= 20
+              ? "text-red-500 font-bold"
+              : ""
+          }`}
+        >
+          {editingPrices ? (
+            <NumberInput
+              min={0}
+              value={draft.stock ?? ""}
+              onValueChange={(n) => patch({ stock: n })}
+              onKeyDown={bulkEditMode ? undefined : handleInlineKeyDown}
+              aria-label={`Stock for ${product.name}`}
+              autoFocus={editingInline}
+              className={cellInputClass}
+            />
+          ) : (
+            product.stock
+          )}
+        </td>
+        <td className={cellPad}>
+          {editingPrices ? (
+            <div className="flex flex-col gap-1">
+              <NumberInput
+                min={0}
+                step="0.01"
+                value={draft.actual_price ?? ""}
+                onValueChange={(n) => patch({ actual_price: n })}
+                onKeyDown={bulkEditMode ? undefined : handleInlineKeyDown}
+                readOnly={autoActual && discountUsable}
+                aria-label={`Actual price for ${product.name}`}
+                title={
+                  autoActual && discountUsable
+                    ? `Calculated from the offer price at ${formatPrice(
+                        seasonDiscount,
+                      )}%`
+                    : undefined
+                }
+                className={`${cellInputClass} ${
+                  autoActual && discountUsable
+                    ? "bg-card/40 text-text/70 cursor-not-allowed"
+                    : ""
+                }`}
+              />
+              {/* Bulk edit has one auto switch in the toolbar;
+                inline edit carries its own, per row. */}
+              {discountUsable && !bulkEditMode && (
+                <label className="flex items-center gap-1 text-xs text-text/60 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    checked={autoActual}
+                    onChange={(e) => syncActual(e.target.checked)}
+                  />
+                  auto
+                </label>
+              )}
+            </div>
+          ) : (
+            `₹${formatPrice(product.actual_price)}`
+          )}
+        </td>
+        <td className={cellPad}>
+          {editingPrices ? (
+            <NumberInput
+              min={0}
+              step="0.01"
+              value={draft.offer_price ?? ""}
+              onValueChange={(n) => onOfferChange(String(n))}
+              onKeyDown={bulkEditMode ? undefined : handleInlineKeyDown}
+              aria-label={`Offer price for ${product.name}`}
+              className={cellInputClass}
+            />
+          ) : (
+            `₹${formatPrice(product.offer_price)}`
+          )}
+        </td>
+        {userRole?.name === "superadmin" && (
+          <td className={cellPad}>
+            {editingPrices ? (
+              <input
+                type="number"
+                onWheel={(e) => e.currentTarget.blur()}
+                min={0}
+                step="0.01"
+                value={draft.apr ?? ""}
+                onChange={(e) => patch({ apr: e.target.value })}
+                onKeyDown={bulkEditMode ? undefined : handleInlineKeyDown}
+                aria-label={`APR for ${product.name}`}
+                className={cellInputClass}
+              />
+            ) : (
+              product.apr || "-"
+            )}
+          </td>
+        )}
+        <td className={cellPad}>
+          {bulkEditMode ? (
+            <select
+              value={draft.is_active ? "true" : "false"}
+              onChange={(e) => patch({ is_active: e.target.value === "true" })}
+              aria-label={`Active status for ${product.name}`}
+              className={cellInputClass}
+            >
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          ) : (
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-bold ${
+                product.is_active
+                  ? "bg-green-100 text-green-700"
+                  : "bg-red-100 text-red-700"
+              }`}
+            >
+              {product.is_active ? "Active" : "Inactive"}
+            </span>
+          )}
+        </td>
+        {userRole?.name === "superadmin" && (
+          <td className={cellPad}>
+            <div className="flex items-center justify-center space-x-2">
+              {bulkEditMode ? (
+                // Saving is one action for the whole table, so
+                // the only per-row control is undoing this row.
+                <button
+                  onClick={() => revertBulkRow(product.id)}
+                  disabled={!rowDirty || savingBulk}
+                  title={
+                    rowDirty ? "Revert this row" : "No changes on this row"
+                  }
+                  className="p-2 text-text/60 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              ) : editingInline ? (
+                <>
+                  <button
+                    onClick={saveInlineEdit}
+                    disabled={savingInline}
+                    title="Save row"
+                    className="p-2 text-green-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    {savingInline ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4" />
+                    )}
+                  </button>
+                  <button
+                    onClick={cancelInlineEdit}
+                    disabled={savingInline}
+                    title="Cancel"
+                    className="p-2 text-red-500 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleEdit(product)}
+                    disabled={isSelectedReadOnly}
+                    title={
+                      isSelectedReadOnly
+                        ? "This season is closed and read-only"
+                        : "Edit product"
+                    }
+                    className="p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => startInlineEdit(product)}
+                    disabled={isSelectedReadOnly}
+                    title={
+                      isSelectedReadOnly
+                        ? "This season is closed and read-only"
+                        : "Inline edit — stock, prices and APR"
+                    }
+                    className="p-2 text-blue-600 hover:bg-card/70 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <PencilLine className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          </td>
+        )}
+      </tr>
     );
   };
 
@@ -2386,9 +2370,9 @@ Offer prices are not changed.`
       name: category.name,
       products: byOrder(
         filteredProducts.filter(
-          (product) => product.category_id === category.id
+          (product) => product.category_id === category.id,
         ),
-        (product) => product.name
+        (product) => product.name,
       ),
     })),
     {
@@ -2397,9 +2381,9 @@ Offer prices are not changed.`
       products: byOrder(
         filteredProducts.filter(
           (product) =>
-            !categories.some((category) => category.id === product.category_id)
+            !categories.some((category) => category.id === product.category_id),
         ),
-        (product) => product.name
+        (product) => product.name,
       ),
     },
   ].filter((group) => {
@@ -2458,7 +2442,7 @@ Offer prices are not changed.`
                   !confirm(
                     `Switching season will discard unsaved changes to ${bulkChangedIds.length} product${
                       bulkChangedIds.length === 1 ? "" : "s"
-                    }. Continue?`
+                    }. Continue?`,
                   )
                 )
                   return;
@@ -2474,8 +2458,8 @@ Offer prices are not changed.`
                   {season.status === "active"
                     ? " (live)"
                     : season.status === "draft"
-                    ? " (draft)"
-                    : " (closed)"}
+                      ? " (draft)"
+                      : " (closed)"}
                 </option>
               ))}
             </select>
@@ -2639,7 +2623,7 @@ Offer prices are not changed.`
                 onClick={async () => {
                   if (
                     !confirm(
-                      `Unlock season ${selectedSeason.name} for editing? This is recorded in the audit log.`
+                      `Unlock season ${selectedSeason.name} for editing? This is recorded in the audit log.`,
                     )
                   )
                     return;
@@ -2647,7 +2631,7 @@ Offer prices are not changed.`
                     await setSeasonUnlocked(selectedSeason.id, true);
                   } catch (err) {
                     alert(
-                      err instanceof Error ? err.message : "Failed to unlock"
+                      err instanceof Error ? err.message : "Failed to unlock",
                     );
                   }
                 }}
@@ -2682,8 +2666,8 @@ Offer prices are not changed.`
               Season {selectedSeason.name} is a draft
             </p>
             <p className="text-sm text-text/70">
-              Edits here are not visible to customers. Activate the season on the
-              Seasons page when you are ready to sell from it.
+              Edits here are not visible to customers. Activate the season on
+              the Seasons page when you are ready to sell from it.
             </p>
           </div>
         )}
@@ -2719,95 +2703,99 @@ Offer prices are not changed.`
             </button>
 
             {priceConfigOpen && (
-            <div className="px-5 pb-5">
-            <p className="text-sm text-text/70 mb-4">
-              Enter the offer price for each product; the actual (struck-out)
-              price is calculated from it at this discount. Each season keeps
-              its own discount.
-            </p>
+              <div className="px-5 pb-5">
+                <p className="text-sm text-text/70 mb-4">
+                  Enter the offer price for each product; the actual
+                  (struck-out) price is calculated from it at this discount.
+                  Each season keeps its own discount.
+                </p>
 
-            <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
-              <div>
-                <label className="block mb-1 text-sm font-medium">
-                  Price list discount %
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={99.99}
-                  step="0.01"
-                  value={discountInput}
-                  onChange={(e) => setDiscountInput(e.target.value)}
-                  disabled={isSelectedReadOnly}
-                  placeholder="80"
-                  className="w-full sm:w-40 px-3 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange disabled:opacity-40"
-                />
+                <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
+                  <div>
+                    <label className="block mb-1 text-sm font-medium">
+                      Price list discount %
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={99.99}
+                      step="0.01"
+                      value={discountInput}
+                      onChange={(e) => setDiscountInput(e.target.value)}
+                      disabled={isSelectedReadOnly}
+                      placeholder="80"
+                      className="w-full sm:w-40 px-3 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange disabled:opacity-40"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleSaveDiscount}
+                    disabled={
+                      savingDiscount ||
+                      isSelectedReadOnly ||
+                      Number(discountInput) === seasonDiscount
+                    }
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {savingDiscount ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>Save discount</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleReprice(false)}
+                    disabled={
+                      repricing || isSelectedReadOnly || !discountUsable
+                    }
+                    title={
+                      discountUsable
+                        ? "Recalculate every product's actual price from its offer price"
+                        : "Set a discount above 0 first"
+                    }
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {repricing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Calculator className="w-4 h-4" />
+                    )}
+                    <span>Recalculate all actual prices</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleReprice(true)}
+                    disabled={
+                      repricing || isSelectedReadOnly || !discountUsable
+                    }
+                    title="Only fill in products that have no actual price yet"
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Calculator className="w-4 h-4" />
+                    <span>Fill missing only</span>
+                  </button>
+                </div>
+
+                <p className="text-sm text-text/70 mt-3">
+                  {discountUsable ? (
+                    <>
+                      At{" "}
+                      <span className="font-semibold">
+                        {formatPrice(seasonDiscount)}%
+                      </span>
+                      , an offer price of ₹8 prints as{" "}
+                      <span className="font-semibold">
+                        ₹{formatPrice(deriveActual(8) ?? 0)}
+                      </span>
+                      .
+                    </>
+                  ) : (
+                    "No discount configured — actual prices must be entered by hand."
+                  )}
+                </p>
               </div>
-
-              <button
-                onClick={handleSaveDiscount}
-                disabled={
-                  savingDiscount ||
-                  isSelectedReadOnly ||
-                  Number(discountInput) === seasonDiscount
-                }
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {savingDiscount ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4" />
-                )}
-                <span>Save discount</span>
-              </button>
-
-              <button
-                onClick={() => handleReprice(false)}
-                disabled={repricing || isSelectedReadOnly || !discountUsable}
-                title={
-                  discountUsable
-                    ? "Recalculate every product's actual price from its offer price"
-                    : "Set a discount above 0 first"
-                }
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {repricing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Calculator className="w-4 h-4" />
-                )}
-                <span>Recalculate all actual prices</span>
-              </button>
-
-              <button
-                onClick={() => handleReprice(true)}
-                disabled={repricing || isSelectedReadOnly || !discountUsable}
-                title="Only fill in products that have no actual price yet"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-card/70 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <Calculator className="w-4 h-4" />
-                <span>Fill missing only</span>
-              </button>
-            </div>
-
-            <p className="text-sm text-text/70 mt-3">
-              {discountUsable ? (
-                <>
-                  At{" "}
-                  <span className="font-semibold">
-                    {formatPrice(seasonDiscount)}%
-                  </span>
-                  , an offer price of ₹8 prints as{" "}
-                  <span className="font-semibold">
-                    ₹{formatPrice(deriveActual(8) ?? 0)}
-                  </span>
-                  .
-                </>
-              ) : (
-                "No discount configured — actual prices must be entered by hand."
-              )}
-            </p>
-            </div>
             )}
           </div>
         )}
@@ -2835,7 +2823,10 @@ Offer prices are not changed.`
           </button>
 
           {canManage && (
-            <ToolbarMenu label="Bulk" icon={<TableProperties className="w-5 h-5" />}>
+            <ToolbarMenu
+              label="Bulk"
+              icon={<TableProperties className="w-5 h-5" />}
+            >
               <MenuSection label="Edit" />
               {isSuperadmin && (
                 <MenuItem
@@ -2852,8 +2843,8 @@ Offer prices are not changed.`
                     isSelectedReadOnly
                       ? "This season is closed and read-only"
                       : bulkEditMode
-                      ? "Already in bulk edit"
-                      : undefined
+                        ? "Already in bulk edit"
+                        : undefined
                   }
                 />
               )}
@@ -2961,8 +2952,8 @@ Offer prices are not changed.`
             {isSelectedReadOnly
               ? "This season is frozen, so the catalog order cannot be rearranged."
               : bulkEditMode || inlineEditId
-              ? "Finish the current edit to rearrange the catalog by dragging."
-              : "Drag a row to reposition it, onto another category to move it there, or drag a category band to reorder the whole category. The printed price list follows this order."}
+                ? "Finish the current edit to rearrange the catalog by dragging."
+                : "Drag a row to reposition it, onto another category to move it there, or drag a category band to reorder the whole category. The printed price list follows this order."}
             {savingOrder && (
               <span className="flex items-center gap-1 text-primary-orange">
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -3042,9 +3033,7 @@ Offer prices are not changed.`
               edge, so it stays readable all the way down a several-hundred
               row price list, and the whole thing sits under the site nav. */}
           <div className="overflow-auto max-h-[calc(100vh-13rem)]">
-            <table
-              className={`w-full ${bulkEditMode ? "table-fixed" : ""}`}
-            >
+            <table className={`w-full ${bulkEditMode ? "table-fixed" : ""}`}>
               <thead className="sticky top-0 z-20">
                 <tr className="bg-card [&>th]:shadow-[inset_0_-1px_0_0_rgb(0_0_0/0.12)]">
                   {dndEnabled && (
@@ -3128,8 +3117,7 @@ Offer prices are not changed.`
                 ) : groupByCategory ? (
                   categoryGroups.map((group) => {
                     const categoryDragged =
-                      dragging?.kind === "category" &&
-                      dragging.id === group.id;
+                      dragging?.kind === "category" && dragging.id === group.id;
                     const groupEdge =
                       dropTarget?.kind === "group" && dropTarget.id === group.id
                         ? dropTarget.edge
@@ -3159,7 +3147,7 @@ Offer prices are not changed.`
                             setDropTarget((current) =>
                               current?.id === (group.id ?? "uncategorized")
                                 ? null
-                                : current
+                                : current,
                             )
                           }
                           onDrop={(e) => {
@@ -3361,7 +3349,7 @@ Offer prices are not changed.`
                               setEditAutoActual(auto);
                               if (!auto) return;
                               const derived = deriveActual(
-                                editForm.offer_price
+                                editForm.offer_price,
                               );
                               if (derived !== null)
                                 setEditForm((f) => ({
@@ -3547,7 +3535,7 @@ Offer prices are not changed.`
                   if (!selectedSeasonId) return;
                   if (isSelectedReadOnly) {
                     alert(
-                      "This season is closed and read-only. A superadmin must unlock it first."
+                      "This season is closed and read-only. A superadmin must unlock it first.",
                     );
                     return;
                   }
@@ -3609,7 +3597,7 @@ Offer prices are not changed.`
                     alert(
                       err instanceof Error
                         ? err.message
-                        : "Failed to add product"
+                        : "Failed to add product",
                     );
                   }
                 }}

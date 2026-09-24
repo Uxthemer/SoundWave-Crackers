@@ -22,7 +22,7 @@ export const DEFAULT_BUSINESS: BusinessDetails = {
   name: "SoundWave Crackers",
   address: null,
   state: null,
-  phone: "+91 9789794518, +91 9363515184",
+  phone: "+91 9789794518, +91 9363515184, +91 8778929593",
   email: "soundwavecrackers@gmail.com",
   website: "www.soundwavecrackers.com",
   gstin: null,
