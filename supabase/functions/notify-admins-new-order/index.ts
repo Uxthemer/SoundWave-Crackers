@@ -153,10 +153,19 @@ serve(async (req) => {
         try {
             const batchResponse = await firebase.messaging().sendEachForMulticast(message);
             
-            return new Response(JSON.stringify({ 
-                message: "Test sent successfully", 
+            // The error codes come back too. "Sent successfully" with a
+            // silent phone is the hardest kind of bug to chase; the code FCM
+            // gave is usually the whole answer.
+            const errors = batchResponse.responses
+                .filter((resp) => !resp.success)
+                .map((resp) => resp.error?.code || 'unknown');
+            if (errors.length) console.warn('Test send failures:', errors);
+
+            return new Response(JSON.stringify({
+                message: "Test sent successfully",
                 successCount: batchResponse.successCount,
-                failureCount: batchResponse.failureCount
+                failureCount: batchResponse.failureCount,
+                errors
             }), { status: 200, headers: corsHeaders });
 
         } catch(e) {
