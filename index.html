@@ -102,8 +102,30 @@
       sizes="16x16"
       href="/assets/img/favicon/favicon-16x16.png"
     />
-    <link rel="icon" type="image/svg+xml" sizes="any" href="/vite.svg" />
-    <link rel="manifest" href="/assets/img/favicon/site.webmanifest" />
+    <!-- The manifest lives at the site root on purpose: start_url and scope
+         resolve against the manifest's own URL, so one kept under
+         /assets/img/favicon/ scoped the installed app to that folder. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Installing on iOS. Safari reads these rather than the manifest on
+         anything before iOS 17.4, and Add to Home Screen opens inside Safari's
+         chrome without the first one. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SoundWave" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- The system bars follow the theme the app is actually showing. -->
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#FFFFFF"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#1E1E1E"
+    />
 
     <!-- Structured Data (SEO Rich Snippets) -->
     <script type="application/ld+json">
