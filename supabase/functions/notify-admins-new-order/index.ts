@@ -293,16 +293,36 @@ serve(async (req) => {
             await sendWhatsApp(cleanPhone, customerMsg);
         }
     
-        // Optional: Cleanup invalid tokens
+        /**
+         * Drop tokens FCM says are gone for good -- and only those.
+         *
+         * This used to delete on any failure at all. A server blip, a quota
+         * error or a momentary outage unsubscribed a perfectly good phone,
+         * permanently and silently: the row vanished, the screen still said
+         * notifications were on, and nothing ever put it back. That is how
+         * one admin device keeps working while another stops.
+         */
         if (batchResponse.failureCount > 0) {
-            const failedTokens = [];
+            const PERMANENT = [
+                'messaging/registration-token-not-registered',
+                'messaging/invalid-registration-token',
+                'messaging/invalid-argument',
+            ];
+            const deadTokens = [];
             batchResponse.responses.forEach((resp, idx) => {
-                if (!resp.success) {
-                    failedTokens.push(uniqueTokens[idx]);
+                if (resp.success) return;
+                const code = resp.error?.code || '';
+                if (PERMANENT.includes(code)) {
+                    deadTokens.push(uniqueTokens[idx]);
+                } else {
+                    // Kept, and worth seeing in the logs when a device is
+                    // reported as missing alerts.
+                    console.warn(`Temporary send failure, token kept: ${code}`);
                 }
             });
-            if (failedTokens.length > 0) {
-                 await supabase.from('admin_push_subscriptions').delete().in('fcm_token', failedTokens);
+            if (deadTokens.length > 0) {
+                 console.log(`Removing ${deadTokens.length} dead token(s).`);
+                 await supabase.from('admin_push_subscriptions').delete().in('fcm_token', deadTokens);
             }
         }
     
