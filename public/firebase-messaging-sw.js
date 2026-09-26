@@ -5,6 +5,16 @@
 importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
 
+// Take over as soon as a new version of this file is deployed.
+//
+// Without these, a browser downloads the new worker and then parks it until
+// every tab and window of the site has been closed -- which on a phone that
+// keeps the app open in the background can be never. The old worker carries
+// on handling pushes in the meantime, so a fix to the code below appears to
+// have no effect on exactly the device you are trying to fix.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+
 const firebaseConfig = {
   apiKey: "AIzaSyB5eeS5Y8xRA4Agmkum85JK7hBTf66pN34",
   authDomain: "soundwave-crackers.firebaseapp.com",
@@ -32,8 +42,11 @@ try {
 
       const data = payload.data || {};
 
+      // Never leave a push without a notification: iOS and Chrome both treat
+      // a push that shows nothing as a fault, and will either post their own
+      // "site updated in the background" notice or drop the subscription.
       self.registration.showNotification(data.title || 'SoundWave Crackers', {
-        body: data.body || '',
+        body: data.body || 'You have a new update.',
         icon: '/assets/img/logo/logo_2.png',
         badge: '/assets/img/logo/logo_2.png',
         // Two pushes for the same order replace each other instead of

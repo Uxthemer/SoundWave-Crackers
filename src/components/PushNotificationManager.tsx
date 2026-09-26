@@ -27,6 +27,40 @@ interface RegisteredDevice {
   created_at: string;
 }
 
+/**
+ * Says what FCM actually did with the test.
+ *
+ * "Sent!" was printed whenever the function returned at all, so a token FCM
+ * rejected outright looked identical to one that worked -- which is no help
+ * when the whole question is why a device is silent. The error codes are the
+ * useful part: `registration-token-not-registered` means that device needs
+ * re-registering, anything else is worth reading.
+ */
+function reportSendResult(
+  data: { successCount?: number; failureCount?: number; errors?: string[] } | null,
+  toastId: string,
+  target: string
+) {
+  const success = data?.successCount ?? 0;
+  const failure = data?.failureCount ?? 0;
+
+  if (failure > 0 && success === 0) {
+    toast.error(
+      `FCM rejected the send${data?.errors?.length ? `: ${data.errors.join(', ')}` : ''}`,
+      { id: toastId, duration: 8000 }
+    );
+    return;
+  }
+  if (failure > 0) {
+    toast.success(
+      `Sent to ${success} of ${success + failure} devices — ${failure} failed`,
+      { id: toastId, duration: 8000 }
+    );
+    return;
+  }
+  toast.success(`Sent to ${target} (${success})`, { id: toastId });
+}
+
 /** A full userAgent is unreadable in a list; this is enough to tell phones apart. */
 function describeDevice(userAgent: string | null): string {
   const ua = userAgent || '';
@@ -64,6 +98,12 @@ export function PushNotificationManager() {
   const [loading, setLoading] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [devices, setDevices] = useState<RegisteredDevice[]>([]);
+  /**
+   * The token this device is registered under. Held so the test button sends
+   * to the row that is in the table, rather than asking for a token again and
+   * possibly getting a different one.
+   */
+  const [deviceToken, setDeviceToken] = useState<string | null>(null);
 
   const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
 
@@ -138,6 +178,15 @@ export function PushNotificationManager() {
         const registration = await navigator.serviceWorker.register(
           '/firebase-messaging-sw.js'
         );
+        // Ask for a newer worker rather than waiting for the browser's own
+        // 24-hour check. A device left on a stale worker keeps handling
+        // pushes with old code and looks broken in a way nothing on this
+        // screen explains.
+        try {
+          await registration.update();
+        } catch {
+          // An update check is best-effort; the existing worker still works.
+        }
         await navigator.serviceWorker.ready;
 
         const token = await getToken(messagingInstance, {
@@ -162,6 +211,7 @@ export function PushNotificationManager() {
         );
         if (error) throw error;
 
+        setDeviceToken(token);
         setIsSubscribed(true);
         if (interactive) toast.success('Push notifications enabled on this device!');
         await loadDevices();
@@ -295,19 +345,25 @@ export function PushNotificationManager() {
                   <div className="flex gap-4">
                       <button
                           onClick={async () => {
-                              const messagingInstance = await messaging;
-                              if (!messagingInstance) return;
-
-                              const token = await getToken(messagingInstance, { vapidKey });
-                              if (!token) return toast.error("No token found");
+                              // The registered token, not a freshly requested
+                              // one. Asking again without naming the service
+                              // worker registration returns a token bound to
+                              // a different scope, so the test went to a
+                              // subscription that was not the one in the
+                              // table -- and nothing arrived.
+                              if (!deviceToken) {
+                                  return toast.error(
+                                      "This device is not registered yet. Press Re-sync Device first."
+                                  );
+                              }
 
                               const toastId = toast.loading("Sending test to THIS device...");
                               try {
-                                  const { error } = await supabase.functions.invoke('notify-admins-new-order', {
-                                      body: { test: true, target_token: token, broadcast: false }
+                                  const { error, data } = await supabase.functions.invoke('notify-admins-new-order', {
+                                      body: { test: true, target_token: deviceToken, broadcast: false }
                                   });
                                   if(error) throw error;
-                                  toast.success("Sent!", { id: toastId });
+                                  reportSendResult(data, toastId, "this device");
                               } catch (e: any) {
                                   toast.error("Failed: " + e.message, { id: toastId });
                               }
@@ -326,7 +382,7 @@ export function PushNotificationManager() {
                                       body: { test: true, broadcast: true }
                                   });
                                   if(error) throw error;
-                                  toast.success(`Sent to ${data?.successCount ?? 'all'} devices`, { id: toastId });
+                                  reportSendResult(data, toastId, "all devices");
                               } catch (e: any) {
                                   toast.error("Failed: " + e.message, { id: toastId });
                               }
