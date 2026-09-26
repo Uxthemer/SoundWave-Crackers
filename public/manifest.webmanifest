@@ -1,0 +1,46 @@
+{
+  "name": "SoundWave Crackers",
+  "short_name": "SoundWave",
+  "description": "Buy quality crackers and fireworks from Sivakasi, and track your order.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "en",
+  "dir": "ltr",
+  "theme_color": "#FF5722",
+  "background_color": "#FFFFFF",
+  "icons": [
+    {
+      "src": "/assets/img/favicon/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/img/favicon/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/img/favicon/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Track Order",
+      "short_name": "Track",
+      "url": "/track-order"
+    },
+    {
+      "name": "Explore Crackers",
+      "short_name": "Explore",
+      "url": "/buy-cracker-online"
+    }
+  ]
+}
