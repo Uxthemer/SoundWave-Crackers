@@ -43,6 +43,8 @@ import {
   renumber,
 } from "../lib/ordering";
 import { openPriceListPdf } from "../lib/priceListPdf";
+import { useAppSettings } from "../context/AppSettingsContext";
+import { businessFromSettings } from "../lib/businessDetails";
 import {
   CustomPriceListModal,
   type CustomPriceListSettings,
@@ -53,6 +55,8 @@ import { NumberInput } from "../components/NumberInput";
 interface Product {
   id: string;
   name: string;
+  /** The name in Tamil. Only the custom price list's Tamil column reads it. */
+  tamil_name?: string | null;
   category_id: string;
   stock: number;
   actual_price: number;
@@ -252,6 +256,8 @@ export function StockManagement() {
   const { setSeasonUnlocked, updateSeason, applyPriceListDiscount } =
     useSeasonActions();
   const { exportProductsToExcel } = useProducts(selectedSeasonId);
+  // The business block printed at the head of the family-pack pamphlet.
+  const { settings: appSettings } = useAppSettings();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -276,6 +282,9 @@ export function StockManagement() {
   const [showBulkAddModal, setShowBulkAddModal] = useState(false);
   const [showAddPackModal, setShowAddPackModal] = useState(false);
   const [showCustomPriceList, setShowCustomPriceList] = useState(false);
+  // The pamphlet reads the packs fresh and then draws them, so a second click
+  // part-way through would build the same file twice.
+  const [buildingPamphlet, setBuildingPamphlet] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
   // Order is auto-filled from the chosen category until it is typed over —
   // after that, switching category must not overwrite a deliberate position.
@@ -464,6 +473,10 @@ export function StockManagement() {
           description: editForm.description,
           yt_link: editForm.yt_link,
           product_code: editForm.product_code,
+          // Identity, like the English name: the same in every season. An
+          // emptied box clears it rather than storing a blank string, so the
+          // price list's "has a Tamil name" test stays a NULL check.
+          tamil_name: editForm.tamil_name?.trim() || null,
         })
         .eq("id", editingProduct.id);
 
@@ -1689,6 +1702,9 @@ Offer prices are not changed.`,
         actual_price: product.actual_price ?? null,
         offer_price: product.offer_price ?? null,
         content: product.content ?? null,
+        // Only printed when the custom sheet asks for the Tamil column; the
+        // standard price list ignores it.
+        tamil_name: product.tamil_name ?? null,
       })),
     }));
   };
@@ -1774,6 +1790,65 @@ Offer prices are not changed.`,
       toast.error(
         err instanceof Error ? err.message : "Could not build the price list",
       );
+    }
+  };
+
+  /**
+   * The family-pack pamphlet: every active pack in this season with what is
+   * inside it, as one PDF to hand a walk-in customer.
+   *
+   * The packs are read from the database on the click rather than taken from
+   * anything this screen is holding — a pack edited a minute ago has to be on
+   * the sheet that prints now. The file saves straight down: there is no
+   * banner or column choice to review first, unlike the custom price list.
+   */
+  const handleFamilyPackPamphlet = async () => {
+    if (!selectedSeasonId) {
+      toast.error("Select a season first");
+      return;
+    }
+    if (buildingPamphlet) return;
+
+    setBuildingPamphlet(true);
+    const progress = toast.loading("Building the family pack pamphlet…");
+    try {
+      // Both loaded on demand: neither is wanted on the first paint of a
+      // several-hundred-row stock table.
+      const [{ fetchFamilyPackPamphlet }, pamphletPdf] = await Promise.all([
+        import("../lib/familyPackPamphlet"),
+        import("../lib/familyPackPamphletPdf"),
+      ]);
+
+      const packs = await fetchFamilyPackPamphlet(selectedSeasonId);
+      if (!packs.length) {
+        toast.error("This season has no active family packs with items in them", {
+          id: progress,
+        });
+        return;
+      }
+
+      const doc = await pamphletPdf.buildFamilyPackPamphletPdf({
+        packs,
+        seasonName: selectedSeason?.name || "Current season",
+        business: businessFromSettings(appSettings),
+        logoUrl: appSettings?.logo_url ?? null,
+      });
+      doc.save(pamphletPdf.familyPackPamphletFileName(seasonSlug));
+
+      const items = packs.reduce((sum, pack) => sum + pack.productCount, 0);
+      toast.success(
+        `Pamphlet downloaded — ${packs.length} pack${
+          packs.length === 1 ? "" : "s"
+        }, ${items} item${items === 1 ? "" : "s"}`,
+        { id: progress },
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not build the pamphlet",
+        { id: progress },
+      );
+    } finally {
+      setBuildingPamphlet(false);
     }
   };
 
@@ -2930,6 +3005,21 @@ Offer prices are not changed.`,
               hint="Same rows, plain text"
               onClick={() => handleExportPriceList("csv")}
             />
+            {/* Family packs are priced and composed by the superadmin, so the
+                sheet that goes out about them is theirs to issue too. */}
+            {isSuperadmin && (
+              <>
+                <MenuSection label="Family packs" />
+                <MenuItem
+                  icon={<Boxes className="w-4 h-4" />}
+                  label="Family pack pamphlet"
+                  hint="PDF — every active pack and what is inside it"
+                  onClick={handleFamilyPackPamphlet}
+                  disabled={buildingPamphlet}
+                  title={buildingPamphlet ? "Building the pamphlet…" : undefined}
+                />
+              </>
+            )}
             <MenuSection label="Catalog" />
             <MenuItem
               icon={<Download className="w-4 h-4" />}
@@ -3245,6 +3335,25 @@ Offer prices are not changed.`,
                       }
                       className="w-full px-3 py-2 border rounded"
                       required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block mb-1 font-medium">
+                      Product Name (Tamil)
+                    </label>
+                    <input
+                      type="text"
+                      lang="ta"
+                      value={editForm.tamil_name || ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          tamil_name: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border rounded"
+                      placeholder="Optional - printed on the Tamil price list"
                     />
                   </div>
 

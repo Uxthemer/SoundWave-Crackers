@@ -40,6 +40,8 @@ export interface Database {
           product_code: string
           category_id: string
           name: string
+          /** The name in Tamil, for the printed price list. Optional. */
+          tamil_name: string | null
           description: string | null
           image_url: string | null
           created_at: string
@@ -61,6 +63,7 @@ export interface Database {
           category_id: string
           name: string
           product_code?: string
+          tamil_name?: string | null
           description?: string | null
           image_url?: string | null
           created_at?: string
@@ -579,6 +582,7 @@ export interface Database {
           id: string
           product_code: string | null
           name: string
+          tamil_name: string | null
           category_id: string | null
           description: string | null
           image_url: string | null

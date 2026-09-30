@@ -37,12 +37,29 @@ interface RegisteredDevice {
  * re-registering, anything else is worth reading.
  */
 function reportSendResult(
-  data: { successCount?: number; failureCount?: number; errors?: string[] } | null,
+  data: {
+    successCount?: number;
+    failureCount?: number;
+    errors?: string[];
+    message?: string;
+    error?: string;
+  } | null,
   toastId: string,
   target: string
 ) {
-  const success = data?.successCount ?? 0;
-  const failure = data?.failureCount ?? 0;
+  // No counts at all means the function answered without sending anything.
+  // It does that with a 200 and an explanation, so it never looked like a
+  // failure -- and `?? 0` turned it into a cheerful "Sent (0)".
+  if (typeof data?.successCount !== 'number') {
+    toast.error(
+      data?.message || data?.error || 'The server did not send anything.',
+      { id: toastId, duration: 9000 }
+    );
+    return;
+  }
+
+  const success = data.successCount;
+  const failure = data.failureCount ?? 0;
 
   if (failure > 0 && success === 0) {
     toast.error(
