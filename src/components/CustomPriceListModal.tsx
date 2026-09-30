@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Loader2, RotateCcw, Settings2, Trash2, X } from "lucide-react";
 import {
   DEFAULT_COLUMN_LABELS,
+  DEFAULT_ON_COLUMNS,
   MIN_FULL_WIDTH_BANNER_RATIO,
   PRICE_LIST_COLUMNS,
   type PriceListColumn,
@@ -42,9 +43,18 @@ export interface CustomPriceListSettings {
 
 const MAX_BANNER_BYTES = 5 * 1024 * 1024;
 
-/** What the sheet looks like before anyone touches it: today's price list. */
+/**
+ * What the sheet looks like before anyone touches it: today's price list.
+ *
+ * Which means Tamil off. Most sheets go out in English, and a Tamil column is
+ * something a superadmin turns on for a particular wholesaler or counter list.
+ */
 function defaultColumns(): PriceListColumn[] {
-  return PRICE_LIST_COLUMNS.map((key) => ({ key, label: "", enabled: true }));
+  return PRICE_LIST_COLUMNS.map((key) => ({
+    key,
+    label: "",
+    enabled: DEFAULT_ON_COLUMNS.includes(key),
+  }));
 }
 
 export function CustomPriceListModal({
@@ -303,7 +313,9 @@ export function CustomPriceListModal({
           <h3 className="font-semibold mb-1">Columns</h3>
           <p className="text-sm text-text/60 mb-3">
             S.No, Product and the category bands always print. Switch off what
-            you do not need and the rest widen to fill the page.
+            you do not need and the rest widen to fill the page. Tamil Name
+            prints each product's Tamil name beside the English one, for
+            products that have one.
           </p>
 
           <div className="space-y-2">
@@ -323,7 +335,7 @@ export function CustomPriceListModal({
                 />
                 <label
                   htmlFor={`col-${column.key}`}
-                  className="w-28 text-sm font-medium shrink-0 cursor-pointer"
+                  className="w-32 text-sm font-medium shrink-0 cursor-pointer"
                 >
                   {DEFAULT_COLUMN_LABELS[column.key]}
                 </label>

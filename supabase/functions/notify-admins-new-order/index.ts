@@ -78,28 +78,37 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // 1. Check if Push is enabled globally
-    const { data: settings, error: settingsError } = await supabase
-      .from('app_settings')
-      .select('enable_push_notifications')
-      .single();
-
-    if (settingsError) {
-        console.error("Error fetching settings:", settingsError);
-    }
-
-    console.log("Debug: App Settings:", settings);
-
-    if (settings && settings.enable_push_notifications === false) {
-       console.log("Push notifications disabled in settings.");
-       // We continue strictly for logging/debugging purposes or valid return. 
-       // Actually user probably wants it to stop if disabled.
-       return new Response(JSON.stringify({ message: "Push disabled in settings" }), { headers: corsHeaders });
-    }
-
-    // 2. Parse Webhook Payload
+    // 1. Parse Webhook Payload
     const payload = await req.json();
     console.log("Packet received:", JSON.stringify(payload));
+
+    /**
+     * The global switch is read AFTER the test block below, on purpose.
+     *
+     * It used to be the first thing this function did, and it returned before
+     * even looking at what was being asked. So with "push notifications"
+     * switched off in Admin Settings, pressing Test This Device returned 200
+     * with `{ message: "Push disabled in settings" }` -- no error, no counts,
+     * nothing to see on the phone. The one button whose job is to explain why
+     * a device is silent was itself silenced by a setting, and said nothing
+     * about it.
+     *
+     * A test is an admin pressing a button on a device in their hand. It runs
+     * regardless; the switch governs the automatic order alerts further down,
+     * which is what it was ever meant to govern.
+     */
+    const readPushSetting = async () => {
+      const { data: settings, error: settingsError } = await supabase
+        .from('app_settings')
+        .select('enable_push_notifications')
+        .single();
+
+      if (settingsError) {
+          console.error("Error fetching settings:", settingsError);
+      }
+      console.log("Debug: App Settings:", settings);
+      return settings;
+    };
 
     // HANDLE TEST NOTIFICATION
     if (payload.test === true) {
@@ -174,8 +183,15 @@ serve(async (req) => {
         }
     }
 
+    // Automatic order alerts, which the global switch does govern.
+    const settings = await readPushSetting();
+    if (settings && settings.enable_push_notifications === false) {
+       console.log("Push notifications disabled in settings.");
+       return new Response(JSON.stringify({ message: "Push disabled in settings" }), { headers: corsHeaders });
+    }
+
     // HANDLE NEW ORDER NOTIFICATION
-    const order = payload.record; 
+    const order = payload.record;
     
     if (!order) {
         console.error("No record in payload", payload);
