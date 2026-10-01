@@ -1,26 +1,61 @@
 import { useEffect, useState } from "react";
   import { useQuotations } from "../hooks/useQuotations";
   import { useCartStore } from "../store/cartStore";
-  import { Eye, Trash2, ShoppingCart, MessageCircle } from "lucide-react";
+  import {
+    Eye,
+    Pencil,
+    Trash2,
+    ShoppingCart,
+    MessageCircle,
+    Loader2,
+    X,
+  } from "lucide-react";
   import { format } from "date-fns";
+  import toast from "react-hot-toast";
+  import { useNavigate } from "react-router-dom";
   import { useAppSettings } from "../context/AppSettingsContext";
+  import { useSeasons } from "../context/SeasonContext";
+  import { supabase } from "../lib/supabase";
+  import { createOrder } from "../hooks/useOrders";
   import { businessFromSettings } from "../lib/businessDetails";
   import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
   import {
     WhatsAppShareDialog,
     type WhatsAppShareRequest,
   } from "../components/WhatsAppShareDialog";
-  
+
   // interface QuotationsListProps {
   //   onOpenCart: () => void;
   // }
-  
+
+  /**
+   * The name to show for a quoted line.
+   *
+   * A pack line has no product row behind it, so its name comes from the
+   * pack. Either may be missing if the catalogue has moved on since the quote
+   * was saved -- the line still has its quantity and price, which is enough to
+   * keep the quotation readable.
+   */
+  function lineName(item: any): string {
+    return (
+      item.product?.name ??
+      item.pack?.name ??
+      (item.combo_pack_id ? "Family pack" : "Product")
+    );
+  }
+
   export function QuotationsList() {
     const { quotations, loading, fetchQuotations, deleteQuotation } = useQuotations();
     const { loadQuotation, openCart } = useCartStore();
     const { settings } = useAppSettings();
+    const { activeSeason } = useSeasons();
+    const navigate = useNavigate();
 
     const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
+    // The quotation open in the read-only view, and the one currently being
+    // turned into an order.
+    const [viewing, setViewing] = useState<any | null>(null);
+    const [converting, setConverting] = useState<string | null>(null);
 
     /** Sends the quotation on WhatsApp; see WhatsAppShareDialog. */
     const handleShare = (quote: any) => {
@@ -36,9 +71,10 @@ import { useEffect, useState } from "react";
           `Hello ${quote.customer_name || ""}, here is your quotation ${number} ` +
           `from ${business.name}. Total Rs. ${Number(quote.total_amount || 0).toFixed(2)}.`,
         makePdf: async () => {
+          // No product code: the customer reads this, and our codes mean
+          // nothing to them.
           const lines = (quote.items || []).map((item: any) => ({
-            code: item.product?.product_code ?? item.pack?.pack_code ?? null,
-            name: item.product?.name ?? item.pack?.name ?? "Item",
+            name: lineName(item),
             quantity: Number(item.quantity || 0),
             price: Number(item.price || 0),
             total: Number(item.total_price || 0),
@@ -68,16 +104,90 @@ import { useEffect, useState } from "react";
     useEffect(() => {
       fetchQuotations();
     }, [fetchQuotations]);
-  
+
+    /** Opens the quotation in the cart, where its lines can be changed. */
     const handleEdit = (quotation: any) => {
       loadQuotation(quotation);
       openCart();
     };
-  
+
+    /**
+     * Turns the quotation into an order.
+     *
+     * The quotation is deleted once the order exists, the same as when one is
+     * converted from inside the cart: the quote has become the order, and
+     * leaving both would have the customer counted twice in every report.
+     *
+     * The prices are the quoted ones, not today's -- that is the whole point
+     * of having quoted them.
+     */
+    const handleConvert = async (quote: any) => {
+      const number = quote.short_id || String(quote.id).slice(0, 8);
+      const confirmed = window.confirm(
+        `Convert quotation ${number} into an order?\n\n` +
+          `${quote.customer_name || "Customer"} · ${(quote.items || []).length} products · ` +
+          `Rs. ${Number(quote.total_amount || 0).toFixed(2)}\n\n` +
+          `The order is created at the quoted prices and this quotation is removed.`
+      );
+      if (!confirmed) return;
+
+      setConverting(quote.id);
+      try {
+        const order = await createOrder({
+          total_amount: Number(quote.total_amount || 0),
+          // The same as an order placed at the counter: nothing is paid yet.
+          payment_method: "offline",
+          season_id: quote.season_id ?? activeSeason?.id ?? null,
+          items: (quote.items || []).map((item: any) => ({
+            product_id: item.product_id ?? null,
+            combo_pack_id: item.combo_pack_id ?? null,
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            total_price: Number(item.total_price || 0),
+          })),
+          delivery_details: {
+            customerName: quote.customer_name || "",
+            email: quote.email || "",
+            phone: quote.phone || "",
+            alternatePhone: "",
+            referralPhone: "",
+            address: quote.address || "",
+            city: quote.city || "",
+            district: "",
+            state: quote.state || "",
+            pincode: quote.pincode || "",
+            country: "India",
+          },
+        });
+
+        // deleteQuotation asks for confirmation of its own, which would be a
+        // second prompt for something already agreed to above.
+        const { error } = await supabase.from("quotations").delete().eq("id", quote.id);
+        if (error) {
+          // The order is placed; a quotation left behind is untidy, not lost
+          // work, so it is reported rather than rolled back.
+          console.error("Quotation could not be removed after converting", error);
+          toast.error(`Order ${order.short_id} created, but quotation ${number} is still listed`);
+        } else {
+          toast.success(`Order ${order.short_id} created from quotation ${number}`);
+        }
+
+        fetchQuotations();
+        navigate("/orders");
+      } catch (err) {
+        console.error("Converting the quotation failed", err);
+        toast.error(
+          err instanceof Error ? `Could not convert: ${err.message}` : "Could not convert the quotation"
+        );
+      } finally {
+        setConverting(null);
+      }
+    };
+
     if (loading) {
         return <div className="p-8 text-center">Loading quotations...</div>;
     }
-  
+
     if (quotations.length === 0) {
       return (
         <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-100">
@@ -91,13 +201,16 @@ import { useEffect, useState } from "react";
         </div>
       );
     }
-  
+
     return (
       <>
       <WhatsAppShareDialog
         request={shareRequest}
         onClose={() => setShareRequest(null)}
       />
+      {viewing && (
+        <QuotationView quote={viewing} onClose={() => setViewing(null)} />
+      )}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -132,11 +245,30 @@ import { useEffect, useState } from "react";
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => handleEdit(quote)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                        title="View / Edit / Convert to Order"
+                        onClick={() => setViewing(quote)}
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                        title="View the quoted items"
                       >
                         <Eye className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleEdit(quote)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                        title="Edit this quotation in the cart"
+                      >
+                        <Pencil className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleConvert(quote)}
+                        disabled={converting === quote.id}
+                        className="p-2 text-primary-orange hover:bg-orange-50 rounded-full transition-colors disabled:opacity-40"
+                        title="Convert this quotation into an order"
+                      >
+                        {converting === quote.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <ShoppingCart className="w-5 h-5" />
+                        )}
                       </button>
                       <button
                         onClick={() => handleShare(quote)}
@@ -163,4 +295,84 @@ import { useEffect, useState } from "react";
       </>
     );
   }
-  
+
+  /** The quoted lines, read only. Changing them is what Edit is for. */
+  function QuotationView({ quote, onClose }: { quote: any; onClose: () => void }) {
+    const items: any[] = quote.items || [];
+    const totalQuantity = items.reduce(
+      (sum, item) => sum + Number(item.quantity || 0),
+      0
+    );
+
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+          <div className="flex items-start justify-between gap-4 p-5 border-b border-gray-100">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Quotation {quote.short_id}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {quote.customer_name || "Customer"}
+                {quote.phone ? ` · ${quote.phone}` : ""} ·{" "}
+                {format(new Date(quote.created_at), "d MMM yyyy, h:mm a")}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="overflow-y-auto">
+            {items.length === 0 ? (
+              <p className="p-6 text-center text-gray-500">
+                This quotation has no items.
+              </p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2 text-left font-medium w-10">#</th>
+                    <th className="px-4 py-2 text-left font-medium">Product</th>
+                    <th className="px-4 py-2 text-center font-medium">Qty</th>
+                    <th className="px-4 py-2 text-right font-medium">Price</th>
+                    <th className="px-4 py-2 text-right font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {items.map((item, index) => (
+                    <tr key={item.id ?? index}>
+                      <td className="px-4 py-2 text-gray-400">{index + 1}</td>
+                      <td className="px-4 py-2 text-gray-900">{lineName(item)}</td>
+                      <td className="px-4 py-2 text-center">{item.quantity}</td>
+                      <td className="px-4 py-2 text-right">
+                        ₹{Number(item.price || 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2 text-right font-medium">
+                        ₹{Number(item.total_price || 0).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 font-medium text-gray-700">
+                  <tr>
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2">{items.length} products</td>
+                    <td className="px-4 py-2 text-center">{totalQuantity}</td>
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2 text-right">
+                      ₹{Number(quote.total_amount || 0).toLocaleString()}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }

@@ -10,6 +10,7 @@ import {
   Download,
   Upload,
   Printer,
+  Share2,
   ChevronUp,
   ChevronDown,
   PencilLine,
@@ -285,6 +286,9 @@ export function StockManagement() {
   // The pamphlet reads the packs fresh and then draws them, so a second click
   // part-way through would build the same file twice.
   const [buildingPamphlet, setBuildingPamphlet] = useState(false);
+  // Sharing builds the PDF and then waits on a share sheet or an upload, so
+  // the menu item has to stop asking for a second copy meanwhile.
+  const [sharingPriceList, setSharingPriceList] = useState(false);
   const [addForm, setAddForm] = useState<Partial<Product>>({});
   // Order is auto-filled from the chosen category until it is typed over —
   // after that, switching category must not overwrite a deliberate position.
@@ -1321,6 +1325,13 @@ Offer prices are not changed.`,
   // distinguishable from the current one.
   const seasonSlug = (selectedSeason?.name || "current").replace(/\s+/g, "-");
 
+  /**
+   * How long a printed price list is allowed to run before the type gives
+   * ground. Four pages is what is handed over a counter and sent on WhatsApp;
+   * past that it stops being a leaflet.
+   */
+  const PRICE_LIST_TARGET_PAGES = 4;
+
   const handleExportPriceList = (format: "excel" | "csv") => {
     const rows = getPriceListExportRows();
 
@@ -1740,6 +1751,10 @@ Offer prices are not changed.`,
           groups,
           seasonName: seasonSlug,
           discountPercent: discountUsable ? seasonDiscount : null,
+          // Four pages is what goes out over WhatsApp and what the counter
+          // prints. Only the type tightens to make it, and only when the
+          // list would otherwise run over.
+          fitToPages: PRICE_LIST_TARGET_PAGES,
         },
         viewer,
       );
@@ -1748,6 +1763,94 @@ Offer prices are not changed.`,
       toast.error(
         err instanceof Error ? err.message : "Could not build the price list",
       );
+    }
+  };
+
+  /**
+   * Sends the price list to someone, as the file rather than as a link into
+   * this browser.
+   *
+   * "Export Price list" opens the PDF in the browser's own viewer, and that
+   * viewer's address is a `blob:` URL — a handle to a blob held in memory by
+   * this tab. Sharing the page from there passes that handle on, and it means
+   * nothing anywhere else: on the recipient's phone it is a dead link, and it
+   * dies in the sender's browser too as soon as the tab is closed. So the
+   * sharing happens here, from the file itself:
+   *
+   *   - where the device has a share sheet that takes files (every phone),
+   *     the PDF is attached to it and WhatsApp receives the document;
+   *   - otherwise it is uploaded and a signed https link is copied, which is
+   *     the same path an invoice takes.
+   */
+  const handleSharePriceList = async () => {
+    if (sharingPriceList) return;
+    setSharingPriceList(true);
+    const progress = toast.loading("Preparing the price list…");
+    try {
+      const groups = priceListGroups();
+      if (!groups.length) {
+        toast.error("There are no active products to print", { id: progress });
+        return;
+      }
+
+      const { buildPriceListPdf } = await import("../lib/priceListPdf");
+      const doc = await buildPriceListPdf({
+        groups,
+        seasonName: seasonSlug,
+        discountPercent: discountUsable ? seasonDiscount : null,
+        fitToPages: PRICE_LIST_TARGET_PAGES,
+      });
+
+      const blob = doc.output("blob") as Blob;
+      const fileName = `soundwave_price_list_${seasonSlug}.pdf`;
+      const message = `Soundwave Crackers price list — ${selectedSeason?.name ?? seasonSlug}`;
+
+      const { canShareFiles, shareFile, uploadForSharing } = await import(
+        "../lib/whatsappShare"
+      );
+
+      if (canShareFiles()) {
+        const file = new File([blob], fileName, { type: "application/pdf" });
+        try {
+          const outcome = await shareFile(file, message);
+          if (outcome === "cancelled") {
+            toast.dismiss(progress);
+            return;
+          }
+          toast.success("Price list shared", { id: progress });
+          return;
+        } catch {
+          // The share sheet refused. Usually the click's activation has run
+          // out — building the list takes a moment, and a browser will not
+          // open a share sheet long after the tap that asked for it. Rather
+          // than stop at an error, fall through to the link below, which
+          // needs no gesture at all.
+        }
+      }
+
+      // No share sheet, or it would not open: upload the file and hand over a
+      // link that works anywhere, for as long as a shared invoice link does.
+      const link = await uploadForSharing(blob, fileName, "price-lists");
+      try {
+        await navigator.clipboard.writeText(link);
+        toast.success("Link copied — paste it into WhatsApp or an email", {
+          id: progress,
+        });
+      } catch {
+        // Clipboard refused (no permission, or an insecure origin). Opening
+        // the link at least puts it in the address bar to copy by hand.
+        window.open(link, "_blank", "noopener");
+        toast.success("Price list uploaded — copy the link from the new tab", {
+          id: progress,
+        });
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not share the price list",
+        { id: progress },
+      );
+    } finally {
+      setSharingPriceList(false);
     }
   };
 
@@ -1782,6 +1885,9 @@ Offer prices are not changed.`,
         discountPercent: settings.discountPercent,
         columns: settings.columns,
         strikePrice: settings.strikePrice,
+        // The Tamil column pushes this sheet longest, so it is the one most
+        // often set a size down to make the target.
+        fitToPages: PRICE_LIST_TARGET_PAGES,
       });
       doc.save(`soundwave_price_list_${seasonSlug}_custom.pdf`);
       setShowCustomPriceList(false);
@@ -2982,6 +3088,17 @@ Offer prices are not changed.`,
               label="Export Price list"
               hint="PDF — opens in the viewer, print or save from there"
               onClick={handlePriceListDownload}
+            />
+            {/* Sharing has to start from the file, not from the viewer tab:
+                that tab's address is a blob: handle to this browser's memory
+                and is useless to whoever receives it. */}
+            <MenuItem
+              icon={<Share2 className="w-4 h-4" />}
+              label="Share Price list"
+              hint="Sends the PDF itself, or copies a link that works anywhere"
+              onClick={handleSharePriceList}
+              disabled={sharingPriceList}
+              title={sharingPriceList ? "Preparing the price list…" : undefined}
             />
             {/* A one-off sheet, so only the superadmin who sets the season's
                 prices can decide how a list going out differs from it. */}

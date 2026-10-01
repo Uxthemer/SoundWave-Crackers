@@ -11,6 +11,7 @@ import {
   Copy,
   Check,
   Download,
+  MessageCircle,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useState, useRef } from "react";
@@ -33,6 +34,10 @@ import {
   documentFileName,
   type BusinessDocument,
 } from "../lib/documentPdf";
+import {
+  WhatsAppShareDialog,
+  type WhatsAppShareRequest,
+} from "./WhatsAppShareDialog";
 
 /** The single place the UPI id is written down. */
 const UPI_ID = "selvakumar541989@oksbi";
@@ -104,6 +109,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
     null,
   );
   const [isDownloadingSummary, setIsDownloadingSummary] = useState(false);
+  // The quotation being sent on WhatsApp from the cart. It is always a quote
+  // that has just been written to the database -- see handleShareQuotation.
+  const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(
+    null,
+  );
 
   // ensure when cart empties we clear delivery (optional)
   useEffect(() => {
@@ -176,15 +186,23 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   }, [showPhoneVerification, verifyingPhone]);
 
-  const handleSaveQuotation = async () => {
+  /**
+   * Writes the quotation and gives back its id and number, or null if it
+   * could not go out (empty cart, no customer). Both the Save and the Share
+   * button come through here: a shared quotation is a numbered document, so
+   * there has to be a saved row behind that number.
+   */
+  const persistQuotation = async (): Promise<
+    { id: string; short_id: string } | null
+  > => {
     if ((items || []).length === 0) {
       toast.error("Cart is empty");
-      return;
+      return null;
     }
 
     if (!delivery.customerName || !delivery.phone) {
       toast.error("Please enter customer details (Name & Phone)");
-      return;
+      return null;
     }
 
     setIsQuotationSaving(true);
@@ -210,21 +228,97 @@ export function Cart({ isOpen, onClose }: CartProps) {
         total_price: item.totalPrice,
       }));
 
-      await saveQuotation(
+      return await saveQuotation(
         quotationData,
         quotationItems,
         editingQuotationId || undefined,
       );
-
-      clearCart();
-      // clearQuotationMode is handled by clearCart if implemented, but let's be safe or if clearCart logic changes
-      // In store I added editingQuotationId: null to clearCart, so it's fine.
-      onClose();
     } catch (error) {
       console.error(error);
+      return null;
     } finally {
       setIsQuotationSaving(false);
     }
+  };
+
+  const handleSaveQuotation = async () => {
+    const saved = await persistQuotation();
+    if (!saved) return;
+
+    clearCart();
+    // clearQuotationMode is handled by clearCart if implemented, but let's be safe or if clearCart logic changes
+    // In store I added editingQuotationId: null to clearCart, so it's fine.
+    onClose();
+  };
+
+  /** The quotation exactly as the cart stands, ready to be drawn. */
+  const quotationDocument = (number: string): BusinessDocument => ({
+    kind: "quotation",
+    number,
+    date: new Date(),
+    customer: {
+      name: delivery.customerName,
+      phone: delivery.phone,
+      email: delivery.email,
+      address: delivery.address,
+      city: delivery.city,
+      district: delivery.district,
+      state: delivery.state,
+      pincode: delivery.pincode,
+    },
+    // No product code: this sheet goes to the customer, and our codes mean
+    // nothing to them.
+    lines: items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.offer_price,
+      total: item.totalPrice,
+    })),
+    subtotal: totalAmount,
+    business: businessFromSettings(appSettings),
+  });
+
+  /**
+   * Saves the quotation and sends it to the customer on WhatsApp.
+   *
+   * The document is built here, before the dialog opens, because the cart is
+   * cleared the moment the dialog closes -- by then there is nothing left to
+   * draw from.
+   */
+  const handleShareQuotation = async () => {
+    const saved = await persistQuotation();
+    if (!saved) return;
+
+    const number = saved.short_id || saved.id.slice(0, 8);
+    const business = businessFromSettings(appSettings);
+    const document = quotationDocument(number);
+
+    setShareRequest({
+      kind: "quotation",
+      title: `Quotation ${number}`,
+      customerName: delivery.customerName,
+      phone: delivery.phone,
+      fileName: documentFileName("quotation", number),
+      message:
+        `Hello ${delivery.customerName || ""}, here is your quotation ${number} ` +
+        `from ${business.name}. Total Rs. ${Number(totalAmount || 0).toFixed(2)}.`,
+      makePdf: async () => {
+        const pdf = await buildDocumentPdf(document);
+        return pdf.output("blob");
+      },
+    });
+  };
+
+  /**
+   * Closing the share dialog finishes the job: the quote is saved, so the
+   * cart empties and closes just as it does after Save Quote. Leaving the
+   * same lines in the cart would let the next Share write a second quotation
+   * for the same order.
+   */
+  const handleShareDialogClose = () => {
+    setShareRequest(null);
+    clearCart();
+    onClose();
   };
 
   /**
@@ -728,6 +822,10 @@ export function Cart({ isOpen, onClose }: CartProps) {
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/50 z-60 flex justify-end"
     >
+      <WhatsAppShareDialog
+        request={shareRequest}
+        onClose={handleShareDialogClose}
+      />
       {isProcessing && (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/60">
           <Loader2 className="w-12 h-12 animate-spin text-primary-orange mb-4" />
@@ -1459,6 +1557,20 @@ export function Cart({ isOpen, onClose }: CartProps) {
                                 : editingQuotationId
                                   ? "Update Quote"
                                   : "Save Quote"}
+                            </button>
+                          )}
+                          {["admin", "superadmin"].includes(
+                            userRole?.name || "",
+                          ) && (
+                            <button
+                              type="button"
+                              onClick={handleShareQuotation}
+                              disabled={isQuotationSaving || isProcessing}
+                              title="Saves the quotation and sends it on WhatsApp"
+                              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors whitespace-nowrap"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                              Share Quote
                             </button>
                           )}
                         </div>

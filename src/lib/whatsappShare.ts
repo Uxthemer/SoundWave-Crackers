@@ -57,11 +57,15 @@ export function canShareFiles(): boolean {
  * The bucket is private (the file carries their address and phone), so the
  * link is signed and expires. `download` names the file when it is saved,
  * rather than leaving the phone to call it by its storage key.
+ *
+ * A price list carries nobody's details, but it goes through the same bucket
+ * and the same expiry: one upload path, one set of storage policies, and a
+ * sheet of last season's prices stops circulating on its own.
  */
 export async function uploadForSharing(
   blob: Blob,
   fileName: string,
-  folder: "invoices" | "quotations"
+  folder: "invoices" | "quotations" | "price-lists"
 ): Promise<string> {
   const id =
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -84,7 +88,48 @@ export async function uploadForSharing(
       `The PDF was uploaded but no link could be made: ${linkError?.message ?? "unknown error"}`
     );
   }
-  return data.signedUrl;
+  return (await shortLink(folder, id)) ?? data.signedUrl;
+}
+
+/** The one-letter folder in a short link. */
+const FOLDER_CODE: Record<"invoices" | "quotations" | "price-lists", string> = {
+  invoices: "i",
+  quotations: "q",
+  "price-lists": "p",
+};
+
+/**
+ * The short stand-in for a signed storage URL.
+ *
+ * A signed URL is a few hundred characters of JWT, and WhatsApp prints every
+ * one of them in the message -- it dwarfs the greeting and reads as spam.
+ * This is the same file behind about seventy characters: the `doc` edge
+ * function takes the folder letter and the upload's id, signs the file at
+ * that moment and redirects to it. The id is a random uuid and is all the
+ * link carries, so it gives nothing away that the signed URL did not.
+ *
+ * Returns null -- and the caller keeps the long link -- if the function is
+ * not deployed or cannot be reached. A customer with a working long link is
+ * better than a tidy one that 404s.
+ */
+async function shortLink(
+  folder: "invoices" | "quotations" | "price-lists",
+  id: string
+): Promise<string | null> {
+  const base = String(import.meta.env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
+  if (!base) return null;
+
+  const url = `${base}/functions/v1/doc/${FOLDER_CODE[folder]}/${id.replace(/-/g, "")}`;
+  try {
+    // `manual` stops the browser from following the redirect to the file
+    // itself: the point is only to learn that the function answered. An
+    // opaque redirect is exactly what a working link looks like from here.
+    const response = await fetch(url, { method: "HEAD", redirect: "manual" });
+    if (response.type === "opaqueredirect" || response.ok) return url;
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /** Attaches the actual PDF through the share sheet; the user picks the chat. */
