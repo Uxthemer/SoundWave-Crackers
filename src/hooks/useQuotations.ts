@@ -61,9 +61,23 @@ import { useState, useEffect, useCallback } from 'react';
 
         // A quotation saved before packs existed has no combo_pack_id column
         // to read, so an empty list here is normal rather than a problem.
+        //
+        // The product columns are named one by one on purpose. `select('*')`
+        // on products is refused for anon and authenticated -- the cost column
+        // apr is not granted to them
+        // (20260809020000_revoke_public_cost_price.sql) -- and a star select
+        // asks for it, so the whole lookup failed with "permission denied for
+        // column apr". The lines then had no product attached: the quotation
+        // opened with no items and the shared PDF printed every line as
+        // "Item". Never put apr in this list.
         const [productsRes, packsRes] = await Promise.all([
           productIds.length
-            ? supabase.from('products').select('*').in('id', productIds)
+            ? supabase
+                .from('products')
+                .select(
+                  'id, product_code, name, tamil_name, category_id, content, description, image_url, product_type, actual_price, offer_price, discount_percentage, stock, is_active'
+                )
+                .in('id', productIds)
             : Promise.resolve({ data: [], error: null }),
           packIds.length
             ? supabase
@@ -74,9 +88,18 @@ import { useState, useEffect, useCallback } from 'react';
         ]);
 
         // A missing product or pack must not lose the quotation it is on --
-        // the line still has its own name, price and quantity.
-        if (productsRes.error) console.error(productsRes.error);
-        if (packsRes.error) console.error(packsRes.error);
+        // the line still has its own price and quantity. A failed lookup is a
+        // different thing: every line on the page loses its name at once, and
+        // that used to show up only as blank quotations with no explanation
+        // anywhere but the console.
+        if (productsRes.error) {
+          console.error(productsRes.error);
+          toast.error(`Quotation products could not be read: ${productsRes.error.message}`);
+        }
+        if (packsRes.error) {
+          console.error(packsRes.error);
+          toast.error(`Quotation packs could not be read: ${packsRes.error.message}`);
+        }
 
         const productById = new Map(
           (productsRes.data ?? []).map((product: any) => [product.id, product])
@@ -121,30 +144,41 @@ import { useState, useEffect, useCallback } from 'react';
       }
     }, []);
   
+    /**
+     * Saves (or updates) a quotation and returns its id and number.
+     *
+     * The number comes back because sharing from the cart needs it: the
+     * caller has just built the document and has nowhere else to get
+     * "QT-004" from without reading the row again.
+     */
     const saveQuotation = async (
       quotationData: Omit<QuotationInsert, 'id' | 'created_at' | 'updated_at' | 'short_id' | 'user_id'>,
       items: Omit<QuotationItemInsert, 'id' | 'quotation_id' | 'created_at'>[],
       existingId?: string
-    ) => {
+    ): Promise<{ id: string; short_id: string }> => {
       setLoading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error('User not authenticated');
   
         let quotationId = existingId;
+        let quotationNumber = '';
   
         if (existingId) {
           // Update existing
-          const { error: updateError } = await supabase
+          const { data: updated, error: updateError } = await supabase
             .from('quotations')
             .update({
               ...quotationData,
               user_id: user.id,
               updated_at: new Date().toISOString()
             })
-            .eq('id', existingId);
+            .eq('id', existingId)
+            .select('short_id')
+            .single();
   
           if (updateError) throw updateError;
+          quotationNumber = updated?.short_id ?? '';
   
           // Delete old items to replace with new ones
           const { error: deleteItemsError } = await supabase
@@ -185,6 +219,7 @@ import { useState, useEffect, useCallback } from 'react';
   
           if (insertError) throw insertError;
           quotationId = newQuote.id;
+          quotationNumber = newQuote.short_id ?? shortId;
         }
   
         if (!quotationId) throw new Error('Failed to get quotation ID');
@@ -198,7 +233,7 @@ import { useState, useEffect, useCallback } from 'react';
   
         toast.success(existingId ? 'Quotation updated successfully' : 'Quotation saved successfully');
         fetchQuotations();
-        return quotationId;
+        return { id: quotationId, short_id: quotationNumber };
       } catch (error) {
         console.error('Error saving quotation:', error);
         toast.error('Failed to save quotation');

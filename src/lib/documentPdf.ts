@@ -15,7 +15,12 @@ import type { BusinessDetails } from "./businessDetails";
  */
 
 export interface DocumentLine {
-  code: string | null;
+  /**
+   * The product code, printed in a column of its own. Optional: a quotation
+   * goes to a customer who has no use for our internal codes, so it leaves
+   * this out and the column is not drawn at all.
+   */
+  code?: string | null;
   name: string;
   quantity: number;
   price: number;
@@ -75,44 +80,21 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   // a tax document, so it never claims to be one.
   const showGst = isInvoice && business.showGst && !!business.gstin;
 
-  // ---- business, top left --------------------------------------------------
+  // ---- header --------------------------------------------------------------
+  //
+  // The logo stands alone on the left; the shop's own details, the document
+  // number and the date all sit together against the right edge. Splitting
+  // the business between a left column and a right one -- which is what this
+  // was -- read as two different letterheads on one page.
   let leftY = margin;
   const logo = await loadImage("/assets/img/logo/logo_2.png");
   if (logo) {
-    const height = 48;
+    const height = 62;
     const width = (logo.width / logo.height) * height;
     pdf.addImage(logo.dataUrl, margin, leftY, width, height, undefined, "FAST");
     leftY += height + 8;
   }
 
-  pdf.setTextColor(30);
-  pdf.setFont("helvetica", "bold");
-  pdf.setFontSize(12);
-  pdf.text(business.name, margin, leftY + 10);
-  leftY += 16;
-
-  pdf.setFont("helvetica", "normal");
-  pdf.setFontSize(9);
-  pdf.setTextColor(80);
-  const businessLines = [
-    ...(business.address ? pdf.splitTextToSize(business.address, 240) : []),
-    ...(business.state ? [business.state] : []),
-    `Phone: ${business.phone}`,
-    `Email: ${business.email}`,
-  ] as string[];
-  businessLines.forEach((line) => {
-    pdf.text(line, margin, leftY + 9);
-    leftY += 12;
-  });
-  if (showGst) {
-    pdf.setFont("helvetica", "bold");
-    pdf.setTextColor(30);
-    pdf.text(`GSTIN: ${business.gstin}`, margin, leftY + 9);
-    leftY += 12;
-    pdf.setFont("helvetica", "normal");
-  }
-
-  // ---- document, top right -------------------------------------------------
   let rightY = margin;
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(20);
@@ -125,8 +107,35 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
     rightY + 18,
     { align: "right" }
   );
-  rightY += 34;
+  rightY += 32;
 
+  pdf.setTextColor(30);
+  pdf.setFontSize(12);
+  pdf.text(business.name, right, rightY, { align: "right" });
+  rightY += 15;
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(80);
+  const businessLines = [
+    ...(business.address ? pdf.splitTextToSize(business.address, 260) : []),
+    ...(business.state ? [business.state] : []),
+    `Phone: ${business.phone}`,
+    `Email: ${business.email}`,
+  ] as string[];
+  businessLines.forEach((line) => {
+    pdf.text(line, right, rightY, { align: "right" });
+    rightY += 12;
+  });
+  if (showGst) {
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(30);
+    pdf.text(`GSTIN: ${business.gstin}`, right, rightY, { align: "right" });
+    rightY += 12;
+    pdf.setFont("helvetica", "normal");
+  }
+
+  rightY += 4;
   pdf.setFontSize(9);
   pdf.setTextColor(60);
   const meta: [string, string][] = [
@@ -135,10 +144,13 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   ];
   if (doc.status) meta.push(["Status", doc.status]);
   meta.forEach(([label, value]) => {
-    pdf.setFont("helvetica", "normal");
-    pdf.text(`${label}:`, right - 170, rightY);
+    // The label is placed off the width of its own value so that the pair
+    // ends flush right whatever the number or date happens to be.
     pdf.setFont("helvetica", "bold");
+    const valueWidth = pdf.getTextWidth(value);
     pdf.text(value, right, rightY, { align: "right" });
+    pdf.setFont("helvetica", "normal");
+    pdf.text(`${label}:`, right - valueWidth - 6, rightY, { align: "right" });
     rightY += 13;
   });
 
@@ -186,30 +198,58 @@ export async function buildDocumentPdf(doc: BusinessDocument): Promise<jsPDF> {
   // ---- items ---------------------------------------------------------------
   const totalQuantity = doc.lines.reduce((sum, line) => sum + (line.quantity || 0), 0);
 
+  // The code column only earns its width when there is something to put in
+  // it; without it the product name gets those 62 points instead.
+  const withCode = doc.lines.some((line) => line.code);
+
   autoTable(pdf, {
     startY: y,
-    head: [["S.No", "Code", "Product", "Qty", "Price (Rs.)", "Total (Rs.)"]],
-    body: doc.lines.map((line, index) => [
-      String(index + 1),
-      line.code ?? "-",
-      line.name,
-      String(line.quantity),
-      amount(line.price),
-      amount(line.total),
-    ]),
-    foot: [["", "", `${doc.lines.length} products`, String(totalQuantity), "", ""]],
+    head: [
+      withCode
+        ? ["S.No", "Code", "Product", "Qty", "Price (Rs.)", "Total (Rs.)"]
+        : ["S.No", "Product", "Qty", "Price (Rs.)", "Total (Rs.)"],
+    ],
+    body: doc.lines.map((line, index) =>
+      [
+        String(index + 1),
+        ...(withCode ? [line.code ?? "-"] : []),
+        line.name,
+        String(line.quantity),
+        amount(line.price),
+        amount(line.total),
+      ]
+    ),
+    // The totals row carries its own alignment on the cell. A columnStyles
+    // entry outranks footStyles in autotable, so the product column's
+    // left-aligned body setting was pulling these two totals off centre.
+    foot: [
+      [
+        ...(withCode ? ["", ""] : [""]),
+        { content: `${doc.lines.length} products`, styles: { halign: "center" as const } },
+        { content: String(totalQuantity), styles: { halign: "center" as const } },
+        "",
+        "",
+      ],
+    ],
     margin: { left: margin, right: margin, bottom: 50 },
     theme: "grid",
     styles: { font: "helvetica", fontSize: 8.5, cellPadding: 4, lineColor: [215, 215, 215], lineWidth: 0.4 },
     headStyles: { fillColor: BRAND, textColor: 255, fontStyle: "bold", halign: "center" },
     footStyles: { fillColor: [248, 248, 248], textColor: 60, fontStyle: "bold" },
-    columnStyles: {
-      0: { cellWidth: 32, halign: "center" },
-      1: { cellWidth: 62 },
-      3: { cellWidth: 40, halign: "center" },
-      4: { cellWidth: 70, halign: "right" },
-      5: { cellWidth: 78, halign: "right" },
-    },
+    columnStyles: withCode
+      ? {
+          0: { cellWidth: 32, halign: "center" },
+          1: { cellWidth: 62 },
+          3: { cellWidth: 40, halign: "center" },
+          4: { cellWidth: 70, halign: "right" },
+          5: { cellWidth: 78, halign: "right" },
+        }
+      : {
+          0: { cellWidth: 32, halign: "center" },
+          2: { cellWidth: 40, halign: "center" },
+          3: { cellWidth: 70, halign: "right" },
+          4: { cellWidth: 78, halign: "right" },
+        },
   });
 
   // ---- totals --------------------------------------------------------------

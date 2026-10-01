@@ -75,6 +75,9 @@ export async function loadImage(
   }
 }
 
+/** A banner already fetched and measured, as `loadImage` returns it. */
+type LoadedBanner = Awaited<ReturnType<typeof loadImage>>;
+
 const BRAND = [139, 69, 19] as const; // the brown the printed list has always used
 const BAND = [253, 237, 226] as const; // category strip
 
@@ -231,6 +234,22 @@ const TAMIL_FONT_SCALE = 0.95;
 const DEFAULT_BANNER_MAX_RATIO = 0.4;
 
 /**
+ * The type sizes `fitToPages` will try, as multiples of `BODY_FONT_SIZE`,
+ * largest first.
+ *
+ * Fitting used to be done by taking the banner in, and it looked wrong: a
+ * capped banner keeps its proportions, so shortening it narrows it, and the
+ * sheet came out with a small centred header floating over a full-width
+ * table. The banner is artwork and belongs edge to edge.
+ *
+ * Type size is the better lever anyway. It is paid back on every page rather
+ * than on page one alone — worth several times what the banner was — and it
+ * leaves every column exactly where it was. The floor is 7pt, which is still
+ * comfortably readable in print; below that a price list stops being one.
+ */
+const FIT_TYPE_SCALES = [1, 0.96, 0.92, 0.88, 0.84, 0.82] as const;
+
+/**
  * The shape a banner has to be, or wider, to span the page.
  *
  * A banner is drawn at the full table width unless doing so would make it
@@ -315,14 +334,27 @@ export interface PriceListPdfOptions {
   /**
    * The tallest the banner may be drawn, in points.
    *
-   * Only worth setting for a banner whose artwork survives being brought in —
-   * a wide strip, or one with nothing along its top and bottom edges. Past
-   * this height the width comes in with it rather than the picture being
-   * cropped, so a tall banner given a short cap ends up a small block centred
-   * over a full-width table. Omitted, a banner may take
-   * `DEFAULT_BANNER_MAX_RATIO` of the page.
+   * Rarely worth setting, and never for page count — `fitToPages` handles
+   * that without touching the banner. Past this height the width comes in
+   * with it rather than the picture being cropped, so a capped banner is a
+   * small block centred over a full-width table, which is exactly what this
+   * sheet is not meant to look like. Omitted, a banner may take
+   * `DEFAULT_BANNER_MAX_RATIO` of the page, which leaves anything 1.7:1 or
+   * wider — the standard header included — spanning the table edge to edge.
    */
   bannerMaxHeight?: number;
+  /**
+   * Set the list a size tighter, if that is what it takes to land it inside
+   * this many pages.
+   *
+   * Only the body type and its padding give ground, through
+   * `FIT_TYPE_SCALES`, and only as far as the target actually requires. The
+   * banner stays edge to edge and every column keeps its width, so a fitted
+   * sheet is the same sheet set slightly tighter. A list too long for even
+   * the smallest size comes back at the fewest pages that size could reach,
+   * rather than at full size.
+   */
+  fitToPages?: number;
 }
 
 /**
@@ -359,34 +391,50 @@ function layOutColumns(
 }
 
 /**
- * Builds the document. Returns the jsPDF instance so the caller decides
- * between viewing it, saving it and attaching it.
+ * Draws the list once, at a given banner cap.
+ *
+ * Split out from `buildPriceListPdf` so a sheet with a page target can be
+ * laid out more than once — the banner it is handed is already loaded, so a
+ * second pass costs no network.
  */
-export async function buildPriceListPdf({
-  groups,
-  seasonName,
-  headerImageUrl = "/assets/img/banners/price-list-header.png",
-  subtitle,
-  discountPercent,
-  columns,
-  strikePrice = true,
-  bannerMaxHeight,
-}: PriceListPdfOptions): Promise<jsPDF> {
+async function renderPriceList(
+  options: PriceListPdfOptions,
+  banner: LoadedBanner,
+  bannerMaxHeight: number | undefined,
+  typeScale: number,
+): Promise<jsPDF> {
+  const {
+    groups,
+    seasonName,
+    subtitle,
+    discountPercent,
+    columns,
+    strikePrice = true,
+  } = options;
+
+  /**
+   * The body type and the padding around it, for this pass.
+   *
+   * Both scale together: shrinking the type while leaving the padding alone
+   * would leave the rows looking airy rather than tighter. The widths do not
+   * scale — the table still fills the page edge to edge, which is the whole
+   * point of fitting this way rather than by taking the banner in.
+   */
+  const bodyFontSize = BODY_FONT_SIZE * typeScale;
+  const cellPadding = CELL_PADDING * typeScale;
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = PAGE_MARGIN;
-
-  const banner = headerImageUrl ? await loadImage(headerImageUrl) : null;
 
   /**
    * The banner spans the same column as the table, edge to edge, and takes
    * whatever height its own proportions ask for — clamping the height while
    * holding the width is what squashed the 2:1 image flat.
    *
-   * The cap is a guard against an unusually tall banner eating page one, not
-   * a layout choice: only then does the width come in, and both sides scale
-   * together so the picture still is not distorted.
+   * Under a cap the width comes in with the height, both sides scaling
+   * together, so the picture is never distorted and never cropped: a capped
+   * banner is a smaller one, centred over the table.
    */
   const BANNER_MAX_HEIGHT =
     bannerMaxHeight && bannerMaxHeight > 0
@@ -517,7 +565,7 @@ export async function buildPriceListPdf({
   const tamilIndex = enabled.indexOf("tamilName");
   const tamilColumnIndex = tamilIndex < 0 ? -1 : 2 + tamilIndex;
   const tamilWidth =
-    tamilIndex < 0 ? 0 : layout.optional[tamilIndex] - CELL_PADDING * 2;
+    tamilIndex < 0 ? 0 : layout.optional[tamilIndex] - cellPadding * 2;
   const tamilImages = new Map<number, TamilImage>();
   if (tamilColumnIndex >= 0) await ensureTamilFont();
 
@@ -527,7 +575,7 @@ export async function buildPriceListPdf({
   const tamilHeading = hasTamil(tamilHeadLabel)
     ? renderTamil(tamilHeadLabel, {
         maxWidth: tamilWidth,
-        fontSize: BODY_FONT_SIZE * TAMIL_FONT_SCALE,
+        fontSize: bodyFontSize * TAMIL_FONT_SCALE,
         color: "#fff8dc",
         bold: true,
       })
@@ -561,13 +609,13 @@ export async function buildPriceListPdf({
       if (tamilIndex >= 0) {
         const image = renderTamil(product.tamil_name, {
           maxWidth: tamilWidth,
-          fontSize: BODY_FONT_SIZE * TAMIL_FONT_SCALE,
+          fontSize: bodyFontSize * TAMIL_FONT_SCALE,
         });
         if (image) {
           tamilImages.set(body.length, image);
           cells[tamilIndex] = {
             content: "",
-            styles: { minCellHeight: image.height + CELL_PADDING * 2 },
+            styles: { minCellHeight: image.height + cellPadding * 2 },
           };
         }
       }
@@ -615,8 +663,8 @@ export async function buildPriceListPdf({
     theme: "grid",
     styles: {
       font: "helvetica",
-      fontSize: BODY_FONT_SIZE,
-      cellPadding: CELL_PADDING,
+      fontSize: bodyFontSize,
+      cellPadding: cellPadding,
       lineColor: [200, 200, 200],
       lineWidth: 0.4,
       overflow: "linebreak",
@@ -649,13 +697,13 @@ export async function buildPriceListPdf({
         if (image) {
           const width = Math.min(
             image.width,
-            data.cell.width - CELL_PADDING * 2
+            data.cell.width - cellPadding * 2
           );
           const height = image.height * (width / image.width);
           const x =
             data.section === "head"
               ? data.cell.x + (data.cell.width - width) / 2
-              : data.cell.x + CELL_PADDING;
+              : data.cell.x + cellPadding;
           doc.addImage(
             image.dataUrl,
             "PNG",
@@ -725,11 +773,80 @@ export async function buildPriceListPdf({
 }
 
 /**
+ * Builds the document. Returns the jsPDF instance so the caller decides
+ * between viewing it, saving it and attaching it.
+ *
+ * With `fitToPages` set, the list is drawn at full size and, if that runs
+ * long, redrawn a size smaller until it fits. Only the type and its padding
+ * give ground: the banner stays edge to edge and the columns keep their
+ * widths, so a fitted sheet differs from an unfitted one only in being set a
+ * shade tighter. The banner is loaded once and reused across the attempts,
+ * and the Tamil names are cached by `renderTamil`, so a retry costs the table
+ * layout and nothing else.
+ */
+export async function buildPriceListPdf(
+  options: PriceListPdfOptions,
+): Promise<jsPDF> {
+  const {
+    headerImageUrl = "/assets/img/banners/price-list-header.png",
+    bannerMaxHeight,
+    fitToPages,
+  } = options;
+
+  const banner = headerImageUrl ? await loadImage(headerImageUrl) : null;
+  const full = await renderPriceList(options, banner, bannerMaxHeight, 1);
+
+  // No target, or already inside it: nothing to trade.
+  if (!fitToPages || fitToPages < 1) return full;
+  if (full.getNumberOfPages() <= fitToPages) return full;
+
+  /**
+   * Down through the sizes, stopping at the first that makes the target.
+   *
+   * Taken largest first rather than bisected: there are only a handful of
+   * steps, and the first one that fits is by definition the largest type that
+   * does. The rendered documents are not kept — only the one that is returned
+   * — so a few extra passes cost time, not memory.
+   */
+  let best = full;
+  let bestPages = full.getNumberOfPages();
+
+  for (const scale of FIT_TYPE_SCALES) {
+    if (scale === 1) continue; // already drawn above
+    const attempt = await renderPriceList(
+      options,
+      banner,
+      bannerMaxHeight,
+      scale,
+    );
+    const pages = attempt.getNumberOfPages();
+
+    // Keep whatever reads largest among the fewest pages, so a list that
+    // cannot reach the target still comes back at 5 pages rather than 6.
+    if (pages < bestPages) {
+      best = attempt;
+      bestPages = pages;
+    }
+    if (pages <= fitToPages) break;
+  }
+
+  return best;
+}
+
+/**
  * Builds the list and hands it to the browser's PDF viewer.
  *
  * `target` is a window opened synchronously in the click handler — building
  * the PDF is async, and a window opened after an await is treated as a popup
  * and blocked.
+ *
+ * This is for LOOKING at the list, not for sending it. The viewer's address
+ * is a `blob:` URL, which is a handle to a blob this tab is holding in
+ * memory: it cannot be opened by anyone else, on any other device, and it
+ * stops working here the moment the tab closes. Anything that sends the list
+ * to a person has to send the file — see the share path in Stock Management,
+ * which attaches the PDF to the device's share sheet or uploads it for a
+ * signed https link.
  */
 export async function openPriceListPdf(
   options: PriceListPdfOptions,
