@@ -20,6 +20,11 @@ import { Cart } from "../components/Cart";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 import { boolean } from "zod";
 import { crackerImage } from "../lib/productImage";
+import {
+  CatalogModeSwitch,
+  matchesCatalogMode,
+  type CatalogMode,
+} from "../components/CatalogModeSwitch";
 
 export function ExploreCrackers() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -33,6 +38,7 @@ export function ExploreCrackers() {
   const [displayProducts, setDisplayProducts] = useState<any[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>("all");
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
 
@@ -47,7 +53,7 @@ export function ExploreCrackers() {
   // Filter products when category, products, or search term changes
   useEffect(() => {
     if (products.length > 0) {
-      let filtered = products;
+      let filtered = products.filter((p) => matchesCatalogMode(p, catalogMode));
 
       // Apply category filter
       if (selectedCategory !== "all") {
@@ -97,7 +103,7 @@ export function ExploreCrackers() {
         return newQuantities;
       });
     }
-  }, [selectedCategory, products, searchTerm]);
+  }, [selectedCategory, products, searchTerm, catalogMode]);
 
   // set initial quntities from cart items if exists
   useEffect(() => {
@@ -174,8 +180,6 @@ export function ExploreCrackers() {
     setIsVideoModalOpen(true);
   };
 
-  const packProducts = displayProducts.filter((product) => product.combo_pack_id);
-  const otherProducts = displayProducts.filter((product) => !product.combo_pack_id);
   const gridClass =
     viewMode === "grid"
       ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-6"
@@ -374,7 +378,10 @@ export function ExploreCrackers() {
 
         <div className="container mx-auto px-3 md:px-6 py-8 mt-5">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 space-y-4 md:space-y-0">
-            <h1 className="font-heading text-4xl">Explore Crackers</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <h1 className="font-heading text-4xl">Explore Crackers</h1>
+              <CatalogModeSwitch mode={catalogMode} onChange={setCatalogMode} />
+            </div>
             <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
               <div className="relative flex-1 md:flex-none">
                 <input
@@ -430,10 +437,15 @@ export function ExploreCrackers() {
 
           {displayProducts.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-text/60 mb-4">No products found.</p>
+              <p className="text-text/60 mb-4">
+                {catalogMode === "packs"
+                  ? "No family packs found."
+                  : "No products found."}
+              </p>
               <button
                 onClick={() => {
                   setSearchTerm("");
+                  setCatalogMode("all");
                   handleCategoryChange("all");
                 }}
                 className="btn-primary"
@@ -442,33 +454,12 @@ export function ExploreCrackers() {
               </button>
             </div>
           ) : (
-            <>
-              {/* Family packs lead, under their own heading: they are the
-                  recommendation, and a season without packs shows none. */}
-              {packProducts.length > 0 && (
-                <section className="mb-10">
-                  <div className="flex items-center gap-3 mb-4">
-                    <h2 className="font-heading text-2xl md:text-3xl">Family Packs</h2>
-                    <span className="text-sm text-text/60">
-                      Everything you need, at one rate
-                    </span>
-                  </div>
-                  <div className={gridClass}>
-                    {packProducts.map((product) => renderCard(product))}
-                  </div>
-                </section>
-              )}
-              {otherProducts.length > 0 && (
-                <>
-                  {packProducts.length > 0 && (
-                    <h2 className="font-heading text-2xl md:text-3xl mb-4">All Crackers</h2>
-                  )}
-                  <div className={gridClass}>
-                    {otherProducts.map((product) => renderCard(product))}
-                  </div>
-                </>
-              )}
-            </>
+            // One grid in catalogue order. Family packs used to lead in a
+            // section of their own; the All Products / Family Pack switch
+            // beside the title is now how they are picked out.
+            <div className={gridClass}>
+              {displayProducts.map((product) => renderCard(product))}
+            </div>
           )}
         </div>
       </div>

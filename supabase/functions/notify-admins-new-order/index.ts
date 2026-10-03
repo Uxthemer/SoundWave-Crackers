@@ -20,9 +20,17 @@ function getFirebaseAdmin() {
   return firebaseApp;
 }
 
+/**
+ * Content-Type is part of the CORS set on purpose. supabase-js decides how to
+ * read a function's reply from that header alone: without it the body comes
+ * back as a plain string, so the test buttons got `"{\"successCount\":0,…}"`
+ * instead of an object, found no counts, and reported "The server did not
+ * send anything" -- hiding the FCM error codes that say why a device is silent.
+ */
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Content-Type': 'application/json',
 };
 
 async function sendWhatsApp(to: string, body: string) {
@@ -68,7 +76,7 @@ serve(async (req) => {
   console.log(`Debug: FIREBASE_SERVICE_ACCOUNT is ${envServiceAccount ? 'Set (Length: ' + envServiceAccount.length + ')' : 'MISSING'}`);
 
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: { ...corsHeaders, 'Content-Type': 'text/plain' } });
   }
 
   try {

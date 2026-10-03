@@ -18,6 +18,11 @@ import { useCategories } from "../hooks/useCategories";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 import { NumberInput } from "../components/NumberInput";
 import { crackerImage } from "../lib/productImage";
+import {
+  CatalogModeSwitch,
+  matchesCatalogMode,
+  type CatalogMode,
+} from "../components/CatalogModeSwitch";
 
 import { useAuth } from "../context/AuthContext"; // Import your auth context
 
@@ -32,6 +37,7 @@ export function QuickPurchase() {
     {}
   );
   const [searchTerm, setSearchTerm] = useState("");
+  const [catalogMode, setCatalogMode] = useState<CatalogMode>("all");
   const [expandedCategories, setExpandedCategories] = useState<
     Record<string, boolean>
   >({});
@@ -66,10 +72,11 @@ export function QuickPurchase() {
       // Group products by category
       const filtered = products.filter(
         (product) =>
-          product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          product.categories?.name
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())
+          matchesCatalogMode(product, catalogMode) &&
+          (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            product.categories?.name
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()))
       );
 
       setFilteredProductCount(filtered.length);
@@ -108,7 +115,7 @@ export function QuickPurchase() {
       setQuantities(newQuantities);
     }
     // eslint-disable-next-line
-  }, [products, categories, searchTerm]);
+  }, [products, categories, searchTerm, catalogMode]);
 
   // set initial quantities for products in the cart
   useEffect(() => {
@@ -128,7 +135,10 @@ export function QuickPurchase() {
       .find((p) => p.id === productId);
 
     if (product) {
-      const currentQty = quantities[productId] || 0;
+      // Measured against the cart itself rather than the local mirror, which
+      // can be a render behind the store while someone is typing.
+      const currentQty =
+        items.find((item) => item.id === productId)?.quantity ?? 0;
       const diff = newQuantity - currentQty;
       if (diff !== 0) {
         addToCart(product, diff);
@@ -162,6 +172,24 @@ export function QuickPurchase() {
     }
   };
 
+  /**
+   * The discount for a category's header. Every product in a season usually
+   * carries the same headline discount, so repeating "90% OFF" on each row
+   * was noise; it is said once per section instead. If the products in a
+   * section differ, the header says "Up to" the largest.
+   */
+  const categoryDiscountLabel = (categoryProducts: any[]) => {
+    const discounts = categoryProducts
+      .map((p) => Number(p.discount) || 0)
+      .filter((d) => d > 0);
+    if (discounts.length === 0) return null;
+    const max = Math.max(...discounts);
+    const allSame =
+      discounts.length === categoryProducts.length &&
+      discounts.every((d) => d === max);
+    return `${allSame ? "" : "Up to "}${max}% OFF`;
+  };
+
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) => ({
       ...prev,
@@ -183,10 +211,11 @@ export function QuickPurchase() {
         <div className="container mx-auto px-4">
           <div className="sticky top-[25px] z-40 bg-background/95 backdrop-blur-sm py-2 border-b border-card-border/10 shadow-sm">
             <div className="max-w-6xl mx-auto">
-              <div className="flex flex-col md:flex-row gap-4 items-center mb-4">
+              <div className="flex flex-col md:flex-row gap-2 md:gap-4 items-center mb-4">
                 <h1 className="font-heading text-3xl md:text-4xl">
                   Quick Purchase
                 </h1>
+                <CatalogModeSwitch mode={catalogMode} onChange={setCatalogMode} />
               </div>
               <div className="flex flex-wrap items-center gap-2 bg-card/50 p-2 rounded-xl">
                 <div className="flex-1 min-w-[100px] text-center">
@@ -238,6 +267,28 @@ export function QuickPurchase() {
           </div>
 
           <div className="mt-4 max-w-6xl mx-auto">
+            {/* Only once a filter is on: with neither, the catalogue is not
+                empty, and the count is still 0 for the first frame after
+                loading. */}
+            {filteredProductCount === 0 &&
+              (catalogMode === "packs" || searchTerm) && (
+              <div className="text-center py-12">
+                <p className="text-text/60 mb-4">
+                  {catalogMode === "packs"
+                    ? "No family packs found."
+                    : "No products found."}
+                </p>
+                <button
+                  onClick={() => {
+                    setSearchTerm("");
+                    setCatalogMode("all");
+                  }}
+                  className="btn-primary"
+                >
+                  View All Products
+                </button>
+              </div>
+            )}
             {Object.entries(groupedProducts).map(
               ([category, categoryProducts]) => (
                 <div key={category} className="mb-2">
@@ -245,11 +296,16 @@ export function QuickPurchase() {
                     onClick={() => toggleCategory(category)}
                     className="w-full flex items-center justify-between font-montserrat font-bold text-xl mb-0 pl-4 border-l-4 border-primary-orange bg-primary-orange/10 hover:bg-primary-orange/50 p-2 rounded-t-lg transition-colors"
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2 text-left">
                       <span>{category}</span>
                       <span className="text-sm text-text/60">
                         ({categoryProducts.length} items)
                       </span>
+                      {categoryDiscountLabel(categoryProducts) && (
+                        <span className="bg-primary-orange text-white px-2 py-0.5 rounded-full text-xs font-bold whitespace-nowrap">
+                          {categoryDiscountLabel(categoryProducts)}
+                        </span>
+                      )}
                     </div>
                     {expandedCategories[category] ? (
                       <ChevronUp className="w-5 h-5 text-primary-orange" />
@@ -327,11 +383,6 @@ export function QuickPurchase() {
                                   <span className="text-xs text-text/60">
                                     {product.content}
                                   </span>
-                                  {product.discount > 0 && (
-                                    <span className="bg-primary-orange/10 text-primary-orange px-2 py-0.5 rounded-full text-xs">
-                                      {product.discount}% OFF
-                                    </span>
-                                  )}
                                   {/* Show stock only for admin/superadmin */}
                                   {(userRole?.name === "admin" ||
                                     userRole?.name === "superadmin") && (
@@ -370,40 +421,71 @@ export function QuickPurchase() {
                                   </span>
                                 </div>
 
-                                <div className="flex">
-                                  <button
-                                    onClick={() => handleDecrement(product.id)}
-                                    className="p-2 rounded-l-lg bg-red-500/80 text-white hover:bg-red-500/60 transition-colors"
-                                    disabled={!quantities[product.id]}
-                                    id={`decrement-${product.id}`}
-                                  >
-                                    <Minus className="w-4 h-4" />
-                                  </button>
-                                  <NumberInput
-                                    disabled={!quantities[product.id]}
-                                    min="0"
-                                    max={product.stock}
-                                    value={quantities[product.id] || 0}
-                                    onValueChange={(n) =>
-                                      handleQuantityChange(
-                                        product.id,
-                                        String(n)
-                                      )
-                                    }
-                                    className="w-16 px-1 py-1 text-center border-x border-card-border/10 bg-card"
-                                    id={`input-quantity-${product.id}`}
-                                  />
-                                  <button
-                                    onClick={() => handleIncrement(product.id)}
-                                    className="p-2 rounded-r-lg bg-green-500/80 text-white hover:bg-green-500/60 transition-colors"
-                                    disabled={
-                                      product.stock !== undefined &&
-                                      product.stock <= 0
-                                    }
-                                    id={`increment-${product.id}`}
-                                  >
-                                    <Plus className="w-4 h-4" />
-                                  </button>
+                                {/* Add first, then the stepper. The box is
+                                    the same width either way so the row does
+                                    not jump when it switches. Both go through
+                                    the same cart calls as before: Add is one
+                                    increment, and typing 0 or pressing minus
+                                    at 1 takes the item out and brings Add
+                                    back. */}
+                                <div className="w-[9.5rem] shrink-0">
+                                  {(quantities[product.id] || 0) > 0 ? (
+                                    <div className="flex w-full">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDecrement(product.id)}
+                                        className="p-2 rounded-l-lg bg-red-500/80 text-white hover:bg-red-500/60 transition-colors"
+                                        aria-label={`Remove one ${product.name}`}
+                                        id={`decrement-${product.id}`}
+                                      >
+                                        <Minus className="w-4 h-4" />
+                                      </button>
+                                      <NumberInput
+                                        min="0"
+                                        step="1"
+                                        inputMode="numeric"
+                                        max={product.stock}
+                                        value={quantities[product.id] || 0}
+                                        onValueChange={(n) =>
+                                          handleQuantityChange(
+                                            product.id,
+                                            String(n)
+                                          )
+                                        }
+                                        aria-label={`Quantity of ${product.name}`}
+                                        className="flex-1 min-w-0 px-1 py-1 text-center border-x border-card-border/10 bg-card no-spinner"
+                                        id={`input-quantity-${product.id}`}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleIncrement(product.id)}
+                                        className="p-2 rounded-r-lg bg-green-500/80 text-white hover:bg-green-500/60 transition-colors disabled:opacity-50"
+                                        disabled={
+                                          product.stock !== undefined &&
+                                          product.stock <= 0
+                                        }
+                                        aria-label={`Add one more ${product.name}`}
+                                        id={`increment-${product.id}`}
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleIncrement(product.id)}
+                                      disabled={
+                                        product.stock !== undefined &&
+                                        product.stock <= 0
+                                      }
+                                      className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border-2 border-primary-orange text-primary-orange font-montserrat font-bold text-sm hover:bg-primary-orange hover:text-white transition-colors disabled:opacity-50"
+                                      aria-label={`Add ${product.name} to cart`}
+                                      id={`add-${product.id}`}
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      Add
+                                    </button>
+                                  )}
                                 </div>
                                 <div className="text-right min-w-[90px]">
                                   <p className="text-xs text-text/60">Total</p>

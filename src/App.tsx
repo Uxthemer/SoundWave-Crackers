@@ -235,9 +235,11 @@ function ScrollToTop() {
 }
 
 import { usePageTracking } from "./hooks/usePageTracking";
+import { useForegroundPush } from "./hooks/useForegroundPush";
 
 export function AppContent() {
   usePageTracking();
+  useForegroundPush();
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalQuantity, items, isCartOpen, openCart, closeCart } = useCartStore();
