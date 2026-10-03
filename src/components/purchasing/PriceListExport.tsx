@@ -3,6 +3,7 @@ import { Loader2, Download, Printer, FileSpreadsheet } from "lucide-react";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
 import { loadPriceListForExport, type ExportGroup } from "../../hooks/usePurchasing";
+import { addPrintToolbar } from "../../lib/printWindow";
 
 /**
  * Preview and download of the published price list.
@@ -107,6 +108,7 @@ export function PriceListExport({
       </table>
       </body></html>`);
     w.document.close();
+    addPrintToolbar(w);
     w.print();
   };
 

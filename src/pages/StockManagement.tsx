@@ -52,6 +52,7 @@ import {
 } from "../components/CustomPriceListModal";
 import toast from "react-hot-toast";
 import { NumberInput } from "../components/NumberInput";
+import { addPrintToolbar } from "../lib/printWindow";
 
 interface Product {
   id: string;
@@ -1502,6 +1503,7 @@ Offer prices are not changed.`,
 
     printWindow.document.write(content);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
   };
 
   const handlePriceListDownload1 = async () => {
@@ -1686,6 +1688,7 @@ Offer prices are not changed.`,
 
     printWindow.document.write(content);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
   };
 
   /**
