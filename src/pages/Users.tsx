@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import * as XLSX from 'xlsx';
+import { addPrintToolbar } from '../lib/printWindow';
 
 interface UserProfile {
   id: string;
@@ -130,6 +131,7 @@ export function Users() {
 
     printWindow.document.write(content);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
     printWindow.print();
   };
 

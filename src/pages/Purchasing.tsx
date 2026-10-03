@@ -24,6 +24,7 @@ import { ComparisonTab } from "../components/purchasing/ComparisonTab";
 import { CaseRecommendations } from "../components/purchasing/CaseRecommendations";
 import { VendorSwitcher } from "../components/purchasing/VendorSwitcher";
 import { PriceListExport } from "../components/purchasing/PriceListExport";
+import { addPrintToolbar } from "../lib/printWindow";
 
 const money = (n: number | null | undefined) =>
   n === null || n === undefined ? "—" : `₹${Number(n).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -1289,6 +1290,7 @@ function OrdersTab({ seasonId }: { seasonId: string | null }) {
       <p style="font-size:12px;color:#666">Landed total includes discount, GST, packing and other charges per agreed terms.</p>
       </body></html>`);
     w.document.close();
+    addPrintToolbar(w);
     w.print();
   };
 

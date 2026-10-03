@@ -39,6 +39,7 @@ import {
   type WhatsAppShareRequest,
 } from "./WhatsAppShareDialog";
 import { UPI_ID } from "../lib/paymentDetails";
+import { addPrintToolbar } from "../lib/printWindow";
 
 interface CartProps {
   isOpen: boolean;
@@ -678,6 +679,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
     printWindow.document.open();
     printWindow.document.write(html);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
 
     const cleanup = () => {
       try {

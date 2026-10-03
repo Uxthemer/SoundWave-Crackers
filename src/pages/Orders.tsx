@@ -23,6 +23,7 @@ import {
 import { webChatUrl, whatsappNumber } from "../lib/whatsappShare";
 import { FaWhatsapp } from "react-icons/fa";
 import toast from "react-hot-toast";
+import { addPrintToolbar } from "../lib/printWindow";
 
 interface OrderItem {
   id: string;
@@ -920,6 +921,7 @@ export function Orders() {
     printWindow.document.open();
     printWindow.document.write(invoiceContent);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
 
     // cleanup function to close window and remove listeners/timeouts
     const cleanup = () => {
@@ -1101,6 +1103,7 @@ export function Orders() {
     printWindow.document.open();
     printWindow.document.write(content);
     printWindow.document.close();
+    addPrintToolbar(printWindow);
 
     // cleanup function to close window and remove listeners/timeouts
     const cleanup = () => {
