@@ -147,7 +147,7 @@ export function Customers() {
     setLoadingOrders(true);
     const { data } = await supabase
       .from("orders")
-      .select("id, short_id, created_at, status, total_amount, amount_received")
+      .select("id, short_id, created_at, status, total_amount, discount_amt, amount_received")
       .eq("phone", customer.phone)
       .order("created_at", { ascending: false });
     setSelectedOrders(data ?? []);
@@ -602,8 +602,16 @@ export function Customers() {
                             {format(new Date(order.created_at), "d MMM yyyy")}
                           </td>
                           <td className="py-2">{order.status}</td>
+                          {/* What they owe after any discount, so it lines
+                              up with Received and with Total spent above. */}
                           <td className="py-2 text-right">
-                            {money(order.total_amount)}
+                            {money(
+                              Math.max(
+                                Number(order.total_amount || 0) -
+                                  Number(order.discount_amt || 0),
+                                0
+                              )
+                            )}
                           </td>
                           <td className="py-2 text-right">
                             {money(order.amount_received)}

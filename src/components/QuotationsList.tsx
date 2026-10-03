@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
   import { useQuotations } from "../hooks/useQuotations";
   import { useCartStore } from "../store/cartStore";
   import {
@@ -8,12 +8,22 @@ import { useEffect, useState } from "react";
     ShoppingCart,
     MessageCircle,
     Loader2,
+    ScanLine as ScanIcon,
     X,
   } from "lucide-react";
   import { format } from "date-fns";
   import toast from "react-hot-toast";
   import { useNavigate } from "react-router-dom";
   import { useAppSettings } from "../context/AppSettingsContext";
+  import { useAuth } from "../context/AuthContext";
+  // Lazy: the scan screen carries the image segmentation and the catalogue
+  // matcher, and the great majority of people who open this page are here to
+  // look at a quotation, not to photograph one.
+  const ScanOrderSheetModal = lazy(() =>
+    import("./ScanOrderSheetModal").then((module) => ({
+      default: module.ScanOrderSheetModal,
+    }))
+  );
   import { useSeasons } from "../context/SeasonContext";
   import { supabase } from "../lib/supabase";
   import { createOrder } from "../hooks/useOrders";
@@ -49,7 +59,14 @@ import { useEffect, useState } from "react";
     const { loadQuotation, openCart } = useCartStore();
     const { settings } = useAppSettings();
     const { activeSeason } = useSeasons();
+    const { userRole } = useAuth();
     const navigate = useNavigate();
+
+    // Reading a customer's handwriting and pricing it is a counter job, not a
+    // customer-facing one, so it is kept to the two roles that already see
+    // every order and every price.
+    const canScan = ["admin", "superadmin"].includes(userRole?.name || "");
+    const [scanning, setScanning] = useState(false);
 
     const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
     // The quotation open in the read-only view, and the one currently being
@@ -184,12 +201,51 @@ import { useEffect, useState } from "react";
       }
     };
 
+
+    /**
+     * The bar above the list.
+     *
+     * Rendered in the loading and empty states too: scanning a sheet is how
+     * the first quotation of the day gets made, and hiding the button behind
+     * "you have no quotations yet" put it exactly where it was least useful.
+     */
+    const header = canScan ? (
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <p className="text-sm text-gray-500">
+          Scan a customer's handwritten list instead of typing it out.
+        </p>
+        <button
+          onClick={() => setScanning(true)}
+          className="px-4 py-2 rounded-lg bg-primary-orange text-white font-medium text-sm hover:opacity-90 flex items-center gap-2"
+        >
+          <ScanIcon className="w-4 h-4" />
+          Scan handwritten order
+        </button>
+      </div>
+    ) : null;
+
+    const scanModal =
+      canScan && scanning ? (
+        <Suspense fallback={null}>
+          <ScanOrderSheetModal open onClose={() => setScanning(false)} />
+        </Suspense>
+      ) : null;
+
     if (loading) {
-        return <div className="p-8 text-center">Loading quotations...</div>;
+        return (
+          <>
+            {header}
+            {scanModal}
+            <div className="p-8 text-center">Loading quotations...</div>
+          </>
+        );
     }
 
     if (quotations.length === 0) {
       return (
+        <>
+        {header}
+        {scanModal}
         <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-100">
           <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
             <ShoppingCart className="w-8 h-8 text-gray-400" />
@@ -199,11 +255,14 @@ import { useEffect, useState } from "react";
             Create a quotation by selecting "Save Quotation" in the cart.
           </p>
         </div>
+        </>
       );
     }
 
     return (
       <>
+      {header}
+      {scanModal}
       <WhatsAppShareDialog
         request={shareRequest}
         onClose={() => setShareRequest(null)}

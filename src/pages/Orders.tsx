@@ -136,6 +136,52 @@ const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
   refunded: { label: "Refunded", className: "bg-gray-200 text-gray-700" },
 };
 
+/**
+ * What the customer actually owes: the order total less any discount given.
+ * Payment status, the balance due and the receipt form all measure against
+ * this -- the database derives payment_status the same way
+ * (order_payment_status()).
+ */
+const payableAmount = (order: { total_amount: number; discount_amt?: number | null }) =>
+  Math.max(Number(order.total_amount || 0) - Number(order.discount_amt || 0), 0);
+
+/** The rupee value of a discount entered as an amount or as a % of the order total. */
+const discountValue = (
+  total: number,
+  type: "amount" | "percentage",
+  input: number | string
+) => {
+  const value = Number(input) || 0;
+  return type === "percentage" ? (Number(total || 0) * value) / 100 : value;
+};
+
+/** How an order's saved discount is shown in an input: as the % it was entered as, if it was. */
+const discountInputFor = (order: {
+  discount_amt?: number | null;
+  discount_percentage?: string | null;
+}): { type: "amount" | "percentage"; input: number | string } =>
+  order.discount_percentage && Number(order.discount_percentage) > 0
+    ? { type: "percentage", input: order.discount_percentage }
+    : { type: "amount", input: order.discount_amt ?? "" };
+
+/** Whether what is typed would change the discount already on the order. */
+const discountDiffers = (
+  order: { total_amount: number; discount_amt?: number | null; discount_percentage?: string | null },
+  type: "amount" | "percentage",
+  input: number | string
+) => {
+  const saved = discountInputFor(order);
+  const savedPercentage =
+    saved.type === "percentage" ? Number(saved.input) || 0 : null;
+  const typedPercentage = type === "percentage" ? Number(input) || 0 : null;
+  return (
+    Math.abs(
+      discountValue(order.total_amount, type, input) -
+        Number(order.discount_amt || 0)
+    ) > 0.005 || savedPercentage !== typedPercentage
+  );
+};
+
 /** The sentence that explains what the status means, in the customer's terms. */
 const STATUS_NOTES: Record<string, string> = {
   "Enquiry Received":
@@ -162,8 +208,7 @@ const STATUS_NOTES: Record<string, string> = {
  */
 function statusUpdateMessage(order: Order, business: BusinessDetails): string {
   const number = order.short_id || order.id.slice(0, 8);
-  const grand =
-    Number(order.total_amount || 0) - Number(order.discount_amt || 0);
+  const grand = payableAmount(order);
   const received = Number(order.amount_received || 0);
   const balance = grand - received;
   const lrNumber = String(order.lr_number ?? "").trim();
@@ -229,6 +274,10 @@ export function Orders() {
   const [paymentNote, setPaymentNote] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
+  // The same discount the Discount action sets, offered in the receipt form.
+  const [paymentDiscountType, setPaymentDiscountType] = useState<"amount" | "percentage">("amount");
+  const [paymentDiscountInput, setPaymentDiscountInput] = useState<number | string>("");
+  const [paymentAmountTouched, setPaymentAmountTouched] = useState(false);
   const [sortField, setSortField] = useState<keyof Order>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -270,8 +319,8 @@ export function Orders() {
   }, [range, ready]);
 
   const handleFetch = async () => {
-    const { startDate, endDate } = getDateRange();
-    await fetchOrders(startDate, endDate);
+    const { startDate, endDate, seasonId } = getDateRange();
+    await fetchOrders(startDate, endDate, seasonId);
   };
 
   const handleApplyCustom = async () => {
@@ -280,7 +329,16 @@ export function Orders() {
     setIsApplying(false);
   };
 
-  const fetchOrders = async (startDate?: Date, endDate?: Date) => {
+  /**
+   * Reload through handleFetch, so the range on screen is kept. A bare
+   * fetchOrders() loaded every season's orders into a list still labelled
+   * with this one.
+   */
+  const fetchOrders = async (
+    startDate?: Date,
+    endDate?: Date,
+    seasonId?: string | null
+  ) => {
     try {
       let query = supabase
         .from("orders")
@@ -301,7 +359,11 @@ export function Orders() {
         )
         .order("created_at", { ascending: false });
 
-       if (startDate && endDate) {
+       // A season is filtered on orders.season_id, which is exact; its dates
+       // are only an approximation of which orders belong to it.
+       if (seasonId) {
+         query = query.eq("season_id", seasonId);
+       } else if (startDate && endDate) {
          query = query
            .gte("created_at", startDate.toISOString())
            .lte("created_at", endDate.toISOString());
@@ -375,6 +437,9 @@ export function Orders() {
     return { revenue, cost, discount, profit };
   };
   
+  /** Discounts are a superadmin decision, wherever they are entered. */
+  const canEditDiscount = userRole?.name === "superadmin";
+
   const handleShowProfit = (order: Order) => {
     const breakdown = computeProfitBreakdown(order);
     setProfitBreakdown(breakdown);
@@ -494,7 +559,7 @@ export function Orders() {
         pendingStatus.newStatus === "Order Confirmed" ||
         pendingStatus.newStatus === "Cancelled"
       ) {
-        fetchOrders();
+        handleFetch();
       }
     } catch (error) {
       console.error("Error updating order status:", error);
@@ -513,13 +578,84 @@ export function Orders() {
   /** Opens the receipt form, pre-filled with whatever is still outstanding. */
   const openPaymentModal = (order: Order) => {
     const outstanding =
-      Number(order.total_amount || 0) - Number(order.amount_received || 0);
+      payableAmount(order) - Number(order.amount_received || 0);
+    const discount = discountInputFor(order);
     setPaymentOrder(order);
     setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
+    setPaymentAmountTouched(false);
+    setPaymentDiscountType(discount.type);
+    setPaymentDiscountInput(discount.input);
     setPaymentMethodInput(order.payment_method || "UPI");
     setPaymentReference("");
     setPaymentNote("");
     setPaymentError("");
+  };
+
+  /**
+   * A discount typed into the receipt form moves what is outstanding. Until
+   * someone has typed an amount of their own, the amount follows it, so the
+   * usual case -- "settle it at this price" -- is one field, not two.
+   */
+  const changePaymentDiscount = (
+    type: "amount" | "percentage",
+    input: number | string
+  ) => {
+    setPaymentDiscountType(type);
+    setPaymentDiscountInput(input);
+    if (!paymentOrder || paymentAmountTouched) return;
+    const payable = Math.max(
+      Number(paymentOrder.total_amount || 0) -
+        discountValue(paymentOrder.total_amount, type, input),
+      0
+    );
+    const outstanding = payable - Number(paymentOrder.amount_received || 0);
+    setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
+  };
+
+  /**
+   * Writes an order's discount. The Discount action and the receipt form
+   * both capture the same thing -- the form offers it only so a discount
+   * agreed while taking the money is not a second dialog -- so both save
+   * through here.
+   *
+   * The database re-derives payment_status from the new payable amount, so
+   * it is read back: a discount can settle a part-paid order outright.
+   */
+  const saveDiscount = async (
+    order: Order,
+    type: "amount" | "percentage",
+    input: number | string
+  ): Promise<Order> => {
+    const amount = discountValue(order.total_amount, type, input);
+    if (!Number.isFinite(amount) || amount < 0) {
+      throw new Error("Enter a discount of zero or more.");
+    }
+    if (amount > Number(order.total_amount || 0) + 0.005) {
+      throw new Error("The discount cannot be more than the order total.");
+    }
+    const percentage =
+      type === "percentage" ? String(Number(input) || 0) : null;
+
+    const { data: saved, error } = await supabase
+      .from("orders")
+      .update({ discount_amt: amount, discount_percentage: percentage })
+      .eq("id", order.id)
+      .select("payment_status")
+      .single();
+    if (error) throw error;
+
+    const patch = {
+      discount_amt: amount,
+      discount_percentage: percentage as any,
+      payment_status: saved?.payment_status ?? order.payment_status,
+    };
+    setOrders((prev) =>
+      prev.map((o) => (o.id === order.id ? { ...o, ...patch } : o))
+    );
+    setSelectedOrder((prev) =>
+      prev?.id === order.id ? { ...prev, ...patch } : prev
+    );
+    return { ...order, ...patch };
   };
 
   /**
@@ -531,8 +667,11 @@ export function Orders() {
    */
   const handleRecordPayment = async () => {
     if (!paymentOrder) return;
-    const amount = Number(paymentAmount);
-    if (!Number.isFinite(amount) || amount === 0) {
+    const amount = paymentAmount.trim() === "" ? 0 : Number(paymentAmount);
+    const discountChanged =
+      canEditDiscount &&
+      discountDiffers(paymentOrder, paymentDiscountType, paymentDiscountInput);
+    if (!Number.isFinite(amount) || (amount === 0 && !discountChanged)) {
       setPaymentError("Enter the amount received.");
       return;
     }
@@ -540,8 +679,26 @@ export function Orders() {
     setSavingPayment(true);
     setPaymentError("");
     try {
+      // Discount first, so the payment is measured against the new payable
+      // amount and the status it lands on is the final one.
+      let order = paymentOrder;
+      if (discountChanged) {
+        order = await saveDiscount(
+          paymentOrder,
+          paymentDiscountType,
+          paymentDiscountInput
+        );
+        // If the payment below fails, a retry must not save the discount
+        // again -- it is already in.
+        setPaymentOrder(order);
+      }
+      if (amount === 0) {
+        setPaymentOrder(null);
+        return;
+      }
+
       const { data, error } = await supabase.rpc("record_order_payment", {
-        p_order_id: paymentOrder.id,
+        p_order_id: order.id,
         p_amount: amount,
         p_method: paymentMethodInput || null,
         p_reference: paymentReference || null,
@@ -551,20 +708,21 @@ export function Orders() {
 
       const result = data as any;
       setOrders((prev) =>
-        prev.map((order) =>
-          order.id === paymentOrder.id
+        prev.map((o) =>
+          o.id === order.id
             ? {
-                ...order,
-                amount_received: result?.amount_received ?? order.amount_received,
-                payment_status: result?.payment_status ?? order.payment_status,
+                ...o,
+                amount_received: result?.amount_received ?? o.amount_received,
+                payment_status: result?.payment_status ?? o.payment_status,
               }
-            : order
+            : o
         )
       );
       setPaymentOrder(null);
     } catch (err) {
       setPaymentError(
-        err instanceof Error ? err.message : "Failed to record the payment"
+        (err as { message?: string } | null)?.message ||
+          "Failed to record the payment"
       );
     } finally {
       setSavingPayment(false);
@@ -1085,18 +1243,38 @@ export function Orders() {
     );
   }
 
+  /**
+   * The receipt form's figures as they will be once it is saved: the discount
+   * being typed is applied here so the outstanding amount moves with it.
+   */
+  const paymentPreview = paymentOrder
+    ? (() => {
+        const total = Number(paymentOrder.total_amount || 0);
+        const discount = canEditDiscount
+          ? discountValue(total, paymentDiscountType, paymentDiscountInput)
+          : Number(paymentOrder.discount_amt || 0);
+        const payable = Math.max(total - discount, 0);
+        const received = Number(paymentOrder.amount_received || 0);
+        return {
+          total,
+          discount,
+          payable,
+          received,
+          outstanding: payable - received,
+          discountChanged:
+            canEditDiscount &&
+            discountDiffers(paymentOrder, paymentDiscountType, paymentDiscountInput),
+        };
+      })()
+    : null;
+  const paymentAmountValue =
+    paymentAmount.trim() === "" ? 0 : Number(paymentAmount) || 0;
+
   const handleOpenDiscountModal = (order: Order) => {
     setDiscountOrderId(order.id);
-    // Initialize logic:
-    // If we have a percentage string (e.g. "10"), use it.
-    // Else use amount.
-    if (order.discount_percentage && Number(order.discount_percentage) > 0) {
-      setDiscountType("percentage");
-      setDiscountInput(order.discount_percentage);
-    } else {
-      setDiscountType("amount");
-      setDiscountInput(order.discount_amt ?? "");
-    }
+    const discount = discountInputFor(order);
+    setDiscountType(discount.type);
+    setDiscountInput(discount.input);
     setShowDiscountModal(true);
   };
 
@@ -1354,19 +1532,24 @@ export function Orders() {
                       key={order.id}
                       className="border-t border-card-border/10"
                     >
-                      <td
-                        className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap cursor-help"
-                        title={order.short_id || order.id}
-                      >
+                      <td className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap">
                         {/* The last 4 are the year's sequence, which is what
                             anyone scanning the list goes by; the full number
                             is on hover. Old SWC-### numbers are short enough
-                            to show whole. */}
-                        {order.short_id
-                          ? order.short_id.length > 8
-                            ? `SWC…${order.short_id.slice(-4)}`
-                            : order.short_id
-                          : order.id.slice(0, 8) + "…"}
+                            to show whole. The number is the obvious thing to
+                            click for an order, so it opens the details. */}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(order)}
+                          title={`${order.short_id || order.id} — view order`}
+                          className="font-mono text-primary-orange hover:underline"
+                        >
+                          {order.short_id
+                            ? order.short_id.length > 8
+                              ? `SWC…${order.short_id.slice(-4)}`
+                              : order.short_id
+                            : order.id.slice(0, 8) + "…"}
+                        </button>
                       </td>
                       <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         {order.full_name}
@@ -1499,8 +1682,7 @@ export function Orders() {
                       <td className="py-3 px-3 sm:px-6 whitespace-nowrap">
                         {(() => {
                           const received = Number(order.amount_received || 0);
-                          const balance =
-                            Number(order.total_amount || 0) - received;
+                          const balance = payableAmount(order) - received;
                           const state =
                             PAYMENT_LABELS[order.payment_status || "pending"] ??
                             PAYMENT_LABELS.pending;
@@ -1639,9 +1821,9 @@ export function Orders() {
 
       {/* Record payment. Confirmed explicitly, because money received is not
           something to correct casually afterwards. */}
-      {paymentOrder && (
+      {paymentOrder && paymentPreview && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-xl max-w-md w-full p-6">
+          <div className="bg-background rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="font-heading text-2xl mb-1">Record payment</h2>
             <p className="text-sm text-text/70 mb-4">
               Order{" "}
@@ -1654,27 +1836,81 @@ export function Orders() {
             <div className="bg-card/40 rounded-lg p-3 mb-4 text-sm space-y-1">
               <div className="flex justify-between">
                 <span className="text-text/70">Order total</span>
-                <span>₹{Number(paymentOrder.total_amount).toFixed(2)}</span>
+                <span>₹{paymentPreview.total.toFixed(2)}</span>
               </div>
+              {paymentPreview.discount > 0 && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-text/70">Discount</span>
+                    <span className="text-green-700">
+                      -₹{paymentPreview.discount.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text/70">Payable</span>
+                    <span>₹{paymentPreview.payable.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between">
                 <span className="text-text/70">Already received</span>
-                <span>
-                  ₹{Number(paymentOrder.amount_received || 0).toFixed(2)}
-                </span>
+                <span>₹{paymentPreview.received.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-semibold">
                 <span>Outstanding</span>
                 <span className="text-primary-orange">
-                  ₹
-                  {(
-                    Number(paymentOrder.total_amount) -
-                    Number(paymentOrder.amount_received || 0)
-                  ).toFixed(2)}
+                  ₹{paymentPreview.outstanding.toFixed(2)}
                 </span>
               </div>
             </div>
 
             <div className="space-y-3">
+              {/* The same discount as the Discount action, here so one
+                  agreed while the money is being taken is a single save. */}
+              {canEditDiscount && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium">
+                      Discount
+                    </label>
+                    <div className="flex gap-1">
+                      {(["amount", "percentage"] as const).map((type) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() =>
+                            changePaymentDiscount(type, paymentDiscountInput)
+                          }
+                          className={`px-2 py-0.5 rounded-full text-xs border ${
+                            paymentDiscountType === type
+                              ? "bg-primary-orange text-white border-primary-orange"
+                              : "bg-card border-card-border/20"
+                          }`}
+                        >
+                          {type === "amount" ? "₹ Amount" : "% Percentage"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={paymentDiscountInput}
+                    onChange={(e) =>
+                      changePaymentDiscount(paymentDiscountType, e.target.value)
+                    }
+                    onWheel={(e) => e.currentTarget.blur()}
+                    placeholder={
+                      paymentDiscountType === "amount"
+                        ? "Discount amount"
+                        : "Discount % (e.g. 10)"
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Amount received *
@@ -1683,7 +1919,10 @@ export function Orders() {
                   type="number"
                   step="0.01"
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  onChange={(e) => {
+                    setPaymentAmount(e.target.value);
+                    setPaymentAmountTouched(true);
+                  }}
                   onWheel={(e) => e.currentTarget.blur()}
                   autoFocus
                   className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
@@ -1692,6 +1931,8 @@ export function Orders() {
                     balance on delivery. A refund is a negative amount. */}
                 <p className="text-xs text-text/50 mt-1">
                   Part payments are fine. Use a negative amount for a refund.
+                  {canEditDiscount &&
+                    " Leave it empty to save only the discount."}
                 </p>
               </div>
 
@@ -1750,7 +1991,10 @@ export function Orders() {
               </button>
               <button
                 onClick={handleRecordPayment}
-                disabled={savingPayment || !paymentAmount}
+                disabled={
+                  savingPayment ||
+                  (paymentAmountValue === 0 && !paymentPreview.discountChanged)
+                }
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-40"
               >
                 {savingPayment && (
@@ -1758,8 +2002,12 @@ export function Orders() {
                 )}
                 <span>
                   {savingPayment
-                    ? "Recording…"
-                    : `Confirm ₹${Number(paymentAmount || 0).toFixed(2)} received`}
+                    ? "Saving…"
+                    : paymentAmountValue === 0
+                      ? "Save discount"
+                      : `Confirm ₹${paymentAmountValue.toFixed(2)} received${
+                          paymentPreview.discountChanged ? " & discount" : ""
+                        }`}
                 </span>
               </button>
             </div>
@@ -2107,61 +2355,21 @@ export function Orders() {
               <button
                 className="px-4 py-2 rounded bg-primary-orange text-white hover:bg-primary-orange/90"
                 onClick={async () => {
-                  if (!discountOrderId) return;
+                  const currentOrder = orders.find(
+                    (o) => o.id === discountOrderId
+                  );
+                  if (!currentOrder) return;
                   setSavingDiscount(true);
                   try {
-                    const currentOrder = orders.find(
-                      (o) => o.id === discountOrderId
-                    );
-                    if (!currentOrder) throw new Error("Order not found");
-
-                    let finalAmt = 0;
-                    let finalPercent = null;
-
-                    if (discountType === "percentage") {
-                      const pct = Number(discountInput) || 0;
-                      finalPercent = pct.toString(); // store string
-                      finalAmt = (currentOrder.total_amount * pct) / 100;
-                    } else {
-                      finalAmt = Number(discountInput) || 0;
-                      finalPercent = null; 
-                    }
-
-                    const { error } = await supabase
-                      .from("orders")
-                      .update({
-                        discount_amt: finalAmt,
-                        discount_percentage: finalPercent,
-                      })
-                      .eq("id", discountOrderId);
-                    if (error) throw error;
-
-                    // Update UI
-                    setOrders((orders) =>
-                      orders.map((o) =>
-                        o.id === discountOrderId
-                          ? {
-                              ...o,
-                              discount_amt: finalAmt,
-                              // Add this if your Order type interface has this field, else just ignore
-                              discount_percentage: finalPercent as any,
-                            }
-                          : o
-                      )
-                    );
-                    if (selectedOrder?.id === discountOrderId) {
-                      setSelectedOrder({
-                        ...selectedOrder,
-                        discount_amt: finalAmt,
-                        discount_percentage: finalPercent as any,
-                      });
-                    }
-
+                    await saveDiscount(currentOrder, discountType, discountInput);
                     setShowDiscountModal(false);
                     setDiscountOrderId(null);
                     setDiscountInput("");
                   } catch (err) {
-                    alert("Failed to update discount");
+                    toast.error(
+                      (err as { message?: string } | null)?.message ||
+                        "Failed to update discount"
+                    );
                   } finally {
                     setSavingDiscount(false);
                   }
