@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ReceiptText, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle } from "lucide-react";
+import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { attachPackDetails } from "../lib/orderItems";
@@ -281,6 +281,8 @@ export function Orders() {
   const [sortField, setSortField] = useState<keyof Order>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  /** Which PDF is being built, so its button can show a spinner meanwhile. */
+  const [downloadingPdf, setDownloadingPdf] = useState<"invoice" | "order" | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [orderStats, setOrderStats] = useState<Record<string, number>>({});
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -832,6 +834,60 @@ export function Orders() {
   };
 
   /**
+   * The order as a PDF: the invoice, or the order summary. One layout for
+   * both (documentPdf.ts); the kind only changes the title and wording.
+   */
+  const buildOrderPdf = (order: Order, kind: "invoice" | "order") => {
+    const lines = (order.items || [])
+      .slice()
+      .sort(
+        (a: any, b: any) =>
+          Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0)
+      )
+      .map((item: any) => ({
+        code: item.product?.product_code ?? null,
+        name: item.product?.name ?? "Item",
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+        total: Number(item.total_price || 0),
+      }));
+    return buildDocumentPdf({
+      kind,
+      number: order.short_id || order.id.slice(0, 8),
+      date: order.created_at,
+      status: order.status,
+      customer: {
+        name: order.full_name,
+        phone: order.phone,
+        email: order.email,
+        address: order.address,
+        city: order.city,
+        district: (order as any).district,
+        state: order.state,
+        pincode: order.pincode,
+      },
+      lines,
+      subtotal: Number(order.total_amount || 0),
+      discount: Number(order.discount_amt || 0),
+      paymentMethod: order.payment_method,
+      business: businessFromSettings(appSettings),
+    });
+  };
+
+  const handleDownloadPdf = async (order: Order, kind: "invoice" | "order") => {
+    setDownloadingPdf(kind);
+    try {
+      const pdf = await buildOrderPdf(order, kind);
+      pdf.save(documentFileName(kind, order.short_id || order.id.slice(0, 8)));
+    } catch (err) {
+      console.error("Failed to build the PDF:", err);
+      toast.error("Could not create the PDF. Please try again.");
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
+  /**
    * Sends the invoice to the customer on WhatsApp. The dialog builds the
    * PDF, stores it, and opens WhatsApp on the customer's chat with the
    * message and the invoice link -- see WhatsAppShareDialog.
@@ -849,43 +905,7 @@ export function Orders() {
       message:
         `Hello ${order.full_name || ""}, thank you for your order with ${business.name}. ` +
         `Order ${number}, grand total Rs. ${grand.toFixed(2)}.`,
-      makePdf: async () => {
-        const lines = (order.items || [])
-          .slice()
-          .sort(
-            (a: any, b: any) =>
-              Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0)
-          )
-          .map((item: any) => ({
-            code: item.product?.product_code ?? null,
-            name: item.product?.name ?? "Item",
-            quantity: Number(item.quantity || 0),
-            price: Number(item.price || 0),
-            total: Number(item.total_price || 0),
-          }));
-        const pdf = await buildDocumentPdf({
-          kind: "invoice",
-          number,
-          date: order.created_at,
-          status: order.status,
-          customer: {
-            name: order.full_name,
-            phone: order.phone,
-            email: order.email,
-            address: order.address,
-            city: order.city,
-            district: (order as any).district,
-            state: order.state,
-            pincode: order.pincode,
-          },
-          lines,
-          subtotal: Number(order.total_amount || 0),
-          discount: Number(order.discount_amt || 0),
-          paymentMethod: order.payment_method,
-          business,
-        });
-        return pdf.output("blob");
-      },
+      makePdf: async () => (await buildOrderPdf(order, "invoice")).output("blob"),
     });
   };
 
@@ -2019,7 +2039,7 @@ export function Orders() {
       {selectedOrder && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-background z-10 flex items-center justify-between p-6 border-b border-card-border/10">
+            <div className="sticky top-0 bg-background z-10 flex flex-wrap items-center justify-between gap-3 p-4 sm:p-6 border-b border-card-border/10">
               <div className="flex items-start sm:items-center gap-4">
                 <h2 className="font-heading text-2xl">Order Details</h2>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
@@ -2027,17 +2047,82 @@ export function Orders() {
                   <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedTotalQuantity}</strong></span>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => handlePrint(selectedOrder)}
-                  className="p-2 hover:bg-card/50 rounded-lg transition-colors"
-                  title="Print Order Summary"
-                >
-                  <Printer className="w-6 h-6" />
-                </button>
+              {/* The row's actions, again here: whoever opened the order is
+                  usually about to do one of them, and the row is now behind
+                  this dialog. Edit and Profit open over it. */}
+              <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
+                {(
+                  [
+                    {
+                      label: "Print order summary",
+                      icon: <Printer className="w-5 h-5" />,
+                      onClick: () => handlePrint(selectedOrder),
+                    },
+                    {
+                      label: "Download order summary (PDF)",
+                      icon:
+                        downloadingPdf === "order" ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <FileDown className="w-5 h-5" />
+                        ),
+                      onClick: () => handleDownloadPdf(selectedOrder, "order"),
+                      disabled: downloadingPdf !== null,
+                    },
+                    {
+                      label: "Download invoice (PDF)",
+                      icon:
+                        downloadingPdf === "invoice" ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <ReceiptText className="w-5 h-5" />
+                        ),
+                      onClick: () => handleDownloadPdf(selectedOrder, "invoice"),
+                      disabled: downloadingPdf !== null,
+                    },
+                    {
+                      label: "Share on WhatsApp",
+                      icon: <MessageCircle className="w-5 h-5" />,
+                      onClick: () => handleShareOrder(selectedOrder),
+                    },
+                    {
+                      label: "Edit order",
+                      icon: <Pencil className="w-5 h-5" />,
+                      onClick: () => setEditOrder(selectedOrder),
+                      hidden: userRole?.name !== "superadmin",
+                    },
+                    {
+                      label: "View profit",
+                      icon: <TrendingUp className="w-5 h-5" />,
+                      onClick: () => handleShowProfit(selectedOrder),
+                      hidden: userRole?.name !== "superadmin",
+                    },
+                  ] as {
+                    label: string;
+                    icon: JSX.Element;
+                    onClick: () => void;
+                    disabled?: boolean;
+                    hidden?: boolean;
+                  }[]
+                )
+                  .filter((action) => !action.hidden)
+                  .map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={action.onClick}
+                      disabled={action.disabled}
+                      className="p-2 text-primary-orange hover:bg-card/50 rounded-lg transition-colors disabled:opacity-50"
+                      title={action.label}
+                      aria-label={action.label}
+                    >
+                      {action.icon}
+                    </button>
+                  ))}
                 <button
                   onClick={() => setSelectedOrder(null)}
-                  className="p-2 hover:bg-card/50 rounded-full transition-colors"
+                  className="p-2 hover:bg-card/50 rounded-full transition-colors ml-1"
+                  title="Close"
+                  aria-label="Close"
                 >
                   <X className="w-6 h-6" />
                 </button>
