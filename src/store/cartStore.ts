@@ -41,6 +41,26 @@ type CartStore = {
   toggleCart: () => void;
 }
 
+/**
+ * The cart's totals, always worked out from its lines.
+ *
+ * Only the lines are kept in sessionStorage. The totals used to be carried
+ * along by adding and subtracting on every change, so after a reload they
+ * started from 0 against a full cart -- and checkout sends totalAmount as the
+ * order total and checks the ₹3000 minimum against it. Deriving them from
+ * the lines means they cannot disagree with what is being ordered.
+ */
+const totalsOf = (items: CartItem[]) => ({
+  totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0),
+  totalAmount: items.reduce((sum, item) => sum + item.offer_price * item.quantity, 0),
+  // A line loaded from a quotation can lack actual_price; it then counts at
+  // its offer price (no saving shown) rather than turning the total into NaN.
+  totalActualAmount: items.reduce(
+    (sum, item) => sum + (Number(item.actual_price ?? item.offer_price) || 0) * item.quantity,
+    0
+  ),
+});
+
 // Wrap your store with persist and use sessionStorage
 export const useCartStore = create<CartStore>()(
   persist(
@@ -59,12 +79,7 @@ export const useCartStore = create<CartStore>()(
             if (newQuantity <= 0) {
               // Remove item if quantity becomes 0 or negative
               const updatedItems = state.items.filter((item) => item.id !== product.id);
-              return {
-                items: updatedItems,
-                totalQuantity: Math.max(0, state.totalQuantity + quantity),
-                totalAmount: updatedItems.reduce((sum, item) => sum + (item.offer_price * item.quantity), 0),
-                totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
-              };
+              return { items: updatedItems, ...totalsOf(updatedItems) };
             }
             
             const updatedItems = state.items.map((item) =>
@@ -76,12 +91,7 @@ export const useCartStore = create<CartStore>()(
                   }
                 : item
             );
-            return {
-              items: updatedItems,
-              totalQuantity: Math.max(0, state.totalQuantity + quantity),
-              totalAmount: updatedItems.reduce((sum, item) => sum + (item.offer_price * item.quantity), 0),
-              totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
-            };
+            return { items: updatedItems, ...totalsOf(updatedItems) };
           }
 
           if (quantity <= 0) return state;
@@ -93,12 +103,7 @@ export const useCartStore = create<CartStore>()(
           };
 
           const updatedItems = [...state.items, newItem];
-          return {
-            items: updatedItems,
-            totalQuantity: state.totalQuantity + quantity,
-            totalAmount: updatedItems.reduce((sum, item) => sum + (item.offer_price * item.quantity), 0),
-            totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
-          };
+          return { items: updatedItems, ...totalsOf(updatedItems) };
         }),
       removeFromCart: (productId) =>
         set((state) => {
@@ -106,12 +111,7 @@ export const useCartStore = create<CartStore>()(
           if (!itemToRemove) return state;
 
           const updatedItems = state.items.filter((item) => item.id !== productId);
-          return {
-            items: updatedItems,
-            totalQuantity: Math.max(0, state.totalQuantity - itemToRemove.quantity),
-            totalAmount: updatedItems.reduce((sum, item) => sum + (item.offer_price * item.quantity), 0),
-            totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
-          };
+          return { items: updatedItems, ...totalsOf(updatedItems) };
         }),
       updateQuantity: (productId, quantity) =>
         set((state) => {
@@ -123,12 +123,7 @@ export const useCartStore = create<CartStore>()(
               : item
           ).filter(item => item.quantity > 0); // Remove items with 0 quantity
 
-          return {
-            items: updatedItems,
-            totalQuantity: updatedItems.reduce((sum, item) => sum + item.quantity, 0),
-            totalAmount: updatedItems.reduce((sum, item) => sum + (item.offer_price * item.quantity), 0),
-            totalActualAmount: updatedItems.reduce((sum, item) => sum + (item.actual_price * item.quantity), 0),
-          };
+          return { items: updatedItems, ...totalsOf(updatedItems) };
         }),
       clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0, editingQuotationId: null }),
       loadQuotation: (quotation) => {
@@ -238,6 +233,12 @@ export const useCartStore = create<CartStore>()(
         },
         setItem: (name, value) => sessionStorage.setItem(name, JSON.stringify(value)),
         removeItem: (name) => sessionStorage.removeItem(name),
+      },
+      // Restoring the saved lines restores the totals with them; see totalsOf.
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<CartStore>;
+        const items = Array.isArray(saved.items) ? saved.items : current.items;
+        return { ...current, ...saved, items, ...totalsOf(items) };
       },
       partialize: (state) => ({
         // persist cart items and delivery only (adjust as needed)

@@ -36,17 +36,33 @@ interface RegisteredDevice {
  * useful part: `registration-token-not-registered` means that device needs
  * re-registering, anything else is worth reading.
  */
+type SendResult = {
+  successCount?: number;
+  failureCount?: number;
+  errors?: string[];
+  message?: string;
+  error?: string;
+};
+
 function reportSendResult(
-  data: {
-    successCount?: number;
-    failureCount?: number;
-    errors?: string[];
-    message?: string;
-    error?: string;
-  } | null,
+  raw: SendResult | string | null,
   toastId: string,
   target: string
 ) {
+  // A reply without a JSON Content-Type reaches us as a string. The function
+  // now sets the header, but a deployment older than that fix still answers
+  // this way, and reading the string as if it were the object hid every count.
+  let data: SendResult | null = null;
+  if (typeof raw === 'string') {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = { message: raw || undefined };
+    }
+  } else {
+    data = raw;
+  }
+
   // No counts at all means the function answered without sending anything.
   // It does that with a 200 and an explanation, so it never looked like a
   // failure -- and `?? 0` turned it into a cheerful "Sent (0)".

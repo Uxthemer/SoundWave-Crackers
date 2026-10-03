@@ -38,9 +38,7 @@ import {
   WhatsAppShareDialog,
   type WhatsAppShareRequest,
 } from "./WhatsAppShareDialog";
-
-/** The single place the UPI id is written down. */
-const UPI_ID = "selvakumar541989@oksbi";
+import { UPI_ID } from "../lib/paymentDetails";
 
 interface CartProps {
   isOpen: boolean;
@@ -1003,20 +1001,28 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* The QR gets the wider column: it is the one people
+                      scan, and a small code fails on older phone cameras. */}
+                  <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-6">
                     {/* QR */}
-                    <div className="bg-card p-6 rounded-xl flex flex-col items-center">
+                    <div className="bg-card p-4 md:p-6 rounded-xl flex flex-col items-center">
                       <div className="flex items-center gap-3 mb-4">
                         <QrCode className="w-7 h-7 text-primary-orange" />
                         <h4 className="font-montserrat font-bold text-xl">
                           Scan &amp; Pay
                         </h4>
                       </div>
-                      <div className="bg-white p-4 rounded-lg w-full max-w-xs">
+                      {/* The image is a portrait payment card, not a bare
+                          square code. Forced into a square it shrank to
+                          about 70% of the box; at its own shape it fills
+                          the width. */}
+                      <div className="bg-white p-2 rounded-lg w-full max-w-sm">
                         <img
                           src="/assets/img/payment/QR-Code-payment.jpg"
                           alt="UPI QR code for Soundwave Crackers"
-                          className="w-full aspect-square object-contain rounded"
+                          width={665}
+                          height={942}
+                          className="w-full h-auto rounded"
                         />
                       </div>
                       <p className="text-sm text-text/60 text-center mt-4">
@@ -1025,16 +1031,22 @@ export function Cart({ isOpen, onClose }: CartProps) {
                     </div>
 
                     {/* UPI ID */}
-                    <div className="bg-card p-6 rounded-xl flex flex-col items-center justify-center">
+                    <div className="bg-card p-4 md:p-6 rounded-xl flex flex-col items-center justify-center">
                       <div className="flex items-center gap-3 mb-4">
                         <Wallet className="w-7 h-7 text-primary-orange" />
                         <h4 className="font-montserrat font-bold text-xl">
                           UPI ID
                         </h4>
                       </div>
-                      <div className="bg-background w-full rounded-lg p-5 text-center">
-                        <p className="font-mono text-lg md:text-2xl font-bold break-all select-all">
-                          {UPI_ID}
+                      {/* Sized to sit on one line in this column. If it
+                          ever must wrap, it breaks before the @ (the <wbr>)
+                          rather than mid-handle, which is what break-all
+                          did: "…@oksb" / "i". */}
+                      <div className="bg-background w-full rounded-lg px-3 py-4 text-center">
+                        <p className="font-mono text-base sm:text-lg lg:text-base font-bold break-words select-all">
+                          {UPI_ID.split("@")[0]}
+                          <wbr />
+                          {UPI_ID.includes("@") && `@${UPI_ID.split("@").slice(1).join("@")}`}
                         </p>
                       </div>
                       {/* Reading a UPI id off a screen and typing it into
