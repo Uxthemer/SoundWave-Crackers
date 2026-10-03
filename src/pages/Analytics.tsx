@@ -251,11 +251,16 @@ export function Analytics() {
       const stateCount: Record<string, number> = {};
       const productMap: Record<string, { qty: number; revenue: number }> = {};
       
+      // Sales are counted at what the customer pays, after any discount --
+      // the same figure the dashboard reports as revenue.
+      const netAmount = (order: any) =>
+        Math.max(Number(order.total_amount || 0) - Number(order.discount_amt || 0), 0);
+
       (orders || []).forEach((order: any) => {
         const status = (order.status || "").toString().toLowerCase();
         if (!COMPLETED_STATUSES.includes(status)) return;
 
-        const amt = Number(order.total_amount || 0);
+        const amt = netAmount(order);
         const city = normalisePlace(order.city);
         const district = normalisePlace(order.district);
         const state = normalisePlace(order.state);
@@ -284,14 +289,14 @@ export function Analytics() {
         const status = (order.status || "").toString().toLowerCase();
         if (!COMPLETED_STATUSES.includes(status)) return;
         const month = format(new Date(order.created_at), "MMM yyyy");
-        monthlyData[month] = (monthlyData[month] || 0) + Number(order.total_amount || 0);
+        monthlyData[month] = (monthlyData[month] || 0) + netAmount(order);
       });
 
       // stats
       const totalRevenue = Object.values(cityMap).reduce((s, v) => s + v, 0);
       const expectedRevenue = (orders || []).reduce((sum: number, order: any) => {
         return PENDING_STATUSES.includes((order.status || "").toString().toLowerCase())
-          ? sum + Number(order.total_amount || 0)
+          ? sum + netAmount(order)
           : sum;
       }, 0);
       const completedOrders = (orders || []).filter((o: any) =>
@@ -327,7 +332,7 @@ export function Analytics() {
         if (!ref) return;
         if (!referralMap[ref]) referralMap[ref] = { ordersCount: 0, totalValue: 0 };
         referralMap[ref].ordersCount += 1;
-        referralMap[ref].totalValue += Number(o.total_amount || 0);
+        referralMap[ref].totalValue += netAmount(o);
       });
 
       const referralPhones = Object.keys(referralMap);

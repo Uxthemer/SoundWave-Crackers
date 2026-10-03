@@ -24,3 +24,12 @@ dist-ssr
 *.sw?
 .env
 .gitignore
+Thumbs.db
+
+# Supabase CLI working state: which project this machine is linked to, and
+# the local stack's scratch files. Per-developer, never shared.
+supabase/.temp/
+supabase/.branches/
+
+# TypeScript incremental build cache
+*.tsbuildinfo

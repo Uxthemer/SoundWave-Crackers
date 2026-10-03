@@ -144,9 +144,15 @@ export function useDashboard() {
         COMPLETED_STATUSES.includes((o.status || "").toString().toLowerCase())
       );
 
+      // Revenue is what the customer pays: the order total less its discount.
+      // Profit below already took the discount off, so counting the gross
+      // here made revenue and profit disagree by every discount given.
+      const netAmount = (order: any) =>
+        Math.max(Number(order.total_amount || 0) - Number(order.discount_amt || 0), 0);
+
       // Calculate total revenue from completed orders
       const revenue =
-        (completedOrders || []).reduce((sum, order) => sum + Number(order.total_amount || 0), 0) || 0;
+        (completedOrders || []).reduce((sum, order) => sum + netAmount(order), 0) || 0;
 
       // Calculate total profit based on APR, price, qty and discount (completed orders)
       const profit =
@@ -196,7 +202,7 @@ export function useDashboard() {
       // Key by ISO date so we can sort chronologically, then format labels for display
       const salesByIsoDate = (completedOrders || []).reduce((acc, order) => {
         const iso = format(new Date(order.created_at), "yyyy-MM-dd");
-        acc[iso] = (acc[iso] || 0) + Number(order.total_amount || 0);
+        acc[iso] = (acc[iso] || 0) + netAmount(order);
         return acc;
       }, {} as Record<string, number>);
 
