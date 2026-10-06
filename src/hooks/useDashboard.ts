@@ -9,6 +9,8 @@ export function useDashboard() {
     totalUsers: 0,
     totalRevenue: 0,
     totalProfit: 0,
+    amountReceived: 0,
+    discountGiven: 0,
   });
 
   const [salesData, setSalesData] = useState({
@@ -171,6 +173,23 @@ export function useDashboard() {
           return sum + (orderProfit - discount);
         }, 0) || 0;
 
+      // Money in hand is counted on every live order, whatever its stage:
+      // advances arrive long before anything ships. amount_received is
+      // already measured against the discounted total (order_payment_status()
+      // settles an order at total - discount), so the discount is NOT taken
+      // off again here -- doing so would count it twice.
+      const liveOrders = (orders || []).filter(
+        (o: any) => (o.status || "").toString().toLowerCase() !== "cancelled"
+      );
+      const amountReceived = liveOrders.reduce(
+        (sum, o: any) => sum + Number(o.amount_received || 0),
+        0
+      );
+      const discountGiven = liveOrders.reduce(
+        (sum, o: any) => sum + Number(o.discount_amt || 0),
+        0
+      );
+
       // Fetch the customer role id first
       const { data: roles, error: rolesError } = await supabase
         .from("roles")
@@ -196,6 +215,8 @@ export function useDashboard() {
         totalUsers: userCount || 0,
         totalRevenue: revenue,
         totalProfit: profit,
+        amountReceived,
+        discountGiven,
       });
 
       // Prepare sales data (use completed orders)

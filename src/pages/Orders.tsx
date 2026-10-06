@@ -9,6 +9,7 @@ import { InvoiceTemplate } from "../components/InvoiceTemplate";
 import EditOrderModal, { OrderForEdit } from "../components/EditOrderModal";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { MultiSelectFilter } from "../components/MultiSelectFilter";
 import { RowActionsMenu } from "../components/RowActionsMenu";
 import { useAppSettings } from "../context/AppSettingsContext";
 import {
@@ -260,13 +261,12 @@ export function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState<
-    "all" | "pending" | "partial" | "received" | "refunded"
-  >("all");
-  const [customerFilter, setCustomerFilter] = useState<
-    "all" | "guest" | "registered"
-  >("all");
+  // Each filter is a set of values, any of which may match; empty means no
+  // restriction. Within a filter the choices are alternatives (Packing or
+  // Shipped), across filters they combine (and Part paid).
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [paymentFilter, setPaymentFilter] = useState<string[]>([]);
+  const [customerFilter, setCustomerFilter] = useState<string[]>([]);
   // Recording a receipt: which order, how much, and how it arrived.
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -1142,22 +1142,27 @@ export function Orders() {
     setTimeout(cleanup, 20000);
   };
 
+  /** A status tile adds its status to the selection, or takes it back out. */
   const handleStatusFilterClick = (status: string) => {
-    setStatusFilter(statusFilter === status ? "all" : status);
+    setStatusFilter((current) =>
+      current.includes(status)
+        ? current.filter((s) => s !== status)
+        : [...current, status]
+    );
   };
 
   const readyForPackingCount = orders.filter(isReadyForPacking).length;
 
   const filtersActive =
-    statusFilter !== "all" ||
-    paymentFilter !== "all" ||
-    customerFilter !== "all" ||
+    statusFilter.length > 0 ||
+    paymentFilter.length > 0 ||
+    customerFilter.length > 0 ||
     searchTerm.trim() !== "";
 
   const clearFilters = () => {
-    setStatusFilter("all");
-    setPaymentFilter("all");
-    setCustomerFilter("all");
+    setStatusFilter([]);
+    setPaymentFilter([]);
+    setCustomerFilter([]);
     setSearchTerm("");
   };
 
@@ -1171,24 +1176,26 @@ export function Orders() {
           .includes(searchTerm.toLowerCase()) ||
         order.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         order.short_id?.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (statusFilter === "all" ||
-        (statusFilter === READY_FOR_PACKING
-          ? isReadyForPacking(order)
-          : order.status === statusFilter)) &&
-      (paymentFilter === "all" ||
-        (order.payment_status || "pending") === paymentFilter) &&
-      (customerFilter === "all" ||
-        (customerFilter === "guest" ? !order.user_id : !!order.user_id))
+      (statusFilter.length === 0 ||
+        statusFilter.some((status) =>
+          status === READY_FOR_PACKING
+            ? isReadyForPacking(order)
+            : order.status === status
+        )) &&
+      (paymentFilter.length === 0 ||
+        paymentFilter.includes(order.payment_status || "pending")) &&
+      (customerFilter.length === 0 ||
+        customerFilter.includes(order.user_id ? "registered" : "guest"))
   );
 
   /**
    * A cancelled order is finished business: it holds no stock, nothing is
    * owed on it and nobody is packing it. Leaving them in every list meant
    * scrolling past dead rows to find live ones, so they are kept out unless
-   * they are what you asked for — the Cancelled filter, from the dropdown or
-   * its tile, shows them and nothing else.
+   * they are what you asked for — ticking Cancelled, in the dropdown or on
+   * its tile, brings them back alongside whatever else is ticked.
    */
-  const showingCancelled = statusFilter === CANCELLED;
+  const showingCancelled = statusFilter.includes(CANCELLED);
 
   const filteredOrders = (
     showingCancelled
@@ -1374,7 +1381,7 @@ export function Orders() {
             onClick={() => handleStatusFilterClick(READY_FOR_PACKING)}
             title="Confirmed and fully paid"
             className={`p-2 sm:p-4 rounded-lg transition-all text-xs sm:text-base border ${
-              statusFilter === READY_FOR_PACKING
+              statusFilter.includes(READY_FOR_PACKING)
                 ? "bg-green-600 text-white shadow-lg ring-2 ring-green-600/50 border-green-600"
                 : "bg-green-50 dark:bg-green-900/20 border-green-600/30 hover:bg-green-100 dark:hover:bg-green-900/30"
             }`}
@@ -1384,13 +1391,14 @@ export function Orders() {
               {readyForPackingCount}
             </h3>
             <p className="text-sm opacity-80">Ready for packing</p>
+            <p className="text-[10px] sm:text-xs opacity-70 leading-tight">Payment Received</p>
           </button>
           {ORDER_STATUSES.map((status) => (
             <button
               key={status}
               onClick={() => handleStatusFilterClick(status)}
               className={`p-2 sm:p-4 rounded-lg transition-all text-xs sm:text-base ${
-                statusFilter === status
+                statusFilter.includes(status)
                   ? "bg-primary-orange text-white shadow-lg ring-2 ring-primary-orange/50"
                   : "bg-card hover:bg-card/70"
               }`}
@@ -1411,42 +1419,38 @@ export function Orders() {
             <span>Filters</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              aria-label="Filter by status"
-              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-            >
-              <option value="all">Any status</option>
-              <option value={READY_FOR_PACKING}>Ready for packing</option>
-              {ORDER_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            <select
-              value={paymentFilter}
-              onChange={(e) => setPaymentFilter(e.target.value as typeof paymentFilter)}
-              aria-label="Filter by payment"
-              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-            >
-              <option value="all">Any payment</option>
-              <option value="pending">Unpaid</option>
-              <option value="partial">Part paid</option>
-              <option value="received">Paid</option>
-              <option value="refunded">Refunded</option>
-            </select>
-            <select
-              value={customerFilter}
-              onChange={(e) => setCustomerFilter(e.target.value as typeof customerFilter)}
-              aria-label="Filter by customer type"
-              className="px-3 py-1.5 rounded-lg text-sm bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-            >
-              <option value="all">All customers</option>
-              <option value="guest">Guest orders</option>
-              <option value="registered">Registered customers</option>
-            </select>
+            <MultiSelectFilter
+              placeholder="Any status"
+              ariaLabel="Filter by status"
+              selected={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: READY_FOR_PACKING, label: "Ready for packing (Payment Received)" },
+                ...ORDER_STATUSES.map((status) => ({ value: status, label: status })),
+              ]}
+            />
+            <MultiSelectFilter
+              placeholder="Any payment"
+              ariaLabel="Filter by payment"
+              selected={paymentFilter}
+              onChange={setPaymentFilter}
+              options={[
+                { value: "pending", label: "Unpaid" },
+                { value: "partial", label: "Part paid" },
+                { value: "received", label: "Paid" },
+                { value: "refunded", label: "Refunded" },
+              ]}
+            />
+            <MultiSelectFilter
+              placeholder="All customers"
+              ariaLabel="Filter by customer type"
+              selected={customerFilter}
+              onChange={setCustomerFilter}
+              options={[
+                { value: "guest", label: "Guest orders" },
+                { value: "registered", label: "Registered customers" },
+              ]}
+            />
           </div>
           <div className="flex items-center gap-3 md:ml-auto">
             {/* Counts the rows actually on screen. `orders.length` would
@@ -1473,7 +1477,7 @@ export function Orders() {
             {hiddenCancelled} cancelled{" "}
             {hiddenCancelled === 1 ? "order is" : "orders are"} not shown.{" "}
             <button
-              onClick={() => setStatusFilter(CANCELLED)}
+              onClick={() => setStatusFilter((current) => [...current, CANCELLED])}
               className="text-primary-orange font-semibold hover:underline"
             >
               Show cancelled

@@ -13,6 +13,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
+  IndianRupee,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -64,7 +65,10 @@ export function Dashboard() {
   const { userRole } = useAuth();
   
   // configurable date range (values come from src/config/dashboardConfig.ts)
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
+  // Kept whole as well as destructured: the Analytics tab is handed the same
+  // object so it shows the season picked here, not a fresh default of its own.
+  const dateRange = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = dateRange;
   const [isApplyingCustom, setIsApplyingCustom] = useState(false);
   const {
     stats,
@@ -302,7 +306,7 @@ export function Dashboard() {
             <>
               {/* keep all original dashboard overview markup here */}
               {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                 <button
                   onClick={() => navigate("/orders")}
                   className="card hover:border-primary-orange transition-colors"
@@ -355,6 +359,7 @@ export function Dashboard() {
                       <h3 className="text-2xl font-bold">
                         ₹{stats.totalRevenue.toFixed(2)}
                       </h3>
+                      <p className="text-xs text-text/50">Shipped &amp; delivered</p>
                     </div>
                     <div className="bg-primary-red/10 p-3 rounded-full">
                       <DollarSign className="w-6 h-6 text-primary-red" />
@@ -365,6 +370,27 @@ export function Dashboard() {
               <span className="text-green-500">+18%</span>
               <span className="text-text/60 ml-2">vs last {dateRange}</span>
             </div> */}
+                </button>
+
+                <button
+                  onClick={() => navigate("/orders")}
+                  className="card hover:border-primary-orange transition-colors"
+                  title="Payments recorded on every order that is not cancelled. Amounts are already net of discount."
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <div style={{ textAlign: "start" }}>
+                      <p className="text-text/60">Total Amount Received</p>
+                      <h3 className="text-2xl font-bold">
+                        ₹{stats.amountReceived.toFixed(2)}
+                      </h3>
+                      <p className="text-xs text-text/50">
+                        Discount given: ₹{stats.discountGiven.toFixed(2)}
+                      </p>
+                    </div>
+                    <div className="bg-green-500/10 p-3 rounded-full">
+                      <IndianRupee className="w-6 h-6 text-green-600" />
+                    </div>
+                  </div>
                 </button>
 
                 <button
@@ -533,7 +559,7 @@ export function Dashboard() {
           {/* Analytics tab */}
           {activeTab === "analytics" && (
             <div className="pt-2">
-              <Analytics />
+              <Analytics dateRange={dateRange} />
             </div>
           )}
 

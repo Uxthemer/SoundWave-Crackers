@@ -105,6 +105,10 @@ export interface DashboardStats {
   totalUsers: number;
   totalRevenue: number;
   totalProfit: number;
+  /** Money in hand on every order that is not cancelled. */
+  amountReceived: number;
+  /** Discount given on those same orders, shown beside it for reference. */
+  discountGiven: number;
 }
 
 export interface ProductImport {

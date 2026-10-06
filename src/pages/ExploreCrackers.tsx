@@ -342,63 +342,34 @@ export function ExploreCrackers() {
   return (
     <>
       <div className="pt-6 min-h-screen">
-        <div className="sticky top-[89px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10">
-          <div className="container mx-auto px-2 md:px-6">
-            <div className="py-2">
-              <div className="flex flex-wrap items-center gap-2 bg-card/50 p-2 rounded-xl">
-                <div className="flex-1 min-w-[100px] text-center">
-                  <p className="text-sm text-text/60">Products</p>
-                  <p className="font-montserrat font-bold text-l md:text-xl">
-                    {items.length}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-[100px] text-center">
-                  <p className="text-sm text-text/60">Quantity</p>
-                  <p className="font-montserrat font-bold text-l md:text-xl">
-                    {totalQuantity}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-[100px] text-center">
-                  <p className="text-sm text-text/60">Amount</p>
-                  <p className="font-montserrat font-bold text-l md:text-xl text-primary-orange">
-                    ₹{totalAmount.toFixed(2)}
-                  </p>
-                </div>
-                <button
-                  className="hidden md:flex btn-primary flex items-center gap-2 md:w-auto"
-                  onClick={() => setIsCartOpen(true)}
-                >
-                  <ShoppingCart className="w-5 h-5" />
-                  <span className="hidden md:block">View Cart</span>
-                </button>
+        {/* Title, search, filters and the cart summary stick together under
+            the nav, so the search and the running total are always in reach
+            on a catalogue that is hundreds of cards long. Kept to two short
+            rows on a phone: every pixel here is a pixel less of products. */}
+        <div className="sticky top-[89px] left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-b border-card-border/10 shadow-sm">
+          <div className="container mx-auto px-2 md:px-6 py-2 space-y-2">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                <h1 className="font-heading text-2xl md:text-4xl">Explore Crackers</h1>
+                <CatalogModeSwitch mode={catalogMode} onChange={setCatalogMode} />
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="container mx-auto px-3 md:px-6 py-8 mt-5">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 space-y-4 md:space-y-0">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-              <h1 className="font-heading text-4xl">Explore Crackers</h1>
-              <CatalogModeSwitch mode={catalogMode} onChange={setCatalogMode} />
-            </div>
-            <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-              <div className="relative flex-1 md:flex-none">
-                <input
-                  type="search"
-                  placeholder="Search products or categories..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-10 py-2 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange"
-                />
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="relative">
+              <div className="flex items-center gap-2 w-full lg:w-auto">
+                <div className="relative flex-1 min-w-0 lg:w-72 lg:flex-none">
+                  <input
+                    type="search"
+                    placeholder="Search products or categories..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange text-sm md:text-base"
+                  />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/40" />
+                </div>
+                <div className="relative shrink-0 max-w-[40%] sm:max-w-none">
                   <select
                     value={selectedCategory}
                     onChange={(e) => handleCategoryChange(e.target.value)}
-                    className="appearance-none bg-card border-2 border-card-border/30 rounded-lg px-4 py-2 pr-8 focus:outline-none focus:border-primary-orange"
+                    aria-label="Filter by category"
+                    className="w-full appearance-none bg-card border-2 border-card-border/30 rounded-lg pl-3 pr-8 py-2 text-sm md:text-base truncate focus:outline-none focus:border-primary-orange"
                   >
                     <option value="all">All Categories</option>
                     {categories.map((option) => (
@@ -407,34 +378,66 @@ export function ExploreCrackers() {
                       </option>
                     ))}
                   </select>
-                  <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
+                  <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60 pointer-events-none" />
                 </div>
-                <div className="flex items-center space-x-2 bg-card rounded-lg p-1">
+                <div className="flex items-center gap-1 bg-card rounded-lg p-1 shrink-0">
                   <button
                     onClick={() => setViewMode("grid")}
-                    className={`p-2 rounded ${
+                    aria-label="Grid view"
+                    className={`p-1.5 md:p-2 rounded ${
                       viewMode === "grid"
                         ? "bg-primary-orange text-white"
                         : "text-text/60"
                     }`}
                   >
-                    <LayoutGrid className="w-5 h-5" />
+                    <LayoutGrid className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
                   <button
                     onClick={() => setViewMode("list")}
-                    className={`p-2 rounded ${
+                    aria-label="List view"
+                    className={`p-1.5 md:p-2 rounded ${
                       viewMode === "list"
                         ? "bg-primary-orange text-white"
                         : "text-text/60"
                     }`}
                   >
-                    <LayoutList className="w-5 h-5" />
+                    <LayoutList className="w-4 h-4 md:w-5 md:h-5" />
                   </button>
                 </div>
               </div>
             </div>
-          </div>
 
+            <div className="flex flex-wrap items-center gap-2 bg-card/50 p-2 rounded-xl">
+              <div className="flex-1 min-w-[80px] text-center">
+                <p className="text-xs md:text-sm text-text/60">Products</p>
+                <p className="font-montserrat font-bold text-l md:text-xl">
+                  {items.length}
+                </p>
+              </div>
+              <div className="flex-1 min-w-[80px] text-center">
+                <p className="text-xs md:text-sm text-text/60">Quantity</p>
+                <p className="font-montserrat font-bold text-l md:text-xl">
+                  {totalQuantity}
+                </p>
+              </div>
+              <div className="flex-1 min-w-[80px] text-center">
+                <p className="text-xs md:text-sm text-text/60">Amount</p>
+                <p className="font-montserrat font-bold text-l md:text-xl text-primary-orange">
+                  ₹{totalAmount.toFixed(2)}
+                </p>
+              </div>
+              <button
+                className="hidden md:flex btn-primary flex items-center gap-2 md:w-auto"
+                onClick={() => setIsCartOpen(true)}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                <span className="hidden md:block">View Cart</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="container mx-auto px-3 md:px-6 py-6">
           {displayProducts.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-text/60 mb-4">

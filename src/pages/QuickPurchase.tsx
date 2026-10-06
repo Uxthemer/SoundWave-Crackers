@@ -244,25 +244,24 @@ export function QuickPurchase() {
                   <span className="hidden md:block">View Cart</span>
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* Search Bar */}
-          <div className="max-w-6xl mx-auto mt-4 px-2">
-            <div className="relative flex flex-col md:flex-row md:items-center gap-2">
-              <div className="relative flex-1">
+              {/* Search rides in the sticky block with the cart summary, so a
+                  customer halfway down the list can look up the next item
+                  without scrolling back to the top. The count sits inside
+                  the box to keep this to one short row. */}
+              <div className="relative mt-2">
                 <input
                   type="search"
                   placeholder="Search products or categories..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full px-10 py-3 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange"
+                  className="w-full pl-10 pr-28 py-2 rounded-lg bg-card/30 border-2 border-card-border/30 focus:outline-none focus:border-primary-orange"
                 />
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-text/40" />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-text/60 pointer-events-none whitespace-nowrap">
+                  {filteredProductCount} found
+                </span>
               </div>
-              <span className="text-sm text-text/60 md:ml-4 md:mt-0 mt-1">
-                {filteredProductCount} products found
-              </span>
             </div>
           </div>
 
