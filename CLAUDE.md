@@ -72,6 +72,7 @@ public/assets/       images; banners in img/banners/
 | `orderSheetMatch.ts` | a read row → catalogue candidates, scored on name (trigram + word containment, with a hard penalty for disagreeing figures so 15/30/50 Cm and 1000/10000 Wala cannot swap), price agreement weighted by how many products share that price, and the S.No. Ranking and confidence are separate: one signal can win the ranking, but two must agree before a line is ticked |
 | `scanOrderSheet.ts` | sequences the four above and reports progress |
 | `tamilText.ts` | draws a Tamil string on a canvas and hands back a transparent PNG sized in PDF points. jsPDF cannot shape Tamil (see the file's own comment); the browser can, so the Tamil column is a picture of the name |
+| `customerLookup.ts` | staff-only customer lookup (by phone, or by name/place/pincode, every word must match some field) for placing an order on a customer's behalf: `customer_summary` (past orders, one row per phone) plus `user_profiles` (accounts with no orders yet), under the caller's RLS. Used by `CustomerPhoneLookup` in the cart and in New Order |
 | `businessDetails.ts` | `businessFromSettings(appSettings)` → the business block printed on documents |
 | `orderItems.ts` | makes a combo-pack order line look like a product line (`attachPackDetails`, `PACK_EMBED`) |
 | `pricing.ts`, `ordering.ts`, `productImage.ts`, `personName.ts` | small shared rules |

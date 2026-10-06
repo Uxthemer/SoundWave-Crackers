@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import toast from "react-hot-toast";
 import { NumberInput } from "./NumberInput";
+import { CustomerPhoneLookup } from "./CustomerPhoneLookup";
+import { CustomerMatch, customerOrderExtras } from "../lib/customerLookup";
 
 type ProductOption = {
   id: string;
@@ -69,6 +71,32 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         ...it,
       })) || []
   );
+
+  /** The Orders page opens this with an empty id for New Order. */
+  const isNewOrder = !order.id;
+
+  const fillFromCustomer = async (customer: CustomerMatch) => {
+    setForm((f) => ({
+      ...f,
+      phone: customer.phone,
+      full_name: customer.name,
+      email: customer.email,
+      address: customer.address,
+      city: customer.city,
+      district: customer.district,
+      state: customer.state,
+      pincode: customer.pincode,
+    }));
+    setCustomerSearch("");
+    const extras = await customerOrderExtras(customer.phone);
+    setForm((f) => ({
+      ...f,
+      alternate_phone: extras.alternatePhone || f.alternate_phone,
+      // The summary's district is the latest order's, which may be blank.
+      district: customer.district.trim() ? f.district : extras.district || f.district,
+    }));
+  };
+  const [customerSearch, setCustomerSearch] = useState("");
 
   // Orders placed before seasons existed were backfilled, but guard anyway.
   const orderSeasonId = order.season_id ?? null;
@@ -445,6 +473,43 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
             </button>
             {addressOpen && (
               <div className="p-4 space-y-3">
+                {/* A new order starts from the phone: picking an existing
+                    customer fills everything below. Editing an order keeps
+                    its own details, so the lookup is not offered there. */}
+                {isNewOrder && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Find existing customer{" "}
+                      <span className="font-normal text-text/60">
+                        — by name, phone, city, district, address or pincode
+                      </span>
+                    </label>
+                    <CustomerPhoneLookup
+                      mode="any"
+                      value={customerSearch}
+                      onChange={setCustomerSearch}
+                      onSelect={fillFromCustomer}
+                      placeholder="e.g. Ravi Chennai, 600042, 97897…"
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                )}
+                {isNewOrder && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Phone{" "}
+                      <span className="font-normal text-text/60">
+                        — type to find an existing customer
+                      </span>
+                    </label>
+                    <CustomerPhoneLookup
+                      value={form.phone}
+                      onChange={(phone) => setForm((f) => ({ ...f, phone }))}
+                      onSelect={fillFromCustomer}
+                      className="w-full p-2 border rounded"
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <input
                     value={form.full_name}
@@ -462,14 +527,16 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
                     className="p-2 border rounded"
                     placeholder="Email"
                   />
-                  <input
-                    value={form.phone}
-                    onChange={(e) =>
-                      setForm({ ...form, phone: e.target.value })
-                    }
-                    className="p-2 border rounded"
-                    placeholder="Phone"
-                  />
+                  {!isNewOrder && (
+                    <input
+                      value={form.phone}
+                      onChange={(e) =>
+                        setForm({ ...form, phone: e.target.value })
+                      }
+                      className="p-2 border rounded"
+                      placeholder="Phone"
+                    />
+                  )}
                   <input
                     value={form.alternate_phone || ""}
                     onChange={(e) =>
