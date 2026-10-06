@@ -22,6 +22,7 @@ import {
   Info,
 } from "lucide-react";
 import { ExpandableChart } from "../components/ExpandableChart";
+import { ExpandablePanel } from "../components/ExpandablePanel";
 import { useDateRange } from "../hooks/useDateRange";
 import { useSeasons } from "../context/SeasonContext";
 import { DateRangeFilter } from "../components/DateRangeFilter";
@@ -37,7 +38,12 @@ interface AnalyticsData {
   monthlyRevenue: { labels: string[]; data: number[] };
   stats: {
     totalRevenue: number;
+    /** totalRevenue split by where the order is, so the tile can be checked by hand. */
+    revenueByStage: StageTotal[];
+    /** Money actually received against those same orders. */
+    amountReceived: number;
     expectedRevenue: number;
+    expectedByStage: StageTotal[];
     totalOrders: number;
     totalProducts: number;
     averageOrderValue: number;
@@ -63,8 +69,14 @@ interface AnalyticsData {
   referralTotal?: number;
 }
 
+interface StageTotal {
+  stage: string;
+  amount: number;
+  orders: number;
+}
+
 /**
- * What counts as a sale.
+ * What the location, product and monthly charts count.
  *
  * This used to be shipped/dispatched/delivered only, which meant every
  * confirmed order still being packed counted for nothing -- and in a season
@@ -87,8 +99,49 @@ const COMPLETED_STATUSES = [
   "payment completed",
 ];
 
-/** Asked for, not yet agreed. Counted as expected revenue, never as sales. */
-const PENDING_STATUSES = ["enquiry received"];
+/**
+ * Total Revenue is goods that have left the godown: Shipped and Delivered.
+ * Everything still in hand -- an enquiry, a confirmed order, one on the
+ * packing table -- is Expected Revenue until it ships, and a cancelled order
+ * is neither. The two tiles therefore add up to the whole live order book,
+ * and each is broken into its stages so either can be checked by hand
+ * against the Orders page.
+ */
+const REVENUE_STAGES: { stage: string; statuses: string[] }[] = [
+  { stage: "Delivered", statuses: ["delivered"] },
+  { stage: "Shipped", statuses: ["shipped", "dispatched"] },
+];
+const REVENUE_STATUSES = REVENUE_STAGES.flatMap((s) => s.statuses);
+
+/**
+ * Expected Revenue is every status that is neither revenue nor cancelled.
+ * The named stages are the ones the Orders page uses; anything else (a legacy
+ * "payment completed", or a status added later) still counts, under Other,
+ * rather than silently dropping out of both tiles.
+ */
+const EXPECTED_STAGES: { stage: string; statuses: string[] }[] = [
+  { stage: "Enquiry Received", statuses: ["enquiry received"] },
+  { stage: "Order Confirmed", statuses: ["order confirmed"] },
+  { stage: "Packing", statuses: ["packing"] },
+];
+const CANCELLED_STATUS = "cancelled";
+
+function totalsByStage(
+  orders: any[],
+  stages: { stage: string; statuses: string[] }[],
+  amountOf: (order: any) => number
+): StageTotal[] {
+  return stages.map(({ stage, statuses }) => {
+    const inStage = orders.filter((o) =>
+      statuses.includes((o.status || "").toString().toLowerCase())
+    );
+    return {
+      stage,
+      amount: inStage.reduce((s, o) => s + amountOf(o), 0),
+      orders: inStage.length,
+    };
+  });
+}
 
 /**
  * Collapses the spellings of one place into a single bucket.
@@ -137,14 +190,29 @@ function buildProductExportRows(labels: string[], quantities: number[], revenue:
     .sort((a, b) => Number(b.QuantitySold) - Number(a.QuantitySold));
 }
 
-export function Analytics() {
+interface AnalyticsProps {
+  /**
+   * The Dashboard's own range. Inside the Dashboard this tab used to keep a
+   * range of its own, which reset to the live season every time the tab was
+   * opened -- so picking a season on Overview and switching to Analytics
+   * quietly showed a different season. Passing the Dashboard's state in keeps
+   * one season across the tabs; the standalone /analytics route has none and
+   * keeps its own.
+   */
+  dateRange?: ReturnType<typeof useDateRange>;
+}
+
+export function Analytics({ dateRange }: AnalyticsProps = {}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const { userRole } = useAuth();
   const { activeSeason } = useSeasons();
 
-  // Use shared date range logic
-  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } = useDateRange();
+  // Hooks cannot be called conditionally, so the local range always exists
+  // and is simply ignored when the Dashboard supplies one.
+  const ownDateRange = useDateRange();
+  const { range, setRange, customStart, setCustomStart, customEnd, setCustomEnd, getDateRange, ready } =
+    dateRange ?? ownDateRange;
   const [isApplying, setIsApplying] = useState(false);
 
   // UI state for Stock & Referral tables
@@ -293,17 +361,53 @@ export function Analytics() {
       });
 
       // stats
-      const totalRevenue = Object.values(cityMap).reduce((s, v) => s + v, 0);
-      const expectedRevenue = (orders || []).reduce((sum: number, order: any) => {
-        return PENDING_STATUSES.includes((order.status || "").toString().toLowerCase())
-          ? sum + netAmount(order)
-          : sum;
-      }, 0);
-      const completedOrders = (orders || []).filter((o: any) =>
-        COMPLETED_STATUSES.includes((o.status || "").toString().toLowerCase())
+      const statusOf = (o: any) => (o.status || "").toString().toLowerCase();
+      const revenueOrders = (orders || []).filter((o: any) =>
+        REVENUE_STATUSES.includes(statusOf(o))
       );
+      const expectedOrders = (orders || []).filter(
+        (o: any) =>
+          statusOf(o) !== CANCELLED_STATUS && !REVENUE_STATUSES.includes(statusOf(o))
+      );
+      const sumNet = (list: any[]) => list.reduce((s: number, o: any) => s + netAmount(o), 0);
+
+      const totalRevenue = sumNet(revenueOrders);
+      const expectedRevenue = sumNet(expectedOrders);
       const averageOrderValue =
-        completedOrders.length > 0 ? totalRevenue / completedOrders.length : 0;
+        revenueOrders.length > 0 ? totalRevenue / revenueOrders.length : 0;
+
+      const revenueByStage = totalsByStage(revenueOrders, REVENUE_STAGES, netAmount);
+      const namedExpected = totalsByStage(expectedOrders, EXPECTED_STAGES, netAmount);
+      const otherExpected = {
+        stage: "Other",
+        amount: expectedRevenue - namedExpected.reduce((s, t) => s + t.amount, 0),
+        orders: expectedOrders.length - namedExpected.reduce((s, t) => s + t.orders, 0),
+      };
+      const expectedByStage =
+        otherExpected.orders > 0 ? [...namedExpected, otherExpected] : namedExpected;
+
+      const amountReceived = revenueOrders.reduce(
+        (s: number, o: any) => s + Number(o.amount_received || 0),
+        0
+      );
+
+      const completedOrders = (orders || []).filter((o: any) =>
+        COMPLETED_STATUSES.includes(statusOf(o))
+      );
+
+      // Products Sold counts what has been committed, so it reads the same
+      // confirmed-onward orders as the charts. It used to read every order -- enquiries and cancellations
+      // included -- and keyed on product_id alone, so every family pack line
+      // collapsed into one null entry.
+      const productsSold = new Set(
+        completedOrders.flatMap((o: any) =>
+          (o.items || [])
+            .map((i: any) =>
+              i.product_id ? `p:${i.product_id}` : i.combo_pack_id ? `c:${i.combo_pack_id}` : null
+            )
+            .filter(Boolean)
+        )
+      ).size;
 
       // stock list and total stock value
       // include only active single products (ignore group product_type and inactive)
@@ -393,9 +497,12 @@ export function Analytics() {
         monthlyRevenue: { labels: Object.keys(monthlyData), data: Object.values(monthlyData) },
         stats: {
           totalRevenue,
+          revenueByStage,
+          amountReceived,
           expectedRevenue,
+          expectedByStage,
           totalOrders: (orders || []).length,
-          totalProducts: new Set((orders || []).flatMap((o: any) => o.items?.map((i: any) => i.product_id) || [])).size,
+          totalProducts: productsSold,
           averageOrderValue,
           availableStockValue: totalStockValue,
         },
@@ -403,7 +510,6 @@ export function Analytics() {
         referralList,
         referralTotal,
       });
-      console.log("Fetched analytics data:", { data });
     } catch (error) {
       console.error("Error fetching analytics:", error);
     } finally {
@@ -515,8 +621,8 @@ export function Analytics() {
                 </h3>
                 <div className="group relative">
                   <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Based on shipped, dispatched, and delivered orders only
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Shipped and Delivered orders only, after discount.
                   </div>
                 </div>
               </div>
@@ -530,6 +636,20 @@ export function Analytics() {
             <p className="text-xs text-text/60">
               Avg order: ₹{data.stats.averageOrderValue.toFixed(2)}
             </p>
+            <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
+              {data.stats.revenueByStage.map((s) => (
+                <div key={s.stage} className="flex justify-between gap-2">
+                  <dt>
+                    {s.stage} <span className="text-text/50">({s.orders})</span>
+                  </dt>
+                  <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
+                </div>
+              ))}
+              <div className="flex justify-between gap-2 pt-1 text-green-700 dark:text-green-400">
+                <dt>Payment received on these</dt>
+                <dd className="tabular-nums">₹{data.stats.amountReceived.toFixed(2)}</dd>
+              </div>
+            </dl>
           </motion.div>
 
           <motion.div
@@ -545,8 +665,10 @@ export function Analytics() {
                 </h3>
                 <div className="group relative">
                   <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Based on pending and processing orders
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
+                    Every order not yet shipped -- enquiries, confirmed and packing
+                    -- after discount. Cancelled orders are not counted. An order
+                    moves into Total Revenue when it ships.
                   </div>
                 </div>
               </div>
@@ -557,7 +679,17 @@ export function Analytics() {
             <p className="text-xl font-bold mb-1">
               ₹{data.stats.expectedRevenue.toFixed(2)}
             </p>
-            <p className="text-xs text-text/60">From pending orders</p>
+            <p className="text-xs text-text/60">Not yet shipped</p>
+            <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
+              {data.stats.expectedByStage.map((s) => (
+                <div key={s.stage} className="flex justify-between gap-2">
+                  <dt>
+                    {s.stage} <span className="text-text/50">({s.orders})</span>
+                  </dt>
+                  <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
+                </div>
+              ))}
+            </dl>
           </motion.div>
 
           <motion.div
@@ -574,7 +706,8 @@ export function Analytics() {
                 <div className="group relative">
                   <Info className="w-4 h-4 text-text/40 cursor-help" />
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Total number of orders across all statuses
+                    Every order in the period, whatever its status -- enquiries and
+                    cancelled orders included
                   </div>
                 </div>
               </div>
@@ -600,7 +733,7 @@ export function Analytics() {
                 <div className="group relative">
                   <Info className="w-4 h-4 text-text/40 cursor-help" />
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Number of unique products sold
+                    Distinct products and family packs on confirmed orders
                   </div>
                 </div>
               </div>
@@ -609,7 +742,7 @@ export function Analytics() {
               </div>
             </div>
             <p className="text-xl font-bold mb-1">{data.stats.totalProducts}</p>
-            <p className="text-xs text-text/60">Unique products</p>
+            <p className="text-xs text-text/60">Unique products &amp; packs</p>
           </motion.div>
 
           <motion.div
@@ -643,8 +776,9 @@ export function Analytics() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Available Stock (compact, inner scroll) with search & sort */}
-          <motion.div className="bg-card rounded-xl p-6 col-span-1 lg:col-span-1">
-            <h3 className="font-montserrat font-bold text-xl mb-4">Available Stock</h3>
+          <ExpandablePanel title="Available Stock">
+            {(expanded) => (
+              <>
 
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
@@ -673,10 +807,10 @@ export function Analytics() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <div className="max-h-64 overflow-y-auto">
+            <div className={`overflow-x-auto ${expanded ? "flex-1 min-h-0 flex flex-col" : ""}`}>
+              <div className={expanded ? "flex-1 min-h-0 overflow-y-auto" : "max-h-64 overflow-y-auto"}>
                 <table className="w-full border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 z-[1] bg-card">
                     <tr className="bg-card/50 text-left">
                       <th className="p-3">S.No</th>
                       <th className="p-3">Product</th>
@@ -726,11 +860,14 @@ export function Analytics() {
                 </table>
               </div>
             </div>
-          </motion.div>
+            </>
+            )}
+          </ExpandablePanel>
 
           {/* Referral Bonuses with search, sort and S.No */}
-          <motion.div className="bg-card rounded-xl p-6 col-span-1 lg:col-span-1">
-            <h3 className="font-montserrat font-bold text-xl mb-4">Referral Bonuses</h3>
+          <ExpandablePanel title="Referral Bonuses">
+            {(expanded) => (
+              <>
 
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
@@ -759,10 +896,10 @@ export function Analytics() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <div className="max-h-64 overflow-y-auto">
+            <div className={`overflow-x-auto ${expanded ? "flex-1 min-h-0 flex flex-col" : ""}`}>
+              <div className={expanded ? "flex-1 min-h-0 overflow-y-auto" : "max-h-64 overflow-y-auto"}>
                 <table className="w-full border-collapse">
-                  <thead>
+                  <thead className="sticky top-0 z-[1] bg-card">
                     <tr className="bg-card/50 text-left">
                       <th className="p-3">S.No</th>
                       <th className="p-3">User / Phone</th>
@@ -806,7 +943,9 @@ export function Analytics() {
                 </table>
               </div>
             </div>
-          </motion.div>
+            </>
+            )}
+          </ExpandablePanel>
 
           {/* State-wise Sales */}
           {/* State-wise Sales */}

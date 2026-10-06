@@ -26,6 +26,8 @@ import { useCartStore } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
 import { NumberInput } from "./NumberInput";
+import { CustomerPhoneLookup } from "./CustomerPhoneLookup";
+import { CustomerMatch, customerOrderExtras } from "../lib/customerLookup";
 import { crackerImage } from "../lib/productImage";
 import { useAppSettings } from "../context/AppSettingsContext";
 import { businessFromSettings } from "../lib/businessDetails";
@@ -121,8 +123,63 @@ export function Cart({ isOpen, onClose }: CartProps) {
     }
   }, [items, clearDelivery]);
 
+  /**
+   * Staff key in orders for customers. For them the phone comes first and
+   * looks up who has bought before, and the form is not prefilled with their
+   * own profile -- that only put the admin's own number in the box the
+   * lookup reads.
+   */
+  const isStaff = ["admin", "superadmin"].includes(userRole?.name || "");
+
+  const fillFromCustomer = async (customer: CustomerMatch) => {
+    // The State picker only shows a value that is exactly one of its options,
+    // and an old order may have it typed in another case.
+    const canonicalState =
+      statesList.find((s) => s.name.toLowerCase() === customer.state.trim().toLowerCase())?.name ||
+      customer.state;
+    setDelivery({
+      phone: customer.phone,
+      customerName: customer.name,
+      email: customer.email,
+      address: customer.address,
+      city: customer.city,
+      state: canonicalState,
+      district: customer.district,
+      pincode: customer.pincode,
+    });
+    setCustomerSearch("");
+    const extras = await customerOrderExtras(customer.phone);
+    if (extras.alternatePhone) setDeliveryField("alternatePhone", extras.alternatePhone);
+    // The summary's district is the latest order's, which may be blank.
+    if (!customer.district.trim() && extras.district) {
+      setDeliveryField("district", extras.district);
+    }
+    toast.success(`Filled in ${customer.name || "the customer"}'s details`);
+  };
+
+  /** The free search box above the form: name, place, pincode or number. */
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  /**
+   * The District picker only shows a value that is exactly one of its
+   * options, and the list for a state arrives after the state is set. A
+   * district filled in from an old order may be typed in another case or
+   * with stray spaces, which left the picker blank -- so once the list is in,
+   * the filled-in value is swapped for the list's own spelling.
+   */
+  useEffect(() => {
+    const current = delivery.district.trim().toLowerCase();
+    if (!current || districtsList.length === 0) return;
+    const canonical = districtsList.find((d) => d.name.trim().toLowerCase() === current);
+    if (canonical && canonical.name !== delivery.district) {
+      setDeliveryField("district", canonical.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [districtsList, delivery.district]);
+
   // Prefill delivery from profile on mount if empty
   useEffect(() => {
+    if (isStaff) return;
     if (delivery.customerName === "" && userProfile) {
       setDelivery({
         customerName: userProfile.full_name || "",
@@ -137,7 +194,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile]);
+  }, [userProfile, isStaff]);
 
   // Add this utility function to clear recaptcha (if you use a ref, adjust accordingly)
   function clearRecaptcha() {
@@ -1366,6 +1423,41 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       //setShowPayment(true);
                     }}
                   >
+                    {isStaff && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-2">
+                          Find existing customer{" "}
+                          <span className="font-normal text-text/60">
+                            — by name, phone, city, district, address or pincode
+                          </span>
+                        </label>
+                        <CustomerPhoneLookup
+                          mode="any"
+                          value={customerSearch}
+                          onChange={setCustomerSearch}
+                          onSelect={fillFromCustomer}
+                          placeholder="e.g. Ravi Chennai, 600042, 97897…"
+                          className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
+                        />
+                      </div>
+                    )}
+                    {isStaff && (
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium mb-2">
+                          Phone *{" "}
+                          <span className="font-normal text-text/60">
+                            — type to find an existing customer
+                          </span>
+                        </label>
+                        <CustomerPhoneLookup
+                          value={delivery.phone}
+                          onChange={(value) => setDeliveryField("phone", value)}
+                          onSelect={fillFromCustomer}
+                          required
+                          className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium mb-2">
                         Name *
@@ -1386,25 +1478,28 @@ export function Cart({ isOpen, onClose }: CartProps) {
                       <input
                         type="email"
                         name="email"
-                        defaultValue={delivery.email}
-                        // value={deliveryDetails.email}
+                        // Controlled, so a customer picked by phone shows
+                        // their email here; defaultValue never updated.
+                        value={delivery.email || ""}
                         onChange={handleDeliveryDetailsChange}
                         className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Phone *
-                      </label>
-                      <input
-                        type="tel"
-                        name="phone"
-                        value={delivery.phone}
-                        onChange={handleDeliveryDetailsChange}
-                        required
-                        className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
-                      />
-                    </div>
+                    {!isStaff && (
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Phone *
+                        </label>
+                        <input
+                          type="tel"
+                          name="phone"
+                          value={delivery.phone}
+                          onChange={handleDeliveryDetailsChange}
+                          required
+                          className="w-full px-4 py-2 rounded-lg bg-background border border-card-border focus:outline-none focus:border-primary-orange"
+                        />
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm font-medium mb-2">
                         Alternate Phone No.
