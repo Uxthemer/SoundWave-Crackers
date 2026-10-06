@@ -12,7 +12,6 @@ interface CustomerPhoneLookupProps {
   onChange: (value: string) => void;
   /** Called with the chosen customer; the form fills its other fields from it. */
   onSelect: (customer: CustomerMatch) => void;
-  name?: string;
   required?: boolean;
   className?: string;
   placeholder?: string;
@@ -36,7 +35,6 @@ export function CustomerPhoneLookup({
   value,
   onChange,
   onSelect,
-  name = "phone",
   required,
   className = "",
   placeholder = "Type the customer's phone number",
@@ -118,9 +116,21 @@ export function CustomerPhoneLookup({
   return (
     <div ref={rootRef} className="relative">
       <div className="relative">
+        {/*
+          Browser autofill must stay out of this box: its popup sits on top of
+          our match list and offers the staff member's own saved details, not
+          the customer's. Chrome ignores autocomplete="off" for address and
+          phone autofill and guesses the field from its name, type and label
+          ("name, phone, city, address…" reads as an address form), so the
+          field carries no name, is a plain text box with a numeric keypad
+          rather than type="tel", and has an autocomplete token Chrome does not
+          recognise -- the one thing it reliably honours. The data-* attributes
+          do the same for LastPass, 1Password and Dashlane. The forms are
+          controlled, so nothing reads this input by name.
+        */}
         <input
-          type={mode === "phone" ? "tel" : "search"}
-          name={mode === "phone" ? name : undefined}
+          type="text"
+          inputMode={mode === "phone" ? "tel" : "search"}
           value={value}
           onChange={(e) => {
             pickedFor.current = null;
@@ -129,7 +139,11 @@ export function CustomerPhoneLookup({
           onFocus={() => matches.length > 0 && setOpen(true)}
           onKeyDown={onKeyDown}
           required={required}
-          autoComplete="off"
+          autoComplete="customer-lookup-no-autofill"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-form-type="other"
+          spellCheck={false}
           placeholder={placeholder}
           role="combobox"
           aria-expanded={showList}

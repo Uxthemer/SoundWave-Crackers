@@ -28,6 +28,8 @@ type CartStore = {
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   loadQuotation: (quotation: QuotationWithItems) => void;
+  /** Replaces the cart with a copy of an existing order; see lib/orderCopy. */
+  loadOrderCopy: (items: CartItem[], delivery: DeliveryDetailsState) => void;
   clearQuotationMode: () => void;
   // delivery state
   delivery: DeliveryDetailsState;
@@ -183,6 +185,16 @@ export const useCartStore = create<CartStore>()(
           isCartOpen: true
         });
       },
+      // Not a quotation: placing the copy must not delete whatever quote
+      // happened to be open in the cart before.
+      loadOrderCopy: (items, delivery) =>
+        set({
+          editingQuotationId: null,
+          items,
+          ...totalsOf(items),
+          delivery,
+          isCartOpen: true,
+        }),
       clearQuotationMode: () => set({ editingQuotationId: null }),
       // delivery defaults
       delivery: {
