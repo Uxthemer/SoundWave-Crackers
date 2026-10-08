@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle } from "lucide-react";
+import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { attachPackDetails } from "../lib/orderItems";
@@ -25,6 +25,9 @@ import { webChatUrl, whatsappNumber } from "../lib/whatsappShare";
 import { FaWhatsapp } from "react-icons/fa";
 import toast from "react-hot-toast";
 import { addPrintToolbar } from "../lib/printWindow";
+import { useCartStore } from "../store/cartStore";
+import { useSeasons } from "../context/SeasonContext";
+import { buildOrderCopy } from "../lib/orderCopy";
 
 interface OrderItem {
   id: string;
@@ -300,6 +303,65 @@ export function Orders() {
   const [discountType, setDiscountType] = useState<"amount" | "percentage">("amount");
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const loadOrderCopy = useCartStore((state) => state.loadOrderCopy);
+  const { activeSeason } = useSeasons();
+  const [copyingOrderId, setCopyingOrderId] = useState<string | null>(null);
+
+  /**
+   * Copy as new order: the same lines for another delivery or another
+   * customer. The copy opens in the cart, where the lines and the shipping
+   * details can be changed and the order placed like any other -- see
+   * lib/orderCopy for why it goes that way, and why it is priced today.
+   */
+  const handleCopyAsNewOrder = async (order: Order) => {
+    if (copyingOrderId) return;
+    if (!activeSeason?.id) {
+      toast.error("There is no active season to price the new order from.");
+      return;
+    }
+    const inCart = useCartStore.getState().items.length;
+    if (
+      inCart > 0 &&
+      !window.confirm(
+        `The cart already has ${inCart} item${inCart === 1 ? "" : "s"}. ` +
+          `Replace them with a copy of order ${order.short_id || ""}? ` +
+          `(Cancelling the copy in the cart brings them back.)`
+      )
+    ) {
+      return;
+    }
+    setCopyingOrderId(order.id);
+    try {
+      const copy = await buildOrderCopy(order, activeSeason.id);
+      if (copy.items.length === 0) {
+        toast.error("None of the products in this order are on sale this season.");
+        return;
+      }
+      loadOrderCopy(copy.items, copy.delivery, order.short_id || order.id.slice(0, 8));
+      setSelectedOrder(null);
+      toast.success(
+        `Copied ${order.short_id || "the order"} to the cart. ` +
+          "Change the items or shipping details, then place the order — or cancel the copy from the cart.",
+        { duration: 6000 }
+      );
+      if (copy.repriced > 0) {
+        toast(
+          `${copy.repriced} item${copy.repriced === 1 ? " is" : "s are"} priced at this season's rate, not the old order's.`,
+          { duration: 8000 }
+        );
+      }
+      if (copy.skipped.length > 0) {
+        toast.error(`Not on sale this season, left out: ${copy.skipped.join(", ")}`, {
+          duration: 10000,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to copy order:", e);
+      toast.error("Could not copy the order. Please try again.");
+    } finally {
+      setCopyingOrderId(null);
+    }
+  };
 
 
   // profit modal state (superadmin only)
@@ -1730,6 +1792,17 @@ export function Orders() {
                                     ₹{balance.toFixed(2)} due
                                   </p>
                                 )}
+                                {/* The discount is why "due" is less than the
+                                    order total; without it here the two
+                                    figures look like they disagree. */}
+                                {Number(order.discount_amt || 0) > 0.009 && (
+                                  <p
+                                    className="text-[11px] text-green-700 dark:text-green-400"
+                                    title={`Payable after discount ₹${payableAmount(order).toFixed(2)}`}
+                                  >
+                                    ₹{Number(order.discount_amt).toFixed(2)} discount
+                                  </p>
+                                )}
                               </div>
                               {/* Shown only while there is money to collect:
                                   not on a cancelled order, and not once the
@@ -1826,6 +1899,12 @@ export function Orders() {
                                 label: "Edit order",
                                 icon: <Pencil className="w-4 h-4" />,
                                 onClick: () => setEditOrder(order),
+                                hidden: userRole?.name !== "superadmin",
+                              },
+                              {
+                                label: "Copy as new order",
+                                icon: <Copy className="w-4 h-4" />,
+                                onClick: () => handleCopyAsNewOrder(order),
                                 hidden: userRole?.name !== "superadmin",
                               },
                               {
@@ -2096,6 +2175,18 @@ export function Orders() {
                       label: "Edit order",
                       icon: <Pencil className="w-5 h-5" />,
                       onClick: () => setEditOrder(selectedOrder),
+                      hidden: userRole?.name !== "superadmin",
+                    },
+                    {
+                      label: "Copy as new order",
+                      icon:
+                        copyingOrderId === selectedOrder.id ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          <Copy className="w-5 h-5" />
+                        ),
+                      onClick: () => handleCopyAsNewOrder(selectedOrder),
+                      disabled: copyingOrderId !== null,
                       hidden: userRole?.name !== "superadmin",
                     },
                     {

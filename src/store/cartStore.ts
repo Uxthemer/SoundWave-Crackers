@@ -28,6 +28,23 @@ type CartStore = {
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
   loadQuotation: (quotation: QuotationWithItems) => void;
+  /** Replaces the cart with a copy of an existing order; see lib/orderCopy. */
+  loadOrderCopy: (items: CartItem[], delivery: DeliveryDetailsState, sourceLabel: string) => void;
+  /**
+   * Set while the cart holds a copied order: which order it came from, and
+   * the cart as it was before, so the copy can be cancelled without losing
+   * what someone had already put in the cart.
+   */
+  copiedFromOrder: {
+    label: string;
+    previous: {
+      items: CartItem[];
+      delivery: DeliveryDetailsState;
+      editingQuotationId: string | null;
+    };
+  } | null;
+  /** Drops the copy and puts the cart back as it was before it was loaded. */
+  cancelOrderCopy: () => void;
   clearQuotationMode: () => void;
   // delivery state
   delivery: DeliveryDetailsState;
@@ -70,6 +87,7 @@ export const useCartStore = create<CartStore>()(
       totalAmount: 0,
       totalActualAmount: 0,
       editingQuotationId: null,
+      copiedFromOrder: null,
       addToCart: (product, quantity) =>
         set((state) => {
           const existingItem = state.items.find((item) => item.id === product.id);
@@ -125,7 +143,7 @@ export const useCartStore = create<CartStore>()(
 
           return { items: updatedItems, ...totalsOf(updatedItems) };
         }),
-      clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0, editingQuotationId: null }),
+      clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0, editingQuotationId: null, copiedFromOrder: null }),
       loadQuotation: (quotation) => {
         // Map items from quotation using the joined 'product' data
         const cartItems: CartItem[] = quotation.items.map((qItem: any) => {
@@ -163,6 +181,7 @@ export const useCartStore = create<CartStore>()(
 
         set({
           editingQuotationId: quotation.id,
+          copiedFromOrder: null,
           items: cartItems,
           totalQuantity: cartItems.reduce((sum, item) => sum + item.quantity, 0),
           totalAmount: quotation.total_amount,
@@ -183,6 +202,40 @@ export const useCartStore = create<CartStore>()(
           isCartOpen: true
         });
       },
+      // Not a quotation: placing the copy must not delete whatever quote
+      // happened to be open in the cart before.
+      loadOrderCopy: (items, delivery, sourceLabel) =>
+        set((state) => ({
+          // Copying twice in a row keeps the cart from before the first copy;
+          // the first copy is not something anyone wants back.
+          copiedFromOrder: {
+            label: sourceLabel,
+            previous: state.copiedFromOrder?.previous ?? {
+              items: state.items,
+              delivery: state.delivery,
+              editingQuotationId: state.editingQuotationId,
+            },
+          },
+          editingQuotationId: null,
+          items,
+          ...totalsOf(items),
+          delivery,
+          isCartOpen: true,
+        })),
+      cancelOrderCopy: () =>
+        set((state) => {
+          const previous = state.copiedFromOrder?.previous;
+          const items = previous?.items ?? [];
+          return {
+            copiedFromOrder: null,
+            items,
+            ...totalsOf(items),
+            delivery: previous?.delivery ?? state.delivery,
+            editingQuotationId: previous?.editingQuotationId ?? null,
+            // Back to the page the copy was made from.
+            isCartOpen: false,
+          };
+        }),
       clearQuotationMode: () => set({ editingQuotationId: null }),
       // delivery defaults
       delivery: {
@@ -244,7 +297,9 @@ export const useCartStore = create<CartStore>()(
         // persist cart items and delivery only (adjust as needed)
         items: state.items,
         delivery: state.delivery,
-        editingQuotationId: state.editingQuotationId
+        editingQuotationId: state.editingQuotationId,
+        // So a reload while working on a copy still offers to cancel it.
+        copiedFromOrder: state.copiedFromOrder,
         // Do NOT persist isCartOpen
       } as unknown as CartStore),
     }

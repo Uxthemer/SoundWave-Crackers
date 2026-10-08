@@ -5,6 +5,7 @@ import toast from "react-hot-toast";
 import { NumberInput } from "./NumberInput";
 import { CustomerPhoneLookup } from "./CustomerPhoneLookup";
 import { CustomerMatch, customerOrderExtras } from "../lib/customerLookup";
+import { cleanDelivery, deliveryProblem } from "../lib/deliveryDetails";
 
 type ProductOption = {
   id: string;
@@ -143,6 +144,10 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
         .from("season_catalog")
         .select("id,name,product_code,stock,offer_price")
         .eq("season_id", orderSeasonId)
+        // Only what is on sale can be added. A line already on the order for
+        // a product since switched off is in `items`, not this list, so it
+        // stays on the order untouched.
+        .eq("is_active", true)
         .order("order", { nullsFirst: false })
         .order("name", { ascending: true })
         .limit(500);
@@ -258,13 +263,52 @@ export default function EditOrderModal({ order, onClose, onSaved }: Props) {
 
   const handleSave = async () => {
     setError("");
+
+    // Trimmed and checked by the cart's own rules (lib/deliveryDetails), so a
+    // correction made here is stored the way a new order would be.
+    const clean = cleanDelivery({
+      customerName: form.full_name,
+      // A guest order with no email is stored as "-"; that is a placeholder,
+      // not an address to check.
+      email: form.email === "-" ? "" : form.email,
+      phone: form.phone,
+      alternatePhone: form.alternate_phone || "",
+      referralPhone: form.referred_by || "",
+      address: form.address,
+      city: form.city,
+      state: form.state,
+      district: form.district || "",
+      pincode: form.pincode,
+      country: "India",
+    });
+    const problem = deliveryProblem(clean, "edit");
+    if (problem) {
+      setError(problem);
+      setAddressOpen(true);
+      return;
+    }
+    const cleanedForm: OrderForEdit = {
+      ...form,
+      full_name: clean.customerName,
+      email: clean.email || (form.email === "-" ? "-" : ""),
+      phone: clean.phone,
+      alternate_phone: clean.alternatePhone,
+      referred_by: clean.referralPhone,
+      address: clean.address,
+      city: clean.city,
+      state: clean.state,
+      district: clean.district,
+      pincode: clean.pincode,
+    };
+    setForm(cleanedForm);
+
     setSaving(true);
     let itemsDeleted = false;
 
     try {
       // compute updated order object
       const updatedOrder: OrderForEdit = {
-        ...form,
+        ...cleanedForm,
         items: items.map((it) => ({
           ...it,
           total_price: +(it.quantity * it.price),

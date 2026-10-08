@@ -29,6 +29,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
   import { createOrder } from "../hooks/useOrders";
   import { businessFromSettings } from "../lib/businessDetails";
   import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
+  import { EditQuotationModal } from "./EditQuotationModal";
+  import { cleanDelivery, deliveryProblem } from "../lib/deliveryDetails";
   import {
     WhatsAppShareDialog,
     type WhatsAppShareRequest,
@@ -55,7 +57,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
   }
 
   export function QuotationsList() {
-    const { quotations, loading, fetchQuotations, deleteQuotation } = useQuotations();
+    const { quotations, loading, fetchQuotations, saveQuotation, deleteQuotation } = useQuotations();
     const { loadQuotation, openCart } = useCartStore();
     const { settings } = useAppSettings();
     const { activeSeason } = useSeasons();
@@ -73,6 +75,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
     // turned into an order.
     const [viewing, setViewing] = useState<any | null>(null);
     const [converting, setConverting] = useState<string | null>(null);
+    // The quotation open in the edit popup.
+    const [editing, setEditing] = useState<any | null>(null);
 
     /** Sends the quotation on WhatsApp; see WhatsAppShareDialog. */
     const handleShare = (quote: any) => {
@@ -122,8 +126,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
       fetchQuotations();
     }, [fetchQuotations]);
 
-    /** Opens the quotation in the cart, where its lines can be changed. */
-    const handleEdit = (quotation: any) => {
+    /**
+     * Opens the quotation in the cart. Still offered from the edit popup:
+     * the cart is where a quote is shared or converted with changes, and
+     * someone used to that route should not lose it.
+     */
+    const handleOpenInCart = (quotation: any) => {
       loadQuotation(quotation);
       openCart();
     };
@@ -140,6 +148,32 @@ import { lazy, Suspense, useEffect, useState } from "react";
      */
     const handleConvert = async (quote: any) => {
       const number = quote.short_id || String(quote.id).slice(0, 8);
+
+      // Cleaned as the cart cleans an order (lib/deliveryDetails): this is
+      // the one way to place an order without going through the cart, and a
+      // quotation saved before the cart cleaned its details may still carry
+      // stray spaces. Held to the quotation's rule, not the order's -- a
+      // quotation has no district to give -- and checked before asking, so a
+      // bad number is fixed in the quotation rather than found afterwards.
+      const delivery = cleanDelivery({
+        customerName: quote.customer_name || "",
+        email: quote.email || "",
+        phone: quote.phone || "",
+        alternatePhone: "",
+        referralPhone: "",
+        address: quote.address || "",
+        city: quote.city || "",
+        district: "",
+        state: quote.state || "",
+        pincode: quote.pincode || "",
+        country: "India",
+      });
+      const problem = deliveryProblem(delivery, "quotation");
+      if (problem) {
+        toast.error(`${problem} — edit quotation ${number} first.`);
+        return;
+      }
+
       const confirmed = window.confirm(
         `Convert quotation ${number} into an order?\n\n` +
           `${quote.customer_name || "Customer"} · ${(quote.items || []).length} products · ` +
@@ -162,19 +196,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
             price: Number(item.price || 0),
             total_price: Number(item.total_price || 0),
           })),
-          delivery_details: {
-            customerName: quote.customer_name || "",
-            email: quote.email || "",
-            phone: quote.phone || "",
-            alternatePhone: "",
-            referralPhone: "",
-            address: quote.address || "",
-            city: quote.city || "",
-            district: "",
-            state: quote.state || "",
-            pincode: quote.pincode || "",
-            country: "India",
-          },
+          delivery_details: delivery,
         });
 
         // deleteQuotation asks for confirmation of its own, which would be a
@@ -270,6 +292,23 @@ import { lazy, Suspense, useEffect, useState } from "react";
       {viewing && (
         <QuotationView quote={viewing} onClose={() => setViewing(null)} />
       )}
+      {editing && (
+        <EditQuotationModal
+          quote={editing}
+          fallbackSeasonId={activeSeason?.id ?? null}
+          onClose={() => setEditing(null)}
+          // The cart's own save, so the stored rows are the same either way.
+          // It toasts and refreshes the list itself.
+          onSave={async (details, lines) => {
+            await saveQuotation(details, lines as any, editing.id);
+          }}
+          onOpenInCart={() => {
+            const quote = editing;
+            setEditing(null);
+            handleOpenInCart(quote);
+          }}
+        />
+      )}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -311,9 +350,9 @@ import { lazy, Suspense, useEffect, useState } from "react";
                         <Eye className="w-5 h-5" />
                       </button>
                       <button
-                        onClick={() => handleEdit(quote)}
+                        onClick={() => setEditing(quote)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                        title="Edit this quotation in the cart"
+                        title="Edit this quotation"
                       >
                         <Pencil className="w-5 h-5" />
                       </button>
