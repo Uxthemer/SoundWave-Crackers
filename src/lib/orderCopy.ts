@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { crackerImage } from "./productImage";
+import { customerOrderExtras } from "./customerLookup";
 import type { CartItem } from "../types";
 import type { DeliveryDetailsState } from "../store/cartStore";
 
@@ -143,6 +144,13 @@ export async function buildOrderCopy(
     }
   }
 
+  // Orders taken before District was asked for have none; the customer's
+  // latest order that does is the next best, as the customer lookup does.
+  let district = (order.district || "").trim();
+  if (!district && order.phone) {
+    district = (await customerOrderExtras(order.phone)).district;
+  }
+
   return {
     items,
     skipped,
@@ -158,7 +166,7 @@ export async function buildOrderCopy(
       address: order.address || "",
       city: order.city || "",
       state: order.state || "",
-      district: order.district || "",
+      district,
       pincode: order.pincode || "",
       country: "India",
     },

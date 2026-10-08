@@ -324,7 +324,8 @@ export function Orders() {
       inCart > 0 &&
       !window.confirm(
         `The cart already has ${inCart} item${inCart === 1 ? "" : "s"}. ` +
-          `Replace them with a copy of order ${order.short_id || ""}?`
+          `Replace them with a copy of order ${order.short_id || ""}? ` +
+          `(Cancelling the copy in the cart brings them back.)`
       )
     ) {
       return;
@@ -336,11 +337,11 @@ export function Orders() {
         toast.error("None of the products in this order are on sale this season.");
         return;
       }
-      loadOrderCopy(copy.items, copy.delivery);
+      loadOrderCopy(copy.items, copy.delivery, order.short_id || order.id.slice(0, 8));
       setSelectedOrder(null);
       toast.success(
         `Copied ${order.short_id || "the order"} to the cart. ` +
-          "Change the items or shipping details, then place the order.",
+          "Change the items or shipping details, then place the order — or cancel the copy from the cart.",
         { duration: 6000 }
       );
       if (copy.repriced > 0) {
@@ -1789,6 +1790,17 @@ export function Orders() {
                                 {balance > 0.01 && (
                                   <p className="text-[11px] text-red-600">
                                     ₹{balance.toFixed(2)} due
+                                  </p>
+                                )}
+                                {/* The discount is why "due" is less than the
+                                    order total; without it here the two
+                                    figures look like they disagree. */}
+                                {Number(order.discount_amt || 0) > 0.009 && (
+                                  <p
+                                    className="text-[11px] text-green-700 dark:text-green-400"
+                                    title={`Payable after discount ₹${payableAmount(order).toFixed(2)}`}
+                                  >
+                                    ₹{Number(order.discount_amt).toFixed(2)} discount
                                   </p>
                                 )}
                               </div>

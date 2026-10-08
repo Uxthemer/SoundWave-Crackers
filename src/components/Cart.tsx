@@ -22,11 +22,12 @@ import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
-import { useCartStore } from "../store/cartStore";
+import { useCartStore, type DeliveryDetailsState } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
 import { NumberInput } from "./NumberInput";
 import { CustomerPhoneLookup } from "./CustomerPhoneLookup";
+import { cleanDelivery, deliveryProblem } from "../lib/deliveryDetails";
 import { CustomerMatch, customerOrderExtras } from "../lib/customerLookup";
 import { crackerImage } from "../lib/productImage";
 import { useAppSettings } from "../context/AppSettingsContext";
@@ -63,6 +64,8 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
     editingQuotationId,
     clearQuotationMode,
+    copiedFromOrder,
+    cancelOrderCopy,
   } = useCartStore();
 
   const { saveQuotation, deleteQuotation } = useQuotations();
@@ -161,6 +164,24 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const [customerSearch, setCustomerSearch] = useState("");
 
   /**
+   * The same for the state. The District list is looked up by the state's
+   * exact name, so a state carried in from an old order or a quotation as
+   * "tamil nadu" or "Tamil Nadu " left the State picker blank, no districts
+   * loaded, and the order's district -- filled in correctly -- had nothing
+   * to show against. Set directly, not through the picker's change handler,
+   * because that one clears the district.
+   */
+  useEffect(() => {
+    const current = delivery.state.trim().toLowerCase();
+    if (!current || statesList.length === 0) return;
+    const canonical = statesList.find((s) => s.name.trim().toLowerCase() === current);
+    if (canonical && canonical.name !== delivery.state) {
+      setDeliveryField("state", canonical.name);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statesList, delivery.state]);
+
+  /**
    * The District picker only shows a value that is exactly one of its
    * options, and the list for a state arrives after the state is set. A
    * district filled in from an old order may be typed in another case or
@@ -256,21 +277,25 @@ export function Cart({ isOpen, onClose }: CartProps) {
       return null;
     }
 
-    if (!delivery.customerName || !delivery.phone) {
-      toast.error("Please enter customer details (Name & Phone)");
+    // The same cleaning as an order, with only name and phone required.
+    const clean = cleanDelivery(delivery);
+    setDelivery(clean);
+    const problem = deliveryProblem(clean, "quotation");
+    if (problem) {
+      toast.error(problem);
       return null;
     }
 
     setIsQuotationSaving(true);
     try {
       const quotationData = {
-        customer_name: delivery.customerName,
-        email: delivery.email,
-        phone: delivery.phone,
-        address: delivery.address,
-        city: delivery.city,
-        state: delivery.state,
-        pincode: delivery.pincode,
+        customer_name: clean.customerName,
+        email: clean.email,
+        phone: clean.phone,
+        address: clean.address,
+        city: clean.city,
+        state: clean.state,
+        pincode: clean.pincode,
         total_amount: totalAmount,
       };
 
@@ -308,19 +333,22 @@ export function Cart({ isOpen, onClose }: CartProps) {
   };
 
   /** The quotation exactly as the cart stands, ready to be drawn. */
-  const quotationDocument = (number: string): BusinessDocument => ({
+  const quotationDocument = (
+    number: string,
+    customer: DeliveryDetailsState,
+  ): BusinessDocument => ({
     kind: "quotation",
     number,
     date: new Date(),
     customer: {
-      name: delivery.customerName,
-      phone: delivery.phone,
-      email: delivery.email,
-      address: delivery.address,
-      city: delivery.city,
-      district: delivery.district,
-      state: delivery.state,
-      pincode: delivery.pincode,
+      name: customer.customerName,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      city: customer.city,
+      district: customer.district,
+      state: customer.state,
+      pincode: customer.pincode,
     },
     // No product code: this sheet goes to the customer, and our codes mean
     // nothing to them.
@@ -347,16 +375,20 @@ export function Cart({ isOpen, onClose }: CartProps) {
 
     const number = saved.short_id || saved.id.slice(0, 8);
     const business = businessFromSettings(appSettings);
-    const document = quotationDocument(number);
+    // `delivery` here is still the render's copy, from before the save put
+    // the trimmed values in the store; clean it the same way so the shared
+    // PDF matches the saved row.
+    const customer = cleanDelivery(delivery);
+    const document = quotationDocument(number, customer);
 
     setShareRequest({
       kind: "quotation",
       title: `Quotation ${number}`,
-      customerName: delivery.customerName,
-      phone: delivery.phone,
+      customerName: customer.customerName,
+      phone: customer.phone,
       fileName: documentFileName("quotation", number),
       message:
-        `Hello ${delivery.customerName || ""}, here is your quotation ${number} ` +
+        `Hello ${customer.customerName || ""}, here is your quotation ${number} ` +
         `from ${business.name}. Total Rs. ${Number(totalAmount || 0).toFixed(2)}.`,
       makePdf: async () => {
         const pdf = await buildDocumentPdf(document);
@@ -430,7 +462,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
       setIsProcessing(true);
       setOrderError(null);
 
-      // verify all the mandatory fields
+      // Checked and saved trimmed; see lib/deliveryDetails. The cleaned
+      // values go back into the form too, so what is on screen is exactly
+      // what was saved.
+      const clean = cleanDelivery(delivery);
+      setDelivery(clean);
       const {
         customerName,
         phone,
@@ -440,46 +476,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
         district,
         pincode,
         email,
-      } = delivery;
-      if (
-        !customerName ||
-        !phone ||
-        !address ||
-        !city ||
-        !state ||
-        !district ||
-        !pincode ||
-        !email
-      ) {
-        throw new Error("Please fill all mandatory fields");
+      } = clean;
+      const problem = deliveryProblem(clean, "order");
+      if (problem) {
+        throw new Error(problem);
       }
       if (items.length === 0) {
         throw new Error("Your cart is empty");
-      }
-
-      // check phone number format (basic)
-      const phoneRegex = /^[6-9]\d{9}$/;
-      if (!phoneRegex.test(phone)) {
-        throw new Error("Please enter a valid 10-digit phone number");
-      }
-      if (delivery.alternatePhone) {
-        if (!phoneRegex.test(delivery.alternatePhone)) {
-          throw new Error(
-            "Please enter a valid 10-digit alternate phone number",
-          );
-        }
-      }
-      if (delivery.referralPhone) {
-        if (!phoneRegex.test(delivery.referralPhone)) {
-          throw new Error(
-            "Please enter a valid 10-digit referral phone number",
-          );
-        }
-      }
-      // check pincode format (basic)
-      const pinRegex = /^[1-9][0-9]{5}$/;
-      if (!pinRegex.test(pincode)) {
-        throw new Error("Please enter a valid 6-digit pincode");
       }
 
       // An account is optional. If there is a session the order is attached to
@@ -534,13 +537,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
           total_amount: totalAmount,
           payment_method: paymentMethod,
           items: orderItems,
-          delivery_details: delivery,
+          delivery_details: clean,
           season_id: activeSeason?.id ?? null,
         });
         setGuestOrderRef(null);
       } else {
         const guestOrder = await createGuestOrder({
-          delivery,
+          delivery: clean,
           items: items.map((item) => ({
             product_id: item.is_pack ? null : item.id,
             combo_pack_id: item.is_pack ? item.id : null,
@@ -553,7 +556,7 @@ export function Cart({ isOpen, onClose }: CartProps) {
         // put in front of them and kept on the device.
         setGuestOrderRef({
           short_id: guestOrder.short_id,
-          phone: delivery.phone,
+          phone: clean.phone,
         });
       }
 
@@ -904,6 +907,41 @@ export function Cart({ isOpen, onClose }: CartProps) {
             </button>
           </div>
         </div>
+
+        {/* A copied order is waiting to be placed. Saying so, with a way out,
+            matters because the copy replaced whatever was in the cart: Cancel
+            puts that back. Placing the order or clearing the cart ends it too. */}
+        {copiedFromOrder && !orderSuccess && (
+          <div className="mx-4 md:mx-6 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary-orange/40 bg-primary-orange/10 px-4 py-3">
+            <div className="text-sm">
+              <span className="font-semibold">
+                Copy of order {copiedFromOrder.label}
+              </span>
+              <span className="text-text/70">
+                {" "}
+                — change the items or shipping details, then place it as a new
+                order.
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                const restoring = copiedFromOrder.previous.items.length;
+                const ok = window.confirm(
+                  `Cancel the copy of order ${copiedFromOrder.label}? Nothing is placed.` +
+                    (restoring
+                      ? ` Your earlier cart (${restoring} item${restoring === 1 ? "" : "s"}) comes back.`
+                      : ""),
+                );
+                if (!ok) return;
+                cancelOrderCopy();
+                toast.success("Copy cancelled");
+              }}
+              className="px-3 py-1.5 rounded-md border border-red-600 text-red-600 hover:bg-red-50 text-sm font-medium whitespace-nowrap"
+            >
+              Cancel copy
+            </button>
+          </div>
+        )}
 
         <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -1559,7 +1597,13 @@ export function Cart({ isOpen, onClose }: CartProps) {
                         value={
                           districtOptions.find(
                             (opt) => opt.value === delivery.district,
-                          ) || null
+                          ) ||
+                          // A district carried in from an old order that the
+                          // list spells differently is still the order's
+                          // district: shown, not silently blanked.
+                          (delivery.district
+                            ? { value: delivery.district, label: delivery.district }
+                            : null)
                         }
                         onChange={(option) =>
                           handleDeliveryDetailsChange({
