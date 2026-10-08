@@ -4,39 +4,18 @@ import { Swiper, SwiperSlide } from 'swiper/react';
 import { Navigation, Pagination } from 'swiper/modules';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { supabase } from '../lib/supabase';
+import { blogImageSrc, fetchBlogSummaries, type BlogSummary } from '../lib/blogs';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/pagination';
 
-interface Blog {
-  id: string;
-  title: string;
-  slug: string;
-  image_url: string;
-  published_at: string;
-}
-
 export function BlogSection() {
-  const [blogs, setBlogs] = useState<Blog[]>([]);
+  const [blogs, setBlogs] = useState<BlogSummary[]>([]);
 
   useEffect(() => {
-    const fetchBlogs = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('blogs')
-          .select('*')
-          .order('published_at', { ascending: false })
-          .limit(5);
-
-        if (error) throw error;
-        setBlogs(data || []);
-      } catch (error) {
-        console.error('Error fetching blogs:', error);
-      }
-    };
-
-    fetchBlogs();
+    fetchBlogSummaries(8)
+      .then(setBlogs)
+      .catch((error) => console.error('Error fetching blogs:', error));
   }, []);
 
   return (
@@ -57,7 +36,7 @@ export function BlogSection() {
           className="pb-12"
         >
           {blogs.map((blog) => (
-            <SwiperSlide key={blog.id}>
+            <SwiperSlide key={blog.slug}>
               <Link to={`/blog/${blog.slug}`}>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -67,7 +46,7 @@ export function BlogSection() {
                 >
                   <div className="relative h-48 overflow-hidden rounded-lg">
                     <img
-                      src={blog.image_url ? `/assets/img/blogs/${blog.image_url}` : `/assets/img/blogs/online-sale-firecrackers.jpg`}
+                      src={blogImageSrc(blog.image)}
                       alt={blog.title}
                       className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500"
                     />
@@ -77,7 +56,7 @@ export function BlogSection() {
                       {blog.title}
                     </h3>
                     <time className="text-sm text-text/60 mt-auto">
-                      {format(new Date(blog.published_at), 'MMMM dd, yyyy')}
+                      {format(new Date(blog.publishedAt), 'MMMM dd, yyyy')}
                     </time>
                   </div>
                 </motion.div>
@@ -85,6 +64,14 @@ export function BlogSection() {
             </SwiperSlide>
           ))}
         </Swiper>
+        <div className="text-center mt-4">
+          <Link
+            to="/blog"
+            className="text-primary-orange hover:text-primary-orange/80 font-semibold"
+          >
+            See all articles →
+          </Link>
+        </div>
       </div>
     </section>
   );

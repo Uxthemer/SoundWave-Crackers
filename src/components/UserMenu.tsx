@@ -1,11 +1,15 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package, Building2, CalendarRange, ClipboardList, Boxes, Users } from 'lucide-react';
+import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package, Building2, CalendarRange, ClipboardList, Boxes, Users, FileText } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useRoles } from '../hooks/useRoles';
+import { DummyInvoiceModal } from './DummyInvoiceModal';
 
 export function UserMenu() {
   const [isOpen, setIsOpen] = useState(false);
+  // Lives here rather than in the dropdown, which closes as the form opens.
+  const [showDummyInvoice, setShowDummyInvoice] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { user, userProfile, userRole, signOut } = useAuth();
   const navigate = useNavigate();
@@ -105,6 +109,19 @@ export function UserMenu() {
             )}
 
             {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  setShowDummyInvoice(true);
+                }}
+                className="flex items-center px-4 py-2 w-full text-left hover:bg-card/70 transition-colors"
+              >
+                <FileText className="w-4 h-4 mr-3 text-primary-orange" />
+                <span>Generate Dummy Invoice</span>
+              </button>
+            )}
+
+            {(userRole?.name === 'admin' || userRole?.name === 'superadmin') && (
               <Link
                 to="/stock"
                 className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
@@ -193,6 +210,15 @@ export function UserMenu() {
           </div>
         </div>
       )}
+
+      {/* Portalled out of the nav: its backdrop-blur makes it the containing
+          block for anything `fixed` inside it, which would squeeze the form
+          into the height of the nav bar. */}
+      {showDummyInvoice && (userRole?.name === 'admin' || userRole?.name === 'superadmin') &&
+        createPortal(
+          <DummyInvoiceModal onClose={() => setShowDummyInvoice(false)} />,
+          document.body
+        )}
     </div>
   );
 }

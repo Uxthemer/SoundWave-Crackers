@@ -63,6 +63,7 @@ import TermsOfService from "./pages/terms";
 import { BlogSection } from "./components/BlogSection";
 import { FAQSection } from "./components/FAQSection";
 import { BlogPost } from "./pages/BlogPost";
+import { Blog } from "./pages/Blog";
 import { Users } from "./pages/Users";
 import { Analytics } from "./pages/Analytics";
 import { AdminSettings } from "./pages/AdminSettings";
@@ -235,10 +236,12 @@ function ScrollToTop() {
 }
 
 import { usePageTracking } from "./hooks/usePageTracking";
+import { useCanonicalUrl } from "./lib/seo";
 import { useForegroundPush } from "./hooks/useForegroundPush";
 
 export function AppContent() {
   usePageTracking();
+  useCanonicalUrl();
   useForegroundPush();
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -570,6 +573,7 @@ export function AppContent() {
         <Route path="/monthly-installment" element={<MonthlyInstallment />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/blog" element={<Blog />} />
         <Route path="/blog/:slug" element={<BlogPost />} />
         <Route
           path="/profile"

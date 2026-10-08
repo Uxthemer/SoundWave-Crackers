@@ -94,7 +94,7 @@ export function Footer() {
                   href="/blog/firecracker-safety-tips"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
-                  Safty Tips
+                  Safety Tips
                 </a>
               </li>
             </ul>
@@ -122,12 +122,12 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <a
-                  href="/#blog"
+                <Link
+                  to="/blog"
                   className="text-text/60 hover:text-primary-orange transition-colors"
                 >
                   Blog
-                </a>
+                </Link>
               </li>
               <li>
                 <a
