@@ -3,6 +3,8 @@ import { useAppSettings } from "../context/AppSettingsContext";
 import toast from "react-hot-toast";
 import { PushNotificationManager } from "../components/PushNotificationManager";
 import { useAuth } from "../context/AuthContext";
+import { Loader2, Trash2, Upload } from "lucide-react";
+import { removeSignature, signatureUrl, uploadSignature } from "../lib/businessSignature";
 
 /** 2-digit state, 10-character PAN, entity number, "Z", check character. */
 const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
@@ -25,6 +27,47 @@ export function AdminSettings() {
     setFormData((prev: any) => ({ ...prev, [name]: value }));
   };
 
+  // The signature is private, so its preview is a signed link fetched for
+  // whatever path the form currently holds.
+  const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
+  const [signatureUploading, setSignatureUploading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const path = formData.signature_path as string | null | undefined;
+    if (!path) {
+      setSignaturePreview(null);
+      return;
+    }
+    signatureUrl(path).then((url) => !cancelled && setSignaturePreview(url));
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.signature_path]);
+
+  const handleSignatureFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      toast.error("Use a PNG, JPG or WebP image of the signature");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("That image is over 2 MB — crop it to just the signature");
+      return;
+    }
+    setSignatureUploading(true);
+    try {
+      const path = await uploadSignature(file);
+      setFormData((prev: any) => ({ ...prev, signature_path: path }));
+      toast.success("Signature uploaded — press Save to keep it");
+    } catch (err: any) {
+      toast.error(err?.message ?? "The signature could not be uploaded");
+    } finally {
+      setSignatureUploading(false);
+    }
+  };
+
   const gstin = String(formData.gstin ?? "").trim().toUpperCase();
   const gstinInvalid = gstin !== "" && !GSTIN_PATTERN.test(gstin);
 
@@ -42,6 +85,11 @@ export function AdminSettings() {
     setLoading(true);
     try {
       await updateSettings({ ...formData, gstin: gstin || null });
+      // Only once the new path is saved is the old file safe to delete.
+      const oldSignature = settings?.signature_path;
+      if (oldSignature && oldSignature !== formData.signature_path) {
+        await removeSignature(oldSignature);
+      }
       toast.success("Settings updated successfully");
       await refreshSettings();
     } catch (err: any) {
@@ -367,6 +415,39 @@ export function AdminSettings() {
                   placeholder="soundwavecrackers@gmail.com"
                   className="w-full border rounded px-3 py-2 bg-background"
                 />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium mb-1">Authorised signature</label>
+                <p className="text-xs text-text/60 mb-2">
+                  Printed above "Authorised Signatory" on the dummy GST invoice. A PNG with a
+                  transparent or white background, cropped close to the signature, prints best.
+                  Kept private: only admins and superadmins can see it.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="h-20 w-56 border rounded bg-white flex items-center justify-center overflow-hidden">
+                    {signaturePreview ? (
+                      <img src={signaturePreview} alt="Authorised signature" className="max-h-full max-w-full object-contain" />
+                    ) : (
+                      <span className="text-xs text-gray-400">
+                        {formData.signature_path ? "Loading…" : "No signature"}
+                      </span>
+                    )}
+                  </div>
+                  <label className={`inline-flex items-center gap-2 px-3 py-2 rounded border text-sm cursor-pointer hover:bg-background ${signatureUploading ? "opacity-50 pointer-events-none" : ""}`}>
+                    {signatureUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    {formData.signature_path ? "Replace" : "Upload"}
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleSignatureFile} />
+                  </label>
+                  {formData.signature_path && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev: any) => ({ ...prev, signature_path: null }))}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded border text-sm text-red-600 hover:bg-background"
+                    >
+                      <Trash2 className="w-4 h-4" /> Remove
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>

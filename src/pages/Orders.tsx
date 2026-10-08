@@ -18,9 +18,9 @@ import {
 } from "../lib/businessDetails";
 import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
 import {
-  WhatsAppShareDialog,
-  type WhatsAppShareRequest,
-} from "../components/WhatsAppShareDialog";
+  SendPdfOnWhatsAppDialog,
+  type SendPdfRequest,
+} from "../components/SendPdfOnWhatsAppDialog";
 import { webChatUrl, whatsappNumber } from "../lib/whatsappShare";
 import { FaWhatsapp } from "react-icons/fa";
 import toast from "react-hot-toast";
@@ -260,7 +260,7 @@ export function Orders() {
   const { settings: appSettings } = useAppSettings();
   /** Named and signed off in the WhatsApp status updates sent from the rows below. */
   const business = businessFromSettings(appSettings);
-  const [shareRequest, setShareRequest] = useState<WhatsAppShareRequest | null>(null);
+  const [shareRequest, setShareRequest] = useState<SendPdfRequest | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -951,24 +951,28 @@ export function Orders() {
   };
 
   /**
-   * Sends the invoice to the customer on WhatsApp. The dialog builds the
-   * PDF, stores it, and opens WhatsApp on the customer's chat with the
-   * message and the invoice link -- see WhatsAppShareDialog.
+   * Sends the order summary or the invoice, as the PDF file itself, to the
+   * customer's WhatsApp or any other number typed in -- see
+   * SendPdfOnWhatsAppDialog for why it takes two taps.
    */
   const handleShareOrder = (order: Order) => {
     const business = businessFromSettings(appSettings);
     const number = order.short_id || order.id.slice(0, 8);
     const grand = Number(order.total_amount || 0) - Number(order.discount_amt || 0);
+    const greeting =
+      `Hello ${order.full_name || ""}, thank you for your order with ${business.name}. ` +
+      `Order ${number}, grand total Rs. ${grand.toFixed(2)}.`;
     setShareRequest({
-      kind: "invoice",
-      title: `Invoice ${number}`,
+      title: `Order ${number}`,
       customerName: order.full_name,
       phone: order.phone,
-      fileName: documentFileName("invoice", number),
-      message:
-        `Hello ${order.full_name || ""}, thank you for your order with ${business.name}. ` +
-        `Order ${number}, grand total Rs. ${grand.toFixed(2)}.`,
-      makePdf: async () => (await buildOrderPdf(order, "invoice")).output("blob"),
+      documents: (["order", "invoice"] as const).map((kind) => ({
+        key: kind,
+        label: kind === "order" ? "Order summary" : "Invoice",
+        fileName: documentFileName(kind, number),
+        message: `${greeting} Your ${kind === "order" ? "order summary" : "invoice"} PDF follows.`,
+        makePdf: async () => (await buildOrderPdf(order, kind)).output("blob"),
+      })),
     });
   };
 
@@ -1891,7 +1895,7 @@ export function Orders() {
                                 onClick: () => handleInvoicePrint(order),
                               },
                               {
-                                label: "Share on WhatsApp",
+                                label: "Send PDF on WhatsApp",
                                 icon: <MessageCircle className="w-4 h-4" />,
                                 onClick: () => handleShareOrder(order),
                               },
@@ -2167,7 +2171,7 @@ export function Orders() {
                       disabled: downloadingPdf !== null,
                     },
                     {
-                      label: "Share on WhatsApp",
+                      label: "Send PDF on WhatsApp",
                       icon: <MessageCircle className="w-5 h-5" />,
                       onClick: () => handleShareOrder(selectedOrder),
                     },
@@ -2666,7 +2670,7 @@ export function Orders() {
               />
             )}
       
-      <WhatsAppShareDialog
+      <SendPdfOnWhatsAppDialog
         request={shareRequest}
         onClose={() => setShareRequest(null)}
       />

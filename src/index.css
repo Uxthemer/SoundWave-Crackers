@@ -75,6 +75,46 @@ textarea {
   .quantity-input {
     @apply w-20 px-3 py-2 text-center rounded-lg bg-background border-2 border-card-border/50 focus:outline-none focus:border-primary-orange;
   }
+
+  /* Body text of the articles in src/data/blogPosts.ts. There is no
+     typography plugin, so the plain h2/p/ul an article is written in is
+     styled here. The build's static copy of each post uses the same class,
+     so it reads the same before the app takes over. */
+  .blog-article {
+    @apply text-text/80 leading-relaxed;
+  }
+  .blog-article h2 {
+    @apply font-montserrat font-bold text-xl sm:text-2xl text-text mt-8 mb-3;
+  }
+  .blog-article h3 {
+    @apply font-montserrat font-semibold text-lg text-text mt-6 mb-2;
+  }
+  .blog-article p {
+    @apply mb-4;
+  }
+  .blog-article ul,
+  .blog-article ol {
+    @apply mb-4 pl-6 space-y-2;
+  }
+  .blog-article ul {
+    @apply list-disc;
+  }
+  .blog-article ol {
+    @apply list-decimal;
+  }
+  .blog-article a {
+    @apply text-primary-orange underline underline-offset-2 hover:text-primary-red;
+  }
+  .blog-article table {
+    @apply w-full text-sm mb-6 border-collapse block overflow-x-auto sm:table;
+  }
+  .blog-article th,
+  .blog-article td {
+    @apply border border-card-border/30 px-3 py-2 text-left align-top;
+  }
+  .blog-article th {
+    @apply bg-primary-orange/10 font-semibold;
+  }
 }
 
 /* Swiper Customization */

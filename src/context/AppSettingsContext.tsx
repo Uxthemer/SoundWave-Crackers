@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { setDefaultTitle } from "../lib/seo";
 
 interface AppSettings {
   id: string;
@@ -26,6 +27,8 @@ interface AppSettings {
   business_email?: string | null;
   /** Print the GSTIN on invoices. Off by default. */
   gst_on_invoice?: boolean;
+  /** Path in the private business-assets bucket; see lib/businessSignature. */
+  signature_path?: string | null;
 }
 
 interface AppSettingsContextType {
@@ -204,7 +207,8 @@ export function AppSettingsProvider({
       
       // Site Title
       if (s.site_title) {
-          document.title = s.site_title;
+          // Not over a page that has set its own title, such as a blog post.
+          setDefaultTitle(s.site_title);
       }
       
       // Favicon
