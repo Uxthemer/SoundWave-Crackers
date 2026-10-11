@@ -252,7 +252,9 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen pt-8 pb-12">
-      <div className="container mx-auto px-6">
+      {/* Full width with a slim gutter: this page is mostly wide tables, and
+          `container` capped it at 1280-1536px with 24px either side. */}
+      <div className="dashboard-embed w-full px-2 sm:px-4 lg:px-5">
         <div className="mb-6">
           <div className="flex items-center justify-between gap-4">
             <div>
