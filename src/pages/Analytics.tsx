@@ -18,7 +18,6 @@ import {
   Loader2,
   TrendingUp,
   Package,
-  DollarSign,
   Info,
 } from "lucide-react";
 import { ExpandableChart } from "../components/ExpandableChart";
@@ -26,6 +25,8 @@ import { ExpandablePanel } from "../components/ExpandablePanel";
 import { useDateRange } from "../hooks/useDateRange";
 import { useSeasons } from "../context/SeasonContext";
 import { DateRangeFilter } from "../components/DateRangeFilter";
+import { ReferredOrdersModal } from "../components/ReferredOrdersModal";
+import { buildReferrals, type Referrer } from "../lib/referrals";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -36,17 +37,11 @@ interface AnalyticsData {
   stateSales: { labels: string[]; data: number[]; counts?: number[] };
   productSales: { labels: string[]; quantities: number[]; revenue: number[] };
   monthlyRevenue: { labels: string[]; data: number[] };
+  // Total Revenue and Expected Revenue moved to the Dashboard's overview
+  // tiles; see lib/revenueStages.
   stats: {
-    totalRevenue: number;
-    /** totalRevenue split by where the order is, so the tile can be checked by hand. */
-    revenueByStage: StageTotal[];
-    /** Money actually received against those same orders. */
-    amountReceived: number;
-    expectedRevenue: number;
-    expectedByStage: StageTotal[];
     totalOrders: number;
     totalProducts: number;
-    averageOrderValue: number;
     availableStockValue: number;
   };
   stockList?: {
@@ -57,22 +52,8 @@ interface AnalyticsData {
     apr: number;
     value: number;
   }[];
-  referralList?: {
-    phone: string;
-    name?: string | null;
-    address?: string | null;
-    contact?: string | null;
-    ordersCount: number;
-    totalValue: number;
-    bonus: number;
-  }[];
+  referralList?: Referrer[];
   referralTotal?: number;
-}
-
-interface StageTotal {
-  stage: string;
-  amount: number;
-  orders: number;
 }
 
 /**
@@ -98,50 +79,6 @@ const COMPLETED_STATUSES = [
   "delivered",
   "payment completed",
 ];
-
-/**
- * Total Revenue is goods that have left the godown: Shipped and Delivered.
- * Everything still in hand -- an enquiry, a confirmed order, one on the
- * packing table -- is Expected Revenue until it ships, and a cancelled order
- * is neither. The two tiles therefore add up to the whole live order book,
- * and each is broken into its stages so either can be checked by hand
- * against the Orders page.
- */
-const REVENUE_STAGES: { stage: string; statuses: string[] }[] = [
-  { stage: "Delivered", statuses: ["delivered"] },
-  { stage: "Shipped", statuses: ["shipped", "dispatched"] },
-];
-const REVENUE_STATUSES = REVENUE_STAGES.flatMap((s) => s.statuses);
-
-/**
- * Expected Revenue is every status that is neither revenue nor cancelled.
- * The named stages are the ones the Orders page uses; anything else (a legacy
- * "payment completed", or a status added later) still counts, under Other,
- * rather than silently dropping out of both tiles.
- */
-const EXPECTED_STAGES: { stage: string; statuses: string[] }[] = [
-  { stage: "Enquiry Received", statuses: ["enquiry received"] },
-  { stage: "Order Confirmed", statuses: ["order confirmed"] },
-  { stage: "Packing", statuses: ["packing"] },
-];
-const CANCELLED_STATUS = "cancelled";
-
-function totalsByStage(
-  orders: any[],
-  stages: { stage: string; statuses: string[] }[],
-  amountOf: (order: any) => number
-): StageTotal[] {
-  return stages.map(({ stage, statuses }) => {
-    const inStage = orders.filter((o) =>
-      statuses.includes((o.status || "").toString().toLowerCase())
-    );
-    return {
-      stage,
-      amount: inStage.reduce((s, o) => s + amountOf(o), 0),
-      orders: inStage.length,
-    };
-  });
-}
 
 /**
  * Collapses the spellings of one place into a single bucket.
@@ -222,8 +159,10 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
 
   const [refSearch, setRefSearch] = useState("");
   const [refSortField, setRefSortField] =
-    useState<"name" | "ordersCount" | "bonus">("ordersCount");
+    useState<"name" | "ordersCount" | "totalValue" | "bonus">("ordersCount");
   const [refSortDir, setRefSortDir] = useState<"asc" | "desc">("desc");
+  /** The referrer whose orders are open in the popup. */
+  const [refOpen, setRefOpen] = useState<Referrer | null>(null);
 
   // See Orders.tsx: do not fetch until the season list has settled.
   useEffect(() => {
@@ -362,35 +301,6 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
 
       // stats
       const statusOf = (o: any) => (o.status || "").toString().toLowerCase();
-      const revenueOrders = (orders || []).filter((o: any) =>
-        REVENUE_STATUSES.includes(statusOf(o))
-      );
-      const expectedOrders = (orders || []).filter(
-        (o: any) =>
-          statusOf(o) !== CANCELLED_STATUS && !REVENUE_STATUSES.includes(statusOf(o))
-      );
-      const sumNet = (list: any[]) => list.reduce((s: number, o: any) => s + netAmount(o), 0);
-
-      const totalRevenue = sumNet(revenueOrders);
-      const expectedRevenue = sumNet(expectedOrders);
-      const averageOrderValue =
-        revenueOrders.length > 0 ? totalRevenue / revenueOrders.length : 0;
-
-      const revenueByStage = totalsByStage(revenueOrders, REVENUE_STAGES, netAmount);
-      const namedExpected = totalsByStage(expectedOrders, EXPECTED_STAGES, netAmount);
-      const otherExpected = {
-        stage: "Other",
-        amount: expectedRevenue - namedExpected.reduce((s, t) => s + t.amount, 0),
-        orders: expectedOrders.length - namedExpected.reduce((s, t) => s + t.orders, 0),
-      };
-      const expectedByStage =
-        otherExpected.orders > 0 ? [...namedExpected, otherExpected] : namedExpected;
-
-      const amountReceived = revenueOrders.reduce(
-        (s: number, o: any) => s + Number(o.amount_received || 0),
-        0
-      );
-
       const completedOrders = (orders || []).filter((o: any) =>
         COMPLETED_STATUSES.includes(statusOf(o))
       );
@@ -429,47 +339,11 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
           }) || [];
       const totalStockValue = stockList.reduce((s: number, p: any) => s + p.value, 0);
 
-      // referral aggregation
-      const referralMap: Record<string, { ordersCount: number; totalValue: number }> = {};
-      (orders || []).forEach((o: any) => {
-        const ref = (o.referred_by || "").toString().trim();
-        if (!ref) return;
-        if (!referralMap[ref]) referralMap[ref] = { ordersCount: 0, totalValue: 0 };
-        referralMap[ref].ordersCount += 1;
-        referralMap[ref].totalValue += netAmount(o);
-      });
-
-      const referralPhones = Object.keys(referralMap);
-      let referralProfiles: any[] = [];
-      if (referralPhones.length > 0) {
-        const { data: profiles, error: profErr } = await supabase
-          .from("profiles")
-          .select("id,full_name,phone,address,city,state,pincode")
-          .in("phone", referralPhones);
-        if (!profErr && profiles) referralProfiles = profiles as any[];
-      }
-
-      const referralList =
-        referralPhones.map((phone) => {
-          const agg = referralMap[phone];
-          const prof = referralProfiles.find((p) => (p.phone || "").toString() === phone);
-          const addressParts = prof
-            ? [prof.address, prof.city, prof.state, prof.pincode].filter(Boolean).join(", ")
-            : null;
-          const name = prof?.full_name || null;
-          const contact = prof?.phone || phone;
-          const totalValue = agg.totalValue;
-          const bonus = +(totalValue * 0.05);
-          return {
-            phone,
-            name,
-            address: addressParts,
-            contact,
-            ordersCount: agg.ordersCount,
-            totalValue,
-            bonus,
-          };
-        }) || [];
+      // Grouped on the referrer's last ten digits, named where the number is
+      // a customer's. This used to match the typed text exactly against a
+      // `profiles` table, so "+91 98…" and "98…" were two referrers and
+      // hardly anyone got a name.
+      const referralList = await buildReferrals(orders || []);
 
       const referralTotal = referralList.reduce((s, r) => s + r.bonus, 0);
 
@@ -496,14 +370,8 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
         },
         monthlyRevenue: { labels: Object.keys(monthlyData), data: Object.values(monthlyData) },
         stats: {
-          totalRevenue,
-          revenueByStage,
-          amountReceived,
-          expectedRevenue,
-          expectedByStage,
           totalOrders: (orders || []).length,
           totalProducts: productsSold,
-          averageOrderValue,
           availableStockValue: totalStockValue,
         },
         stockList,
@@ -535,12 +403,13 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
   const filteredReferral = useMemo(() => {
     if (!data?.referralList) return [];
     const s = data.referralList.filter((r) =>
-      `${r.name || ""} ${r.phone} ${r.address || ""}`.toLowerCase().includes(refSearch.toLowerCase())
+      `${r.name || ""} ${r.phone} ${r.phoneDisplay}`.toLowerCase().includes(refSearch.toLowerCase())
     );
     const sorted = [...s].sort((a, b) => {
       const dir = refSortDir === "asc" ? 1 : -1;
       if (refSortField === "name") return ((a.name || "") > (b.name || "") ? 1 : -1) * dir;
       if (refSortField === "ordersCount") return (a.ordersCount - b.ordersCount) * dir;
+      if (refSortField === "totalValue") return (a.totalValue - b.totalValue) * dir;
       return (a.bonus - b.bonus) * dir;
     });
     return sorted;
@@ -592,6 +461,7 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
 
   return (
     <div className="min-h-screen pt-8 pb-12">
+      <ReferredOrdersModal referrer={refOpen} onClose={() => setRefOpen(null)} />
       <div className="container mx-auto px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <h1 className="font-heading text-4xl">Analytics Dashboard</h1>
@@ -608,90 +478,8 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-card rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">
-                  Total Revenue
-                </h3>
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Shipped and Delivered orders only, after discount.
-                  </div>
-                </div>
-              </div>
-              <div className="bg-primary-orange/10 p-2 rounded-full">
-                <DollarSign className="w-4 h-4 text-primary-orange" />
-              </div>
-            </div>
-            <p className="text-xl font-bold mb-1">
-              ₹{data.stats.totalRevenue.toFixed(2)}
-            </p>
-            <p className="text-xs text-text/60">
-              Avg order: ₹{data.stats.averageOrderValue.toFixed(2)}
-            </p>
-            <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
-              {data.stats.revenueByStage.map((s) => (
-                <div key={s.stage} className="flex justify-between gap-2">
-                  <dt>
-                    {s.stage} <span className="text-text/50">({s.orders})</span>
-                  </dt>
-                  <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
-                </div>
-              ))}
-              <div className="flex justify-between gap-2 pt-1 text-green-700 dark:text-green-400">
-                <dt>Payment received on these</dt>
-                <dd className="tabular-nums">₹{data.stats.amountReceived.toFixed(2)}</dd>
-              </div>
-            </dl>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="bg-card rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">
-                  Expected Revenue
-                </h3>
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Every order not yet shipped -- enquiries, confirmed and packing
-                    -- after discount. Cancelled orders are not counted. An order
-                    moves into Total Revenue when it ships.
-                  </div>
-                </div>
-              </div>
-              <div className="bg-primary-orange/10 p-2 rounded-full">
-                <DollarSign className="w-4 h-4 text-primary-orange" />
-              </div>
-            </div>
-            <p className="text-xl font-bold mb-1">
-              ₹{data.stats.expectedRevenue.toFixed(2)}
-            </p>
-            <p className="text-xs text-text/60">Not yet shipped</p>
-            <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
-              {data.stats.expectedByStage.map((s) => (
-                <div key={s.stage} className="flex justify-between gap-2">
-                  <dt>
-                    {s.stage} <span className="text-text/50">({s.orders})</span>
-                  </dt>
-                  <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
-                </div>
-              ))}
-            </dl>
-          </motion.div>
-
+        {/* Total Revenue and Expected Revenue are on the Dashboard overview now. */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -872,7 +660,7 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
             <div className="flex flex-col sm:flex-row gap-2 mb-3">
               <input
                 type="text"
-                placeholder="Search name / phone / address..."
+                placeholder="Search name / phone..."
                 value={refSearch}
                 onChange={(e) => setRefSearch(e.target.value)}
                 className="w-full sm:flex-1 p-2 border rounded bg-white"
@@ -884,6 +672,7 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
                   className="flex-1 sm:flex-none p-2 border rounded"
                 >
                   <option value="ordersCount">Orders Referred</option>
+                  <option value="totalValue">Orders Value</option>
                   <option value="bonus">Referral Bonus</option>
                   <option value="name">Name</option>
                 </select>
@@ -902,10 +691,9 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
                   <thead className="sticky top-0 z-[1] bg-card">
                     <tr className="bg-card/50 text-left">
                       <th className="p-3">S.No</th>
-                      <th className="p-3">User / Phone</th>
-                      <th className="p-3">Address</th>
-                      <th className="p-3 text-right">Contact</th>
+                      <th className="p-3">Referred by</th>
                       <th className="p-3 text-center">Orders Referred</th>
+                      <th className="p-3 text-right">Orders Value (₹)</th>
                       <th className="p-3 text-right">Referral Bonus (₹)</th>
                     </tr>
                   </thead>
@@ -915,29 +703,35 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
                         <tr key={r.phone} className="border-t">
                           <td className="p-3">{idx + 1}</td>
                           <td className="p-3">
-                            {r.name ? r.name : r.phone}
-                            <div className="text-xs text-text/60">{r.phone}</div>
+                            {/* Opens the orders this person referred. */}
+                            <button
+                              type="button"
+                              onClick={() => setRefOpen(r)}
+                              className="text-left hover:text-primary-orange hover:underline"
+                              title="Show the orders referred"
+                            >
+                              <span className="font-medium">{r.name || r.phoneDisplay}</span>
+                              {r.name && <div className="text-xs text-text/60">{r.phoneDisplay}</div>}
+                            </button>
                           </td>
-                          <td className="p-3">{r.address || "-"}</td>
-                          <td className="p-3 text-right">{r.contact || "-"}</td>
                           <td className="p-3 text-center">{r.ordersCount}</td>
-                          <td className="p-3 text-right">₹{r.bonus.toFixed(2)}</td>
+                          <td className="p-3 text-right tabular-nums">₹{r.totalValue.toFixed(2)}</td>
+                          <td className="p-3 text-right tabular-nums">₹{r.bonus.toFixed(2)}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="p-6 text-center text-text/60">No referrals found</td>
+                        <td colSpan={5} className="p-6 text-center text-text/60">No referrals found</td>
                       </tr>
                     )}
                   </tbody>
+                  {/* Totals follow the search, so a filtered list adds up on its own. */}
                   <tfoot>
                     <tr className="border-t">
-                      <td className="p-3 font-bold">Total</td>
-                      <td />
-                      <td />
-                      <td />
+                      <td className="p-3 font-bold" colSpan={2}>Total</td>
                       <td className="p-3 text-center font-bold">{filteredReferral.reduce((s, r) => s + r.ordersCount, 0)}</td>
-                      <td className="p-3 text-right font-bold">₹{(data.referralTotal || 0).toFixed(2)}</td>
+                      <td className="p-3 text-right font-bold tabular-nums">₹{filteredReferral.reduce((s, r) => s + r.totalValue, 0).toFixed(2)}</td>
+                      <td className="p-3 text-right font-bold tabular-nums">₹{filteredReferral.reduce((s, r) => s + r.bonus, 0).toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>

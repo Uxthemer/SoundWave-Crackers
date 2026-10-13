@@ -337,3 +337,15 @@ textarea {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* The Dashboard's tabs are whole pages (Orders, Stock, Expenses, Analytics,
+   Vendors), each wrapped in its own `container px-6` for when it stands alone
+   at its own route. Inside the Dashboard that stacked a second width cap and
+   a second 24px gutter on each side, and the tables lost columns to blank
+   space. Inside the dashboard only, the inner container takes the full width
+   it is given; the Dashboard's own padding is the one gutter. */
+.dashboard-embed .container {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
