@@ -58,8 +58,13 @@ export function UserMenu() {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-card rounded-lg shadow-lg py-2 z-50">
-          <div className="px-4 py-2 border-b border-card-border/10">
+        // As wide as its longest item, so no entry wraps onto two lines, and no
+        // taller than the screen below the nav: a superadmin has a dozen
+        // entries, and on a laptop the last ones (Sign Out among them) fell
+        // off the bottom with no way to reach them. The name and Sign Out
+        // stay put; the list between them scrolls.
+        <div className="absolute right-0 mt-2 w-max min-w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5rem)] flex flex-col bg-card rounded-lg shadow-lg py-2 z-50 whitespace-nowrap">
+          <div className="px-4 py-2 border-b border-card-border/10 shrink-0">
             <p className="font-montserrat font-bold truncate">{userProfile?.full_name || 'User'}</p>
             <p className="text-sm text-text/60 truncate">{user.email}</p>
             {userRole?.name === 'superadmin' && (
@@ -67,7 +72,7 @@ export function UserMenu() {
             )}
           </div>
 
-          <div className="py-1">
+          <div className="py-1 flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <Link
               to="/profile"
               className="flex items-center px-4 py-2 hover:bg-card/70 transition-colors"
@@ -199,7 +204,7 @@ export function UserMenu() {
             )}
           </div>
 
-          <div className="border-t border-card-border/10 py-1">
+          <div className="border-t border-card-border/10 py-1 shrink-0">
             <button
               onClick={handleSignOut}
               className="flex items-center px-4 py-2 w-full text-left hover:bg-card/70 transition-colors text-primary-red"

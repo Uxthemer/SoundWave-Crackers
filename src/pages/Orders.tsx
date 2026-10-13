@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
@@ -485,6 +486,42 @@ export function Orders() {
       setLoading(false);
     }
   };
+
+  /**
+   * `/orders?order=<id>` opens that order's details -- the link behind each
+   * order number in Analytics → Referral Bonuses. The order may belong to a
+   * season other than the one on screen, so when it is not in the loaded list
+   * it is fetched on its own. Done once per link.
+   */
+  const [searchParams] = useSearchParams();
+  const linkedOrderId = searchParams.get("order");
+  const openedLinkedOrder = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkedOrderId || loading || openedLinkedOrder.current === linkedOrderId) return;
+    openedLinkedOrder.current = linkedOrderId;
+    const inList = orders.find((o) => o.id === linkedOrderId || o.short_id === linkedOrderId);
+    if (inList) {
+      setSelectedOrder(inList);
+      return;
+    }
+    (async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(
+          `*, items:order_items ( *, product:products ( id, name, product_code, categories:categories ( name ) ), pack:combo_packs ( id, name, pack_code ) )`
+        )
+        // An order number is not a uuid, and comparing one against `id` makes
+        // Postgres reject the whole query -- so pick the column by its shape.
+        .eq(/^[0-9a-f-]{36}$/i.test(linkedOrderId) ? "id" : "short_id", linkedOrderId)
+        .maybeSingle();
+      if (error || !data) {
+        toast.error("That order could not be found");
+        return;
+      }
+      attachPackDetails([data] as any[]);
+      setSelectedOrder(data as Order);
+    })();
+  }, [linkedOrderId, loading, orders]);
 
   // compute revenue/cost/discount/profit for an order
   const computeProfitBreakdown = (order: Order) => {

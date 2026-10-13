@@ -2,6 +2,26 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 import { format, startOfDay, endOfDay } from "date-fns";
 import { DashboardStats } from "../types";
+import { revenueSummary, SALE_STATUSES, statusOf, type RevenueSummary } from "../lib/revenueStages";
+import { personNameKey } from "../lib/personName";
+
+/** The Expenses tile: what went out in the period, by person and by type. */
+export interface ExpenseSummary {
+  /** Everything but credits -- the same total the Expenses page reports as spend. */
+  total: number;
+  byUser: { name: string; amount: number }[];
+  /** Every type, credits included, so the tile can be checked against the page. */
+  byType: { type: string; amount: number }[];
+}
+
+const EMPTY_REVENUE: RevenueSummary = {
+  totalRevenue: 0,
+  revenueByStage: [],
+  amountReceived: 0,
+  averageOrderValue: 0,
+  expectedRevenue: 0,
+  expectedByStage: [],
+};
 
 export function useDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
@@ -66,8 +86,16 @@ export function useDashboard() {
     outOfStockCount: 0,
   });
 
+  const [revenue, setRevenue] = useState<RevenueSummary>(EMPTY_REVENUE);
+  const [expenses, setExpenses] = useState<ExpenseSummary>({ total: 0, byUser: [], byType: [] });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Only the newest request may write the tiles. Switching season, or a
+  // realtime refresh landing mid-load, used to let an older, slower answer
+  // arrive last and overwrite the season on screen.
+  const latestRequest = useRef(0);
 
   /** The range currently on screen, so realtime refreshes reuse it. */
   const lastRangeRef = useRef<{
@@ -102,6 +130,8 @@ export function useDashboard() {
       endDate: endOfDay(new Date(2100, 11, 31)),
     }
   ) => {
+    const request = ++latestRequest.current;
+    const isStale = () => request !== latestRequest.current;
     try {
       setLoading(true);
       lastRangeRef.current = range;
@@ -124,7 +154,10 @@ export function useDashboard() {
           order_items:order_items (
             price,
             quantity,
-            apr_snapshot
+            apr_snapshot,
+            combo_pack_id,
+            product:products ( id, name ),
+            pack:combo_packs ( id, name )
           )
         `
         );
@@ -208,6 +241,20 @@ export function useDashboard() {
         .eq("role_id", customerRoleId);
 
       if (usersError) throw usersError;
+
+      // Expenses for the same period. A failure here leaves the tile empty
+      // rather than blanking the whole dashboard.
+      const { data: expenseRows, error: expensesError } = await supabase
+        .from("expenses")
+        .select("spend_by, amount, type")
+        .gte("date", startDate.toISOString())
+        .lte("date", endDate.toISOString());
+      if (expensesError) console.warn("Expenses for the dashboard failed:", expensesError);
+
+      if (isStale()) return;
+
+      setRevenue(revenueSummary(orders || []));
+      setExpenses(summariseExpenses(expenseRows || []));
 
       setStats({
         // keep totalOrders as total fetched orders in range (matches analytics)
@@ -317,48 +364,38 @@ export function useDashboard() {
           .slice(0, 8)
           .map((p: any) => ({ name: p.name || `#${p.id}`, stock: Number(p.stock ?? 0) }));
 
+        if (isStale()) return;
         setLowStockChart({
           labels: lowForChart.map((l) => l.name),
           datasets: [{ label: "Stock", data: lowForChart.map((l) => l.stock), backgroundColor: "#E53E3E" }],
         });
 
-        // top SKUs by revenue in the selected range
-        let itemsQuery = supabase
-          .from("order_items")
-          // The embed is NOT aliased on purpose: PostgREST resolves the filter
-          // below against the embed's name, so `order:orders!inner(...)` would
-          // silently fail to match `orders.season_id` and the season filter
-          // would be ignored.
-          .select(
-            "price,quantity,combo_pack_id,product:products(id,name,product_code),pack:combo_packs(id,name,pack_code),orders!inner(season_id)"
+        // Top SKUs by revenue, from the very orders fetched above -- so they
+        // are exactly the selected season or dates, by the same filter as the
+        // tiles. They used to come from a second query on order_items, which
+        // could disagree with it, and enquiries and cancelled orders counted
+        // as sales. Only confirmed-onward orders count now.
+        const revMap: Record<string, { name: string; revenue: number; qty: number }> = {};
+        (orders || [])
+          .filter((o: any) => SALE_STATUSES.includes(statusOf(o)))
+          .forEach((o: any) =>
+            (o.order_items || []).forEach((it: any) => {
+              // A family pack sells as itself, so it ranks as its own line here
+              // rather than disappearing into "unknown".
+              const pid = it.product?.id ?? it.pack?.id ?? "unknown";
+              const name =
+                it.product?.name ??
+                (it.pack?.name ? `${it.pack.name} (pack)` : `#${pid}`);
+              const qty = Number(it.quantity) || 0;
+              const amount = (Number(it.price) || 0) * qty;
+              if (!revMap[pid]) revMap[pid] = { name, revenue: 0, qty: 0 };
+              revMap[pid].revenue += amount;
+              revMap[pid].qty += qty;
+            })
           );
 
-        if (seasonId) {
-          itemsQuery = itemsQuery.eq("orders.season_id", seasonId);
-        } else {
-          itemsQuery = itemsQuery
-            .gte("created_at", startDate.toISOString())
-            .lte("created_at", endDate.toISOString());
-        }
-
-        const { data: orderItems } = await itemsQuery;
-
-        const revMap: Record<string, { name: string; revenue: number; qty: number }> = {};
-        (orderItems || []).forEach((it: any) => {
-          // A family pack sells as itself, so it ranks as its own line here
-          // rather than disappearing into "unknown".
-          const pid = it.product?.id ?? it.pack?.id ?? "unknown";
-          const name =
-            it.product?.name ??
-            (it.pack?.name ? `${it.pack.name} (pack)` : `#${pid}`);
-          const qty = Number(it.quantity) || 0;
-          const amount = (Number(it.price) || 0) * qty;
-          if (!revMap[pid]) revMap[pid] = { name, revenue: 0, qty: 0 };
-          revMap[pid].revenue += amount;
-          revMap[pid].qty += qty;
-        });
-
         const topSkus = Object.values(revMap).sort((a, b) => b.revenue - a.revenue);
+        if (isStale()) return;
         setTopSkusChart({
           labels: topSkus.map((s) => `${s.name} (Sold: ${s.qty})`),
           datasets: [{ label: "Revenue", data: topSkus.map((s) => Math.round(s.revenue)), backgroundColor: "#FF8A65" }],
@@ -370,9 +407,9 @@ export function useDashboard() {
         // keep charts empty but don't throw
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      if (!isStale()) setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   };
 
@@ -410,6 +447,8 @@ export function useDashboard() {
 
   return {
     stats,
+    revenue,
+    expenses,
     salesData,
     categoryData,
     topSkusChart,
@@ -418,5 +457,43 @@ export function useDashboard() {
     loading,
     error,
     fetchDashboardData,
+  };
+}
+
+/**
+ * Every spelling of one person's name is one person (see lib/personName),
+ * shown under the spelling they use most.
+ */
+function summariseExpenses(rows: any[]): ExpenseSummary {
+  const users = new Map<string, { amount: number; spellings: Map<string, number> }>();
+  const types = new Map<string, number>();
+  let total = 0;
+
+  rows.forEach((row) => {
+    const amount = Number(row.amount || 0);
+    const type = String(row.type || "other");
+    types.set(type, (types.get(type) || 0) + amount);
+    if (type === "credit") return;
+
+    total += amount;
+    const label = String(row.spend_by ?? "").trim() || "Unknown";
+    const key = personNameKey(label) || label.toLowerCase();
+    const entry = users.get(key) ?? { amount: 0, spellings: new Map<string, number>() };
+    entry.amount += amount;
+    entry.spellings.set(label, (entry.spellings.get(label) || 0) + 1);
+    users.set(key, entry);
+  });
+
+  return {
+    total,
+    byUser: [...users.values()]
+      .map((u) => ({
+        name: [...u.spellings.entries()].sort((a, b) => b[1] - a[1])[0][0],
+        amount: u.amount,
+      }))
+      .sort((a, b) => b.amount - a.amount),
+    byType: [...types.entries()]
+      .map(([type, amount]) => ({ type, amount }))
+      .sort((a, b) => b.amount - a.amount),
   };
 }

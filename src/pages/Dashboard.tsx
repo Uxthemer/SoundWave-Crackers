@@ -1,6 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Users,
   Package,
   DollarSign,
   TrendingUp,
@@ -13,7 +12,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  IndianRupee,
+  Eye,
+  EyeOff,
+  Wallet,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -72,6 +73,8 @@ export function Dashboard() {
   const [isApplyingCustom, setIsApplyingCustom] = useState(false);
   const {
     stats,
+    revenue,
+    expenses,
     salesData,
     categoryData,
     loading,
@@ -89,6 +92,8 @@ export function Dashboard() {
   const [activeTab, setActiveTab] = useState<
     "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors" | "quotations"
   >("overview");
+  // Profit is hidden until the eye is pressed, every time the page opens.
+  const [showProfit, setShowProfit] = useState(false);
   const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
   // recent lists
@@ -307,115 +312,175 @@ export function Dashboard() {
           {activeTab === "overview" && (
             <>
               {/* keep all original dashboard overview markup here */}
-              {/* Stats Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-                <button
-                  onClick={() => navigate("/orders")}
-                  className="card hover:border-primary-orange transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-text/60">Total Orders</p>
-                      <h3 className="text-2xl font-bold">
-                        {stats.totalOrders}
-                      </h3>
-                    </div>
-                    <div className="bg-primary-orange/10 p-3 rounded-full">
-                      <ShoppingCart className="w-6 h-6 text-primary-orange" />
+              {/* Stats Grid. Total Revenue and Expected Revenue moved here
+                  from Analytics (lib/revenueStages); the old Revenue tile
+                  showed the same figure as Total Revenue and is gone. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                {/* Orders, users, money received and profit, one tile. Rows
+                    rather than a 2x2 grid: with four tiles to a desktop line
+                    a tile is ~250px wide, and a lakh figure needs the width. */}
+                <div className="card">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <p className="text-text/60">Orders &amp; Payments</p>
+                    <div className="bg-primary-orange/10 p-2.5 rounded-full">
+                      <ShoppingCart className="w-5 h-5 text-primary-orange" />
                     </div>
                   </div>
-                  {/* <div className="flex items-center text-sm">
-              <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-500">+12%</span>
-              <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div> */}
-                </button>
-
-                <button
-                  onClick={() => navigate("/users")}
-                  className="card hover:border-primary-orange transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <p className="text-text/60">Total Users</p>
-                      <h3 className="text-2xl font-bold">{stats.totalUsers}</h3>
-                    </div>
-                    <div className="bg-primary-yellow/10 p-3 rounded-full">
-                      <Users className="w-6 h-6 text-primary-yellow" />
-                    </div>
-                  </div>
-                  {/* <div className="flex items-center text-sm">
-              <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-500">+5%</span>
-              <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div> */}
-                </button>
-
-                <button
-                  onClick={() => navigate("/orders")}
-                  className="card hover:border-primary-orange transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div style={{ textAlign: "start" }}>
-                      <p className="text-text/60">Revenue</p>
-                      <h3 className="text-2xl font-bold">
-                        ₹{stats.totalRevenue.toFixed(2)}
-                      </h3>
-                      <p className="text-xs text-text/50">Shipped &amp; delivered</p>
-                    </div>
-                    <div className="bg-primary-red/10 p-3 rounded-full">
-                      <DollarSign className="w-6 h-6 text-primary-red" />
-                    </div>
-                  </div>
-                  {/* <div className="flex items-center text-sm">
-              <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-500">+18%</span>
-              <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div> */}
-                </button>
-
-                <button
-                  onClick={() => navigate("/orders")}
-                  className="card hover:border-primary-orange transition-colors"
-                  title="Payments recorded on every order that is not cancelled. Amounts are already net of discount."
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div style={{ textAlign: "start" }}>
-                      <p className="text-text/60">Total Amount Received</p>
-                      <h3 className="text-2xl font-bold">
-                        ₹{stats.amountReceived.toFixed(2)}
-                      </h3>
-                      <p className="text-xs text-text/50">
+                  <div className="space-y-2 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => navigate("/orders")}
+                      className="w-full flex items-baseline justify-between gap-2 hover:text-primary-orange"
+                    >
+                      <span className="text-text/60">Total orders</span>
+                      <span className="text-lg font-bold tabular-nums">{stats.totalOrders}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/users")}
+                      className="w-full flex items-baseline justify-between gap-2 hover:text-primary-orange"
+                    >
+                      <span className="text-text/60 flex items-center gap-1">
+                        Total users
+                      </span>
+                      <span className="text-lg font-bold tabular-nums">{stats.totalUsers}</span>
+                    </button>
+                    <div
+                      className="pt-2 border-t border-card-border/10"
+                      title="Payments recorded on every order that is not cancelled. Amounts are already net of discount."
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-text/60 flex items-center gap-1">
+                          Amt Received
+                        </span>
+                        <span className="text-lg font-bold tabular-nums">₹{stats.amountReceived.toFixed(2)}</span>
+                      </div>
+                      <p className="text-xs text-text/50 text-right">
                         Discount given: ₹{stats.discountGiven.toFixed(2)}
                       </p>
                     </div>
-                    <div className="bg-green-500/10 p-3 rounded-full">
-                      <IndianRupee className="w-6 h-6 text-green-600" />
+                    {/* Profit stays hidden until the eye is pressed, so it is
+                        not on show to whoever is standing behind the screen. */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-card-border/10">
+                      <span className="text-text/60 flex items-center gap-1.5">
+                        Profit
+                        <button
+                          type="button"
+                          onClick={() => setShowProfit((v) => !v)}
+                          className="p-1 rounded-full hover:bg-green-500/10"
+                          aria-label={showProfit ? "Hide profit" : "Show profit"}
+                          title={showProfit ? "Hide profit" : "Show profit"}
+                        >
+                          {showProfit ? (
+                            <EyeOff className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-green-600" />
+                          )}
+                        </button>
+                      </span>
+                      <span className="text-lg font-bold tabular-nums">
+                        {showProfit ? `₹${stats.totalProfit.toFixed(2)}` : "₹ ••••••"}
+                      </span>
                     </div>
                   </div>
-                </button>
+                </div>
 
-                <button
-                  onClick={() => navigate("/orders")}
-                  className="card hover:border-primary-orange transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div style={{ textAlign: "start" }}>
-                      <p className="text-text/60">Profit</p>
-                      <h3 className="text-2xl font-bold">
-                        ₹{stats.totalProfit.toFixed(2)}
-                      </h3>
+                {/* Total Revenue */}
+                <div className="card" title="Shipped and Delivered orders only, after discount.">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-text/60">Total Revenue</p>
+                      <h3 className="text-2xl font-bold">₹{revenue.totalRevenue.toFixed(2)}</h3>
+                      <p className="text-xs text-text/50">
+                        Shipped &amp; delivered · Avg order ₹{revenue.averageOrderValue.toFixed(2)}
+                      </p>
                     </div>
-                    <div className="bg-green-500/10 p-3 rounded-full">
-                      <TrendingUp className="w-6 h-6 text-green-500" />
+                    <div className="bg-primary-red/10 p-2.5 rounded-full">
+                      <DollarSign className="w-5 h-5 text-primary-red" />
                     </div>
                   </div>
-                  {/* <div className="flex items-center text-sm">
-              <TrendingUp className="w-4 h-4 text-green-500 mr-1" />
-              <span className="text-green-500">+15%</span>
-              <span className="text-text/60 ml-2">vs last {dateRange}</span>
-            </div> */}
-                </button>
+                  <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
+                    {revenue.revenueByStage.map((s) => (
+                      <div key={s.stage} className="flex justify-between gap-2">
+                        <dt>
+                          {s.stage} <span className="text-text/50">({s.orders})</span>
+                        </dt>
+                        <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
+                      </div>
+                    ))}
+                    <div className="flex justify-between gap-2 pt-1 text-green-700 dark:text-green-400">
+                      <dt>Payment received on these</dt>
+                      <dd className="tabular-nums">₹{revenue.amountReceived.toFixed(2)}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                {/* Expected Revenue */}
+                <div
+                  className="card"
+                  title="Every order not yet shipped -- enquiries, confirmed and packing -- after discount. Cancelled orders are not counted. An order moves into Total Revenue when it ships."
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-text/60">Expected Revenue</p>
+                      <h3 className="text-2xl font-bold">₹{revenue.expectedRevenue.toFixed(2)}</h3>
+                      <p className="text-xs text-text/50">Not yet shipped</p>
+                    </div>
+                    <div className="bg-primary-yellow/10 p-2.5 rounded-full">
+                      <TrendingUp className="w-5 h-5 text-primary-yellow" />
+                    </div>
+                  </div>
+                  <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
+                    {revenue.expectedByStage.map((s) => (
+                      <div key={s.stage} className="flex justify-between gap-2">
+                        <dt>
+                          {s.stage} <span className="text-text/50">({s.orders})</span>
+                        </dt>
+                        <dd className="tabular-nums">₹{s.amount.toFixed(2)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+
+                {/* Expenses: total, by person, by type */}
+                <div className="card">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-text/60">Expenses</p>
+                      <h3 className="text-2xl font-bold">₹{expenses.total.toFixed(2)}</h3>
+                      <p className="text-xs text-text/50">All but credits</p>
+                    </div>
+                    <div className="bg-primary-red/10 p-2.5 rounded-full">
+                      <Wallet className="w-5 h-5 text-primary-red" />
+                    </div>
+                  </div>
+                  {expenses.byUser.length + expenses.byType.length === 0 ? (
+                    <p className="mt-2 pt-2 border-t border-card-border/10 text-xs text-text/50">
+                      No expenses in this period
+                    </p>
+                  ) : (
+                    <div className="mt-2 pt-2 border-t border-card-border/10 grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3 text-xs text-text/70">
+                      <dl className="space-y-0.5 min-w-0">
+                        <dt className="font-semibold text-text/60 mb-0.5">By person</dt>
+                        {expenses.byUser.map((u) => (
+                          <div key={u.name} className="flex justify-between gap-2">
+                            <dd className="truncate" title={u.name}>{u.name}</dd>
+                            <dd className="tabular-nums">₹{u.amount.toFixed(0)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <dl className="space-y-0.5 min-w-0">
+                        <dt className="font-semibold text-text/60 mb-0.5">By type</dt>
+                        {expenses.byType.map((t) => (
+                          <div key={t.type} className="flex justify-between gap-2">
+                            <dd className="capitalize truncate">{t.type}</dd>
+                            <dd className="tabular-nums">₹{t.amount.toFixed(0)}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Charts + Recent / Users column */}
