@@ -5,6 +5,7 @@ import { Phone, Mail, LogIn, AlertCircle, Lock, KeyRound, Eye, EyeOff, ArrowRigh
 import { useAuth } from "../context/AuthContext";
 import { OTPVerification } from "../components/OTPVerification";
 import { supabase } from "../lib/supabase";
+import { requestPasswordReset } from "../lib/passwordReset";
 import { decodeStoredPassword } from "../lib/legacyPasswordStore";
 import toast from "react-hot-toast";
 import { z } from "zod";
@@ -315,10 +316,9 @@ export function Login() {
         : configuredSite || window.location.origin;
       const redirectUrl = `${base.replace(/\/+$/, "")}/update-password`;
 
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        parsed.data,
-        { redirectTo: redirectUrl }
-      );
+      // Not supabase.auth: see lib/passwordReset for why a reset requested
+      // through the app's PKCE client only worked in the browser it came from.
+      const { error } = await requestPasswordReset(parsed.data, redirectUrl);
       if (error) throw error;
 
       // Supabase answers the same way whether or not the address is
