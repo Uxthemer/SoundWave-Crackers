@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { LogOut, Settings, ShoppingBag, UserCircle, BarChart2, Package, Building2, CalendarRange, ClipboardList, Boxes, Users, FileText } from 'lucide-react';
@@ -11,6 +11,35 @@ export function UserMenu() {
   // Lives here rather than in the dropdown, which closes as the form opens.
   const [showDummyInvoice, setShowDummyInvoice] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownMaxHeight, setDropdownMaxHeight] = useState<number | null>(null);
+
+  // The dropdown may be no taller than the room actually left below it. A
+  // fixed allowance (100dvh minus 5rem) was right for a desktop header but
+  // not a phone's, which is taller, and it ignored the Home / Quick Buy bar
+  // fixed to the bottom of small screens -- so on a phone the last entries,
+  // Sign Out among them, sat under that bar or off the screen. Measured on
+  // open and again whenever the viewport changes: rotation, the address bar
+  // showing or hiding, the keyboard.
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const measure = () => {
+      const el = dropdownRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      const viewport = window.visualViewport?.height ?? window.innerHeight;
+      // BottomNav in App.tsx: h-16, below the sm breakpoint only.
+      const bottomBar = window.matchMedia('(max-width: 639.98px)').matches ? 64 : 0;
+      setDropdownMaxHeight(Math.max(160, Math.floor(viewport - top - bottomBar - 8)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.visualViewport?.addEventListener('resize', measure);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.visualViewport?.removeEventListener('resize', measure);
+    };
+  }, [isOpen]);
   const { user, userProfile, userRole, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -59,11 +88,14 @@ export function UserMenu() {
 
       {isOpen && (
         // As wide as its longest item, so no entry wraps onto two lines, and no
-        // taller than the screen below the nav: a superadmin has a dozen
-        // entries, and on a laptop the last ones (Sign Out among them) fell
-        // off the bottom with no way to reach them. The name and Sign Out
-        // stay put; the list between them scrolls.
-        <div className="absolute right-0 mt-2 w-max min-w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5rem)] flex flex-col bg-card rounded-lg shadow-lg py-2 z-50 whitespace-nowrap">
+        // taller than the room below it (measured above). The name and Sign
+        // Out stay put; the list between them scrolls. z-[60] keeps it over
+        // the bottom bar, which is z-50.
+        <div
+          ref={dropdownRef}
+          style={dropdownMaxHeight ? { maxHeight: dropdownMaxHeight } : undefined}
+          className="absolute right-0 mt-2 w-max min-w-56 max-w-[calc(100vw-1rem)] max-h-[calc(100dvh-5rem)] flex flex-col bg-card rounded-lg shadow-lg py-2 z-[60] whitespace-nowrap"
+        >
           <div className="px-4 py-2 border-b border-card-border/10 shrink-0">
             <p className="font-montserrat font-bold truncate">{userProfile?.full_name || 'User'}</p>
             <p className="text-sm text-text/60 truncate">{user.email}</p>
