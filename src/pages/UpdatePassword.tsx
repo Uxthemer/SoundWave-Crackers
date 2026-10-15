@@ -73,8 +73,10 @@ function readLinkError(): string | null {
 
   // The generic Supabase wording ("Email link is invalid or has expired")
   // leaves people re-clicking the same dead link, so say what to do.
+  // Supabase says "expired" for a link that has already been opened once as
+  // well as for an old one, so the message has to cover both.
   if (code === "otp_expired" || /expired/i.test(description ?? "")) {
-    return "This reset link has expired. Reset links are valid for a short time — please request a new one.";
+    return "This reset link has expired or has already been used. Each link works once, for about an hour — please request a new one.";
   }
   return description
     ? description.replace(/\+/g, " ")
@@ -152,7 +154,11 @@ export function UpdatePassword() {
     }
 
     // 3. An implicit-flow link carries the session itself, which likewise
-    //    does not care which device opened it.
+    //    does not care which device opened it. This is what a reset requested
+    //    through lib/passwordReset produces. The app's own client is PKCE and
+    //    declines to read this fragment itself ("Not a valid PKCE flow url"),
+    //    which is fine: setSession waits for that client to finish starting
+    //    up, then installs the session from the tokens read above.
     if (LINK_PARAMS.accessToken && LINK_PARAMS.refreshToken) {
       (async () => {
         const { error } = await supabase.auth.setSession({
