@@ -10,6 +10,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
     Loader2,
     ScanLine as ScanIcon,
     X,
+    TrendingUp,
+    EyeOff,
   } from "lucide-react";
   import { format } from "date-fns";
   import toast from "react-hot-toast";
@@ -56,6 +58,40 @@ import { lazy, Suspense, useEffect, useState } from "react";
     );
   }
 
+  /**
+   * What a quotation would make if it were accepted as it stands.
+   *
+   * Cost is the one frozen on each line when it was saved
+   * (quotation_items.apr_snapshot, stamped by the database -- the same rule an
+   * order's profit uses), so it does not drift as catalogue costs change. A
+   * line with no cost on record is counted separately rather than as free:
+   * reading it as zero would show its whole price as profit.
+   */
+  function quotationProfit(quote: any) {
+    const items: any[] = quote.items || [];
+    let cost = 0;
+    let uncosted = 0;
+    items.forEach((item) => {
+      if (item.apr_snapshot == null) {
+        uncosted += 1;
+        return;
+      }
+      cost += Number(item.apr_snapshot) * Number(item.quantity || 0);
+    });
+    const value = Number(quote.total_amount || 0);
+    const profit = value - cost;
+    return {
+      value,
+      cost,
+      profit,
+      margin: value > 0 ? (profit / value) * 100 : 0,
+      uncosted,
+    };
+  }
+
+  const money = (value: number) =>
+    value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   export function QuotationsList() {
     const { quotations, loading, fetchQuotations, saveQuotation, deleteQuotation } = useQuotations();
     const { loadQuotation, openCart } = useCartStore();
@@ -74,6 +110,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
     // The quotation open in the read-only view, and the one currently being
     // turned into an order.
     const [viewing, setViewing] = useState<any | null>(null);
+    /** Whether the view opened on its profit (the row's profit button). */
+    const [viewingProfit, setViewingProfit] = useState(false);
     const [converting, setConverting] = useState<string | null>(null);
     // The quotation open in the edit popup.
     const [editing, setEditing] = useState<any | null>(null);
@@ -290,7 +328,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
         onClose={() => setShareRequest(null)}
       />
       {viewing && (
-        <QuotationView quote={viewing} onClose={() => setViewing(null)} />
+        <QuotationView
+          quote={viewing}
+          canSeeProfit={canScan}
+          initialShowProfit={viewingProfit}
+          onClose={() => setViewing(null)}
+        />
       )}
       {editing && (
         <EditQuotationModal
@@ -343,12 +386,27 @@ import { lazy, Suspense, useEffect, useState } from "react";
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => setViewing(quote)}
+                        onClick={() => {
+                          setViewingProfit(false);
+                          setViewing(quote);
+                        }}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
                         title="View the quoted items"
                       >
                         <Eye className="w-5 h-5" />
                       </button>
+                      {canScan && (
+                        <button
+                          onClick={() => {
+                            setViewingProfit(true);
+                            setViewing(quote);
+                          }}
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-full transition-colors"
+                          title="View the profit on this quotation"
+                        >
+                          <TrendingUp className="w-5 h-5" />
+                        </button>
+                      )}
                       <button
                         onClick={() => setEditing(quote)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
@@ -395,8 +453,23 @@ import { lazy, Suspense, useEffect, useState } from "react";
   }
 
   /** The quoted lines, read only. Changing them is what Edit is for. */
-  function QuotationView({ quote, onClose }: { quote: any; onClose: () => void }) {
+  function QuotationView({
+    quote,
+    onClose,
+    canSeeProfit = false,
+    initialShowProfit = false,
+  }: {
+    quote: any;
+    onClose: () => void;
+    /** Admin and superadmin only: cost is never shown to anyone else. */
+    canSeeProfit?: boolean;
+    initialShowProfit?: boolean;
+  }) {
     const items: any[] = quote.items || [];
+    // Off unless asked for, like the Dashboard's profit figure: this popup is
+    // often open on a counter screen with the customer standing in front of it.
+    const [showProfit, setShowProfit] = useState(canSeeProfit && initialShowProfit);
+    const profit = showProfit ? quotationProfit(quote) : null;
     const totalQuantity = items.reduce(
       (sum, item) => sum + Number(item.quantity || 0),
       0
@@ -404,7 +477,11 @@ import { lazy, Suspense, useEffect, useState } from "react";
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+        <div
+          className={`bg-white rounded-xl shadow-xl w-full ${
+            profit ? "max-w-4xl" : "max-w-2xl"
+          } max-h-[85vh] flex flex-col`}
+        >
           <div className="flex items-start justify-between gap-4 p-5 border-b border-gray-100">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
@@ -416,16 +493,69 @@ import { lazy, Suspense, useEffect, useState } from "react";
                 {format(new Date(quote.created_at), "d MMM yyyy, h:mm a")}
               </p>
             </div>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-1 shrink-0">
+              {canSeeProfit && (
+                <button
+                  onClick={() => setShowProfit((v) => !v)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm ${
+                    showProfit
+                      ? "bg-emerald-50 text-emerald-700"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                  title={showProfit ? "Hide profit" : "Show profit"}
+                >
+                  {showProfit ? <EyeOff className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+                  {showProfit ? "Hide profit" : "Profit"}
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                aria-label="Close"
+                className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-y-auto">
+          {profit && (
+            <div className="px-5 py-3 border-b border-gray-100 bg-emerald-50/40">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-gray-500">Quoted value</p>
+                  <p className="font-semibold tabular-nums">₹{money(profit.value)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Cost</p>
+                  <p className="font-semibold tabular-nums">₹{money(profit.cost)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Profit</p>
+                  <p
+                    className={`font-bold tabular-nums ${
+                      profit.profit < 0 ? "text-red-600" : "text-emerald-700"
+                    }`}
+                  >
+                    ₹{money(profit.profit)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Margin</p>
+                  <p className="font-semibold tabular-nums">{profit.margin.toFixed(1)}%</p>
+                </div>
+              </div>
+              {profit.uncosted > 0 && (
+                <p className="mt-2 text-xs text-amber-700">
+                  {profit.uncosted} line{profit.uncosted === 1 ? " has" : "s have"} no cost
+                  recorded and {profit.uncosted === 1 ? "is" : "are"} left out of the cost, so
+                  the real profit is lower than shown. Set the cost in Stock Management, then
+                  save the quotation again.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="overflow-auto">
             {items.length === 0 ? (
               <p className="p-6 text-center text-gray-500">
                 This quotation has no items.
@@ -439,6 +569,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
                     <th className="px-4 py-2 text-center font-medium">Qty</th>
                     <th className="px-4 py-2 text-right font-medium">Price</th>
                     <th className="px-4 py-2 text-right font-medium">Total</th>
+                    {profit && (
+                      <>
+                        <th className="px-4 py-2 text-right font-medium">Cost</th>
+                        <th className="px-4 py-2 text-right font-medium">Profit</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -453,6 +589,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
                       <td className="px-4 py-2 text-right font-medium">
                         ₹{Number(item.total_price || 0).toLocaleString()}
                       </td>
+                      {profit && <LineProfitCells item={item} />}
                     </tr>
                   ))}
                 </tbody>
@@ -465,6 +602,12 @@ import { lazy, Suspense, useEffect, useState } from "react";
                     <td className="px-4 py-2 text-right">
                       ₹{Number(quote.total_amount || 0).toLocaleString()}
                     </td>
+                    {profit && (
+                      <>
+                        <td className="px-4 py-2 text-right tabular-nums">₹{money(profit.cost)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums">₹{money(profit.profit)}</td>
+                      </>
+                    )}
                   </tr>
                 </tfoot>
               </table>
@@ -472,5 +615,30 @@ import { lazy, Suspense, useEffect, useState } from "react";
           </div>
         </div>
       </div>
+    );
+  }
+
+  /** One line's cost and profit, for the profit view. */
+  function LineProfitCells({ item }: { item: any }) {
+    if (item.apr_snapshot == null) {
+      return (
+        <td colSpan={2} className="px-4 py-2 text-right text-xs text-amber-700">
+          No cost recorded
+        </td>
+      );
+    }
+    const cost = Number(item.apr_snapshot) * Number(item.quantity || 0);
+    const profit = Number(item.total_price || 0) - cost;
+    return (
+      <>
+        <td className="px-4 py-2 text-right tabular-nums text-gray-600">₹{money(cost)}</td>
+        <td
+          className={`px-4 py-2 text-right tabular-nums ${
+            profit < 0 ? "text-red-600" : "text-emerald-700"
+          }`}
+        >
+          ₹{money(profit)}
+        </td>
+      </>
     );
   }
