@@ -238,11 +238,13 @@ function ScrollToTop() {
 import { usePageTracking } from "./hooks/usePageTracking";
 import { useCanonicalUrl } from "./lib/seo";
 import { useForegroundPush } from "./hooks/useForegroundPush";
+import { useCartPriceRefresh } from "./hooks/useCartPriceRefresh";
 
 export function AppContent() {
   usePageTracking();
   useCanonicalUrl();
   useForegroundPush();
+  useCartPriceRefresh();
   const { theme, toggleTheme } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { totalQuantity, items, isCartOpen, openCart, closeCart } = useCartStore();

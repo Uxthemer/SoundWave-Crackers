@@ -2,6 +2,7 @@ import create from "zustand";
 import { persist } from "zustand/middleware";
 import { CartItem, Product } from '../types';
 import { QuotationWithItems } from '../types/quotation';
+import { supabase } from '../lib/supabase';
 
 export interface DeliveryDetailsState {
   customerName: string;
@@ -27,6 +28,8 @@ type CartStore = {
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  /** Swaps the lines for repriced ones; see lib/cartPrices. */
+  replaceItems: (items: CartItem[]) => void;
   loadQuotation: (quotation: QuotationWithItems) => void;
   /** Replaces the cart with a copy of an existing order; see lib/orderCopy. */
   loadOrderCopy: (items: CartItem[], delivery: DeliveryDetailsState, sourceLabel: string) => void;
@@ -78,7 +81,8 @@ const totalsOf = (items: CartItem[]) => ({
   ),
 });
 
-// Wrap your store with persist and use sessionStorage
+const CART_STORAGE_KEY = "cart-storage";
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
@@ -144,6 +148,7 @@ export const useCartStore = create<CartStore>()(
           return { items: updatedItems, ...totalsOf(updatedItems) };
         }),
       clearCart: () => set({ items: [], totalQuantity: 0, totalAmount: 0, totalActualAmount: 0, editingQuotationId: null, copiedFromOrder: null }),
+      replaceItems: (items) => set({ items, ...totalsOf(items) }),
       loadQuotation: (quotation) => {
         // Map items from quotation using the joined 'product' data
         const cartItems: CartItem[] = quotation.items.map((qItem: any) => {
@@ -278,14 +283,47 @@ export const useCartStore = create<CartStore>()(
       toggleCart: () => set((state) => ({ isCartOpen: !state.isCartOpen })),
     }),
     {
-      name: "cart-storage",
+      name: CART_STORAGE_KEY,
+      // localStorage, not sessionStorage: a cart used to vanish the moment
+      // the tab, the browser or the installed app was closed, so a customer
+      // who came back later found it empty. It now stays until it is ordered,
+      // emptied, or the browser's site data is cleared -- no expiry.
+      //
+      // Wrapped like the wishlist's: localStorage can be unavailable (private
+      // windows, blocked site data), and the cart then lasts for the visit
+      // instead of breaking the page.
       storage: {
         getItem: (name) => {
-          const value = sessionStorage.getItem(name);
-          return value ? JSON.parse(value) : null;
+          try {
+            const value = localStorage.getItem(name);
+            if (value) return JSON.parse(value);
+            // A cart started before the switch is in sessionStorage; carry
+            // it over once rather than emptying it on the update.
+            const earlier = sessionStorage.getItem(name);
+            if (earlier) {
+              localStorage.setItem(name, earlier);
+              sessionStorage.removeItem(name);
+              return JSON.parse(earlier);
+            }
+            return null;
+          } catch {
+            return null;
+          }
         },
-        setItem: (name, value) => sessionStorage.setItem(name, JSON.stringify(value)),
-        removeItem: (name) => sessionStorage.removeItem(name),
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch {
+            /* nothing to do */
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {
+            /* nothing to do */
+          }
+        },
       },
       // Restoring the saved lines restores the totals with them; see totalsOf.
       merge: (persisted, current) => {
@@ -305,3 +343,29 @@ export const useCartStore = create<CartStore>()(
     }
   )
 );
+// One cart per browser now, shared by every tab -- but each tab keeps its own
+// copy in memory, so without this a tab left open would write its stale cart
+// over what was just added in another. The browser announces a change made by
+// another tab; reload the cart from storage when it does.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === CART_STORAGE_KEY) {
+      useCartStore.persist.rehydrate();
+    }
+  });
+
+  // The cart outlives the browser now, and so would the delivery details in
+  // it -- a customer's name, phone and address left filled in for whoever
+  // signs in next on a shared phone or the counter PC. Signing out clears
+  // them. The products stay: they belong to the device, as before.
+  //
+  // Only on SIGNED_OUT. A guest who signs in at checkout keeps what they had
+  // typed (that is SIGNED_IN, not this), and a page load with no session is
+  // INITIAL_SESSION. After an order the details go anyway: the cart empties
+  // and Cart.tsx clears them with it.
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      useCartStore.getState().clearDelivery();
+    }
+  });
+}
