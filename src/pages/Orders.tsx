@@ -18,6 +18,15 @@ import {
   type BusinessDetails,
 } from "../lib/businessDetails";
 import { buildDocumentPdf, documentFileName } from "../lib/documentPdf";
+import { buildOrdersReportPdf } from "../lib/ordersReportPdf";
+import {
+  ORDERS_EXPORT_COLUMNS,
+  exportCellValue,
+  type OrdersExportColumnKey,
+  type OrdersExportFormat,
+  type OrdersExportRow,
+} from "../lib/ordersExport";
+import ExportOrdersModal from "../components/ExportOrdersModal";
 import {
   SendPdfOnWhatsAppDialog,
   type SendPdfRequest,
@@ -304,6 +313,7 @@ export function Orders() {
   const [discountType, setDiscountType] = useState<"amount" | "percentage">("amount");
   const [editOrder, setEditOrder] = useState<Order | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const loadOrderCopy = useCartStore((state) => state.loadOrderCopy);
   const { activeSeason } = useSeasons();
   const [copyingOrderId, setCopyingOrderId] = useState<string | null>(null);
@@ -887,32 +897,65 @@ export function Orders() {
     XLSX.writeFile(wb, `order-${order.id}.xlsx`);
   };
 
-  const exportAllOrders = () => {
+  /**
+   * Both exports take the table as it stands -- search, status, payment and
+   * customer filters, the hidden cancelled rows and the sort order -- so the
+   * file is what was on screen when Export was pressed. With no filters set
+   * that is every order in the date range.
+   */
+  const exportRows = (): OrdersExportRow[] =>
+    filteredOrders.map((order) => ({
+      number: order.short_id || order.id,
+      date: order.created_at,
+      customer: order.full_name,
+      phone: order.phone,
+      city: order.city,
+      status: order.status,
+      // The label the Payment column shows, not how they paid.
+      payment: PAYMENT_LABELS[order.payment_status || "pending"]?.label ?? "Unpaid",
+      paymentMethod: order.payment_method,
+      itemCount: order.items?.length || 0,
+      total: Number(order.total_amount || 0),
+      discount: Number(order.discount_amt || 0),
+    }));
+
+  const handleExport = async (
+    kind: OrdersExportFormat,
+    columns: OrdersExportColumnKey[],
+    { includeItems }: { includeItems: boolean }
+  ) => {
+    if (kind === "excel") exportAllOrders(columns, includeItems);
+    else await exportAllOrdersPdf(columns);
+  };
+
+  const exportAllOrders = (columns: OrdersExportColumnKey[], includeItems: boolean) => {
     // Create workbook
     const wb = XLSX.utils.book_new();
 
-    // Orders summary sheet
-    const orderData = orders.map((order) => ({
-      "Order ID": order.id,
-      "Customer Name": order.full_name,
-      Phone: order.phone,
-      City: order.city,
-      "Total Amount": order.total_amount,
-      Status: order.status,
-      "Payment Method": order.payment_method,
-      "Order Date": format(new Date(order.created_at), "PPpp"),
-      "Items Count": order.items?.length || 0,
-    }));
+    // Orders summary sheet, in the columns ticked in the export popup
+    const picked = ORDERS_EXPORT_COLUMNS.filter((column) => columns.includes(column.key));
+    const orderData = exportRows().map((row) => {
+      const line: Record<string, string | number> = { "Order ID": row.number };
+      picked.forEach((column) => {
+        line[column.label] = exportCellValue(row, column.key);
+      });
+      return line;
+    });
     const wsOrders = XLSX.utils.json_to_sheet(orderData);
     XLSX.utils.book_append_sheet(wb, wsOrders, "Orders");
 
+    if (!includeItems) {
+      XLSX.writeFile(wb, "all-orders.xlsx");
+      return;
+    }
+
     // All order items sheet - now includes APR
-    const allItems = orders.flatMap((order) => {
+    const allItems = filteredOrders.flatMap((order) => {
       const sorted = (order.items || []).slice().sort((a: any, b: any) => {
         return Number(a.product?.order ?? 0) - Number(b.product?.order ?? 0);
       });
       return sorted.map((item: any, idx: number) => ({
-        "Order ID": order.id,
+        "Order ID": order.short_id || order.id,
         "S.No": idx + 1,
         "Product Code":
           (item.product as any)?.product_code ||
@@ -931,6 +974,21 @@ export function Orders() {
 
     // Write file
     XLSX.writeFile(wb, "all-orders.xlsx");
+  };
+
+  /** The same orders as the Excel export, as a one-line-per-order PDF. */
+  const exportAllOrdersPdf = async (columns: OrdersExportColumnKey[]) => {
+    try {
+      const pdf = await buildOrdersReportPdf(
+        exportRows(),
+        columns,
+        businessFromSettings(appSettings)
+      );
+      pdf.save("all-orders.pdf");
+    } catch (err) {
+      console.error("Failed to build the orders PDF:", err);
+      toast.error("Could not create the PDF. Please try again.");
+    }
   };
 
   /**
@@ -1454,13 +1512,20 @@ export function Orders() {
               <Plus className="w-4 h-4" /> New Order
             </button>
             <button
-              onClick={() => exportAllOrders()}
+              onClick={() => setShowExportModal(true)}
               className="group flex items-center gap-2 px-4 py-2 bg-card border border-card-border/10 rounded-lg hover:bg-card/80 transition-all hover:border-primary-orange/30 shadow-sm hover:shadow-md"
-              title="Download Excel Report"
+              title="Download the orders shown, as Excel or PDF"
             >
               <Download className="w-4 h-4 text-primary-orange group-hover:scale-110 transition-transform" />
               <span className="hidden sm:inline font-medium text-text/80 group-hover:text-primary-orange">Export</span>
             </button>
+            {showExportModal && (
+              <ExportOrdersModal
+                orderCount={filteredOrders.length}
+                onClose={() => setShowExportModal(false)}
+                onExport={handleExport}
+              />
+            )}
             <DateRangeFilter
               range={range}
               setRange={setRange}
