@@ -109,7 +109,8 @@ export async function buildOrdersReportPdf(
     1: { cellWidth: "wrap" },
   };
   columns.forEach((column, index) => {
-    if (column.key === "customer" || column.key === "city") return;
+    // Free text wraps; everything else keeps to one line.
+    if (column.key === "customer" || column.key === "city" || column.key === "paymentNote") return;
     columnStyles[index + 2] = {
       cellWidth: "wrap",
       ...(column.money ? { halign: "right" as const } : {}),

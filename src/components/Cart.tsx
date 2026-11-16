@@ -22,6 +22,7 @@ import toast from "react-hot-toast";
 import confetti from "canvas-confetti";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
+import { useStatesAndDistricts } from "../hooks/useStatesAndDistricts";
 import { useCartStore, type DeliveryDetailsState } from "../store/cartStore";
 import { useQuotations } from "../hooks/useQuotations";
 import { useSeasons } from "../context/SeasonContext";
@@ -86,12 +87,9 @@ export function Cart({ isOpen, onClose }: CartProps) {
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
   const { user, userRole } = useAuth();
   const navigate = useNavigate();
-  const [statesList, setStatesList] = useState<{ id: number; name: string }[]>(
-    [],
-  );
-  const [districtsList, setDistrictsList] = useState<
-    { id: number; name: string }[]
-  >([]);
+  // The same lists the edit-order popup offers (hooks/useStatesAndDistricts).
+  const { states: statesList, districts: districtsList } =
+    useStatesAndDistricts(delivery.state);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [orderSuccess, setOrderSuccess] = useState(false); // <-- New state
   const [upiCopied, setUpiCopied] = useState(false);
@@ -229,11 +227,11 @@ export function Cart({ isOpen, onClose }: CartProps) {
     const value = e?.target?.value;
     if (!name) return;
 
-    // If state changed, clear district selection and cached district list
+    // If state changed, clear district selection; the district list follows
+    // the state by itself.
     if (name === "state") {
       setDeliveryField("state", value);
       setDeliveryField("district", "");
-      setDistrictsList([]);
       return;
     }
 
@@ -815,38 +813,6 @@ export function Cart({ isOpen, onClose }: CartProps) {
       });
     }, 250);
   }
-
-  // Fetch active states on mount
-  useEffect(() => {
-    (async () => {
-      const { data, error } = await supabase
-        .from("states")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name");
-      if (!error && data) setStatesList(data);
-    })();
-  }, []);
-
-  // Fetch districts when state changes
-  useEffect(() => {
-    if (!delivery.state) {
-      setDistrictsList([]);
-      return;
-    }
-    (async () => {
-      // Find state id by name
-      const selectedState = statesList.find((s) => s.name === delivery.state);
-      if (!selectedState) return;
-      const { data, error } = await supabase
-        .from("districts")
-        .select("id, name")
-        .eq("state_id", selectedState.id)
-        .eq("is_active", true)
-        .order("name");
-      if (!error && data) setDistrictsList(data);
-    })();
-  }, [delivery.state, statesList]);
 
   if (!isOpen) return null;
 

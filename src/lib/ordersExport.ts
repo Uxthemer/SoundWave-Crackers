@@ -12,6 +12,8 @@ export interface OrdersExportRow {
   payment: string;
   paymentMethod: string;
   itemCount: number;
+  /** Notes typed against the order's payments, joined -- the table's Payment note. */
+  paymentNote: string;
   total: number;
   discount: number;
 }
@@ -27,6 +29,7 @@ export type OrdersExportColumnKey =
   | "payment"
   | "paymentMethod"
   | "itemCount"
+  | "paymentNote"
   | "total"
   | "discount"
   | "net";
@@ -57,6 +60,9 @@ export const ORDERS_EXPORT_COLUMNS: OrdersExportColumn[] = [
   { key: "payment", label: "Payment", defaultOn: { excel: false, pdf: true } },
   { key: "paymentMethod", label: "Payment Method", defaultOn: { excel: true, pdf: false } },
   { key: "itemCount", label: "Items", defaultOn: { excel: true, pdf: false } },
+  // Off by default: most orders have none, and an empty column costs the
+  // PDF width it does not have.
+  { key: "paymentNote", label: "Payment Note", defaultOn: { excel: false, pdf: false } },
   { key: "total", label: "Total", money: true, defaultOn: { excel: true, pdf: true } },
   { key: "discount", label: "Discount", money: true, defaultOn: { excel: false, pdf: true } },
   { key: "net", label: "Net", money: true, defaultOn: { excel: false, pdf: true } },

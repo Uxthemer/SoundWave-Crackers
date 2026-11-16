@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -9,17 +8,13 @@ import {
   Title,
   Tooltip,
   Legend,
+  type TooltipItem,
 } from "chart.js";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { attachPackDetails } from "../lib/orderItems";
 import { useAuth } from "../context/AuthContext";
-import {
-  Loader2,
-  TrendingUp,
-  Package,
-  Info,
-} from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { ExpandableChart } from "../components/ExpandableChart";
 import { ExpandablePanel } from "../components/ExpandablePanel";
 import { useDateRange } from "../hooks/useDateRange";
@@ -27,6 +22,7 @@ import { useSeasons } from "../context/SeasonContext";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { ReferredOrdersModal } from "../components/ReferredOrdersModal";
 import { buildReferrals, type Referrer } from "../lib/referrals";
+import { NOT_RECORDED, normalisePlace, resolveOrderDistricts } from "../lib/districtResolve";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
@@ -35,14 +31,14 @@ interface AnalyticsData {
   citySales: { labels: string[]; data: number[]; counts?: number[] };
   districtSales: { labels: string[]; data: number[]; counts?: number[] };
   stateSales: { labels: string[]; data: number[]; counts?: number[] };
-  productSales: { labels: string[]; quantities: number[]; revenue: number[] };
+  productSales: { labels: string[]; quantities: number[]; revenue: number[]; counts: number[] };
   monthlyRevenue: { labels: string[]; data: number[] };
   // Total Revenue and Expected Revenue moved to the Dashboard's overview
   // tiles; see lib/revenueStages.
   stats: {
-    totalOrders: number;
-    totalProducts: number;
     availableStockValue: number;
+    /** The same stock at this season's selling price. */
+    availableSaleValue: number;
   };
   stockList?: {
     id: string;
@@ -51,6 +47,7 @@ interface AnalyticsData {
     stock: number;
     apr: number;
     value: number;
+    saleValue: number;
   }[];
   referralList?: Referrer[];
   referralTotal?: number;
@@ -80,51 +77,116 @@ const COMPLETED_STATUSES = [
   "payment completed",
 ];
 
+const rupees = (value: number) =>
+  `₹${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
 /**
- * Collapses the spellings of one place into a single bucket.
- *
- * Addresses are typed by customers, so "chennai", "Chennai " and "CHENNAI"
- * arrive as three separate places and split one town's sales three ways --
- * which is most of why these charts never looked right.
+ * One chart's rows, largest first by `sortBy`, with every figure kept against
+ * its label -- the bars, the tooltip and the records view all read the same
+ * row, so an amount can never be shown against another place's order count.
  */
-function normalisePlace(value: unknown): string {
-  const text = String(value ?? "").trim().replace(/\s+/g, " ");
-  if (!text) return "Unknown";
-  return text
-    .toLowerCase()
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+function buildRows(
+  labels: string[],
+  figures: { sales: number[]; orders: number[]; quantity?: number[] },
+  sortBy: "sales" | "quantity" = "sales",
+  limit = 100
+) {
+  return labels
+    .map((label, i) => ({
+      label,
+      sales: Number(figures.sales[i] || 0),
+      orders: Number(figures.orders[i] || 0),
+      quantity: Number(figures.quantity?.[i] || 0),
+    }))
+    .sort((a, b) => b[sortBy] - a[sortBy])
+    .slice(0, limit);
 }
 
-// small helper to build chart series sorted & trimmed
-function buildChartFromMap(mapLabels: string[], mapData: number[], limit = 12) {
-  const pairs = mapLabels.map((l, i) => ({ label: l, value: Number(mapData[i] || 0) }));
-  pairs.sort((a, b) => b.value - a.value);
-  const trimmed = pairs.slice(0, limit);
+type ChartRow = ReturnType<typeof buildRows>[number];
+
+/**
+ * A bar for the money (or quantity) and a bar for the number of orders, each
+ * on its own axis -- ₹4,00,000 and 120 orders cannot share one scale -- with
+ * both in the tooltip. Orders sits on the right so the left axis still reads
+ * as the chart's main figure.
+ */
+function amountAndOrdersChart(
+  rows: ChartRow[],
+  color: string,
+  metric: "sales" | "quantity" = "sales"
+) {
+  const primaryLabel = metric === "sales" ? "Sales (₹)" : "Quantity sold";
   return {
-    labels: trimmed.map((p) => p.label),
-    data: trimmed.map((p) => p.value),
+    data: {
+      labels: rows.map((r) => r.label),
+      datasets: [
+        {
+          label: primaryLabel,
+          data: rows.map((r) => r[metric]),
+          backgroundColor: color,
+          yAxisID: "y",
+        },
+        {
+          label: "Orders",
+          data: rows.map((r) => r.orders),
+          backgroundColor: "rgba(120, 120, 120, 0.45)",
+          yAxisID: "orders",
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      responsive: true,
+      // Hovering a place shows its every figure, not only the bar under the
+      // pointer.
+      interaction: { mode: "index" as const, intersect: false },
+      plugins: {
+        legend: { display: true, position: "bottom" as const },
+        tooltip: {
+          callbacks: {
+            label: (ctx: TooltipItem<"bar">) => {
+              const row = rows[ctx.dataIndex];
+              if (ctx.dataset.yAxisID === "orders") return `Orders: ${row.orders}`;
+              return metric === "sales"
+                ? `Sales: ${rupees(row.sales)}`
+                : `Quantity sold: ${row.quantity.toLocaleString("en-IN")}`;
+            },
+            // A product's other figure, so either view answers both questions.
+            afterBody: (items: TooltipItem<"bar">[]) => {
+              const row = rows[items[0]?.dataIndex ?? -1];
+              if (!row || !row.quantity) return [];
+              return metric === "sales"
+                ? [`Quantity sold: ${row.quantity.toLocaleString("en-IN")}`]
+                : [`Sales: ${rupees(row.sales)}`];
+            },
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          position: "left" as const,
+          title: { display: true, text: primaryLabel },
+        },
+        orders: {
+          beginAtZero: true,
+          position: "right" as const,
+          grid: { drawOnChartArea: false },
+          ticks: { precision: 0 },
+          title: { display: true, text: "Orders" },
+        },
+      },
+    },
   };
 }
 
-function buildExportRows(labels: string[], values: number[]) {
-  return labels
-    .map((label, index) => ({
-      Label: label,
-      Value: Number(values[index] || 0),
-    }))
-    .sort((a, b) => Number(b.Value) - Number(a.Value));
-}
-
-function buildProductExportRows(labels: string[], quantities: number[], revenue: number[]) {
-  return labels
-    .map((label, index) => ({
-      Product: label,
-      QuantitySold: Number(quantities[index] || 0),
-      Revenue: Number(revenue[index] || 0),
-    }))
-    .sort((a, b) => Number(b.QuantitySold) - Number(a.QuantitySold));
+/** The records view and its Excel export: the place, its sales and its orders. */
+function placeExportRows(rows: ChartRow[], placeHeading: string) {
+  return rows.map((r) => ({
+    [placeHeading]: r.label,
+    "Sales (₹)": r.sales,
+    Orders: r.orders,
+  }));
 }
 
 interface AnalyticsProps {
@@ -163,6 +225,8 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
   const [refSortDir, setRefSortDir] = useState<"asc" | "desc">("desc");
   /** The referrer whose orders are open in the popup. */
   const [refOpen, setRefOpen] = useState<Referrer | null>(null);
+  /** What Top Products ranks by. Sales amount unless switched. */
+  const [productMetric, setProductMetric] = useState<"sales" | "quantity">("sales");
 
   // See Orders.tsx: do not fetch until the season list has settled.
   useEffect(() => {
@@ -228,7 +292,7 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
       const [catalogRes, costsRes] = await Promise.all([
         supabase
           .from("season_catalog")
-          .select("id,name,product_code,stock,product_type,is_active")
+          .select("id,name,product_code,stock,offer_price,product_type,is_active")
           .eq("season_id", valuationSeasonId ?? "")
           .order("order", { nullsFirst: false })
           .order("name", { ascending: true }),
@@ -256,12 +320,18 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
       const cityCount: Record<string, number> = {};
       const districtCount: Record<string, number> = {};
       const stateCount: Record<string, number> = {};
-      const productMap: Record<string, { qty: number; revenue: number }> = {};
-      
+      const productMap: Record<string, { qty: number; revenue: number; orders: number }> = {};
+
       // Sales are counted at what the customer pays, after any discount --
       // the same figure the dashboard reports as revenue.
       const netAmount = (order: any) =>
         Math.max(Number(order.total_amount || 0) - Number(order.discount_amt || 0), 0);
+
+      // Orders with no district on them are placed from their PIN code or
+      // city (lib/districtResolve) rather than piled into one "Unknown" bar.
+      // Resolved across every order, so a cancelled order with a district
+      // still teaches the chart where its PIN code is.
+      const districtOf = await resolveOrderDistricts(orders || []);
 
       (orders || []).forEach((order: any) => {
         const status = (order.status || "").toString().toLowerCase();
@@ -269,7 +339,9 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
 
         const amt = netAmount(order);
         const city = normalisePlace(order.city);
-        const district = normalisePlace(order.district);
+        // Spelled as the districts table spells it ("YSR Kadapa"), or title
+        // case where the table does not know it.
+        const district = districtOf.get(order.id) ?? NOT_RECORDED;
         const state = normalisePlace(order.state);
 
         cityMap[city] = (cityMap[city] || 0) + amt;
@@ -282,12 +354,16 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
         districtCount[district] = (districtCount[district] || 0) + 1;
         stateCount[state] = (stateCount[state] || 0) + 1;
        
+        // A product on two lines of one order is still one order.
+        const productsInOrder = new Set<string>();
         (order.items || []).forEach((it: any) => {
           const name = it.product?.name || "Unknown";
-          if (!productMap[name]) productMap[name] = { qty: 0, revenue: 0 };
+          if (!productMap[name]) productMap[name] = { qty: 0, revenue: 0, orders: 0 };
           productMap[name].qty += Number(it.quantity || 0);
           productMap[name].revenue += Number(it.total_price || 0);
+          productsInOrder.add(name);
         });
+        productsInOrder.forEach((name) => (productMap[name].orders += 1));
       });
 
       // monthly revenue
@@ -299,25 +375,6 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
         monthlyData[month] = (monthlyData[month] || 0) + netAmount(order);
       });
 
-      // stats
-      const statusOf = (o: any) => (o.status || "").toString().toLowerCase();
-      const completedOrders = (orders || []).filter((o: any) =>
-        COMPLETED_STATUSES.includes(statusOf(o))
-      );
-
-      // Products Sold counts what has been committed, so it reads the same
-      // confirmed-onward orders as the charts. It used to read every order -- enquiries and cancellations
-      // included -- and keyed on product_id alone, so every family pack line
-      // collapsed into one null entry.
-      const productsSold = new Set(
-        completedOrders.flatMap((o: any) =>
-          (o.items || [])
-            .map((i: any) =>
-              i.product_id ? `p:${i.product_id}` : i.combo_pack_id ? `c:${i.combo_pack_id}` : null
-            )
-            .filter(Boolean)
-        )
-      ).size;
 
       // stock list and total stock value
       // include only active single products (ignore group product_type and inactive)
@@ -335,9 +392,12 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
               stock,
               apr,
               value,
+              // What the same stock fetches at this season's selling price.
+              saleValue: Number(p.offer_price || 0) * stock,
             };
           }) || [];
       const totalStockValue = stockList.reduce((s: number, p: any) => s + p.value, 0);
+      const totalSaleValue = stockList.reduce((s: number, p: any) => s + p.saleValue, 0);
 
       // Grouped on the referrer's last ten digits, named where the number is
       // a customer's. This used to match the typed text exactly against a
@@ -367,12 +427,12 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
           labels: Object.keys(productMap),
           quantities: Object.values(productMap).map((p) => p.qty),
           revenue: Object.values(productMap).map((p) => p.revenue),
+          counts: Object.values(productMap).map((p) => p.orders),
         },
         monthlyRevenue: { labels: Object.keys(monthlyData), data: Object.values(monthlyData) },
         stats: {
-          totalOrders: (orders || []).length,
-          totalProducts: productsSold,
           availableStockValue: totalStockValue,
+          availableSaleValue: totalSaleValue,
         },
         stockList,
         referralList,
@@ -444,20 +504,47 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
     );
   }
 
-  // Build chart payloads (sorted, top 100)
-  const stateChart = buildChartFromMap(data.stateSales.labels, data.stateSales.data, 100);
-  const districtChart = buildChartFromMap(data.districtSales.labels, data.districtSales.data, 100);
-  const cityChart = buildChartFromMap(data.citySales.labels, data.citySales.data, 100);
-  const topProducts = buildChartFromMap(data.productSales.labels, data.productSales.quantities, 100);
-
-  const stateViewRows = buildExportRows(data.stateSales.labels, data.stateSales.data);
-  const districtViewRows = buildExportRows(data.districtSales.labels, data.districtSales.data);
-  const cityViewRows = buildExportRows(data.citySales.labels, data.citySales.data);
-  const topProductViewRows = buildProductExportRows(
+  // Build chart payloads (sorted, top 100). The records views are not
+  // trimmed: they are where every place is listed.
+  const placeRows = (place: AnalyticsData["stateSales"]) =>
+    buildRows(
+      place.labels,
+      { sales: place.data, orders: place.counts || [] },
+      "sales",
+      Number.MAX_SAFE_INTEGER
+    );
+  const stateRows = placeRows(data.stateSales);
+  const districtRows = placeRows(data.districtSales);
+  const cityRows = placeRows(data.citySales);
+  const productRows = buildRows(
     data.productSales.labels,
-    data.productSales.quantities,
-    data.productSales.revenue
+    {
+      sales: data.productSales.revenue,
+      orders: data.productSales.counts,
+      quantity: data.productSales.quantities,
+    },
+    productMetric === "sales" ? "sales" : "quantity",
+    Number.MAX_SAFE_INTEGER
   );
+
+  const stateChart = amountAndOrdersChart(stateRows.slice(0, 100), "#FF5722");
+  const districtChart = amountAndOrdersChart(districtRows.slice(0, 100), "#2196F3");
+  const cityChart = amountAndOrdersChart(cityRows.slice(0, 100), "#4CAF50");
+  const topProducts = amountAndOrdersChart(
+    productRows.slice(0, 100),
+    "#FFC107",
+    productMetric === "sales" ? "sales" : "quantity"
+  );
+
+  const stateViewRows = placeExportRows(stateRows, "State");
+  const districtViewRows = placeExportRows(districtRows, "District");
+  const cityViewRows = placeExportRows(cityRows, "City");
+  const topProductViewRows = productRows.map((r) => ({
+    Product: r.label,
+    "Sales (₹)": r.sales,
+    "Quantity sold": r.quantity,
+    Orders: r.orders,
+  }));
 
   return (
     <div className="min-h-screen pt-8 pb-12">
@@ -477,94 +564,40 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
           />
         </div>
 
-        {/* Stats Cards */}
-        {/* Total Revenue and Expected Revenue are on the Dashboard overview now. */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-card rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">
-                  Total Orders
-                </h3>
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Every order in the period, whatever its status -- enquiries and
-                    cancelled orders included
-                  </div>
-                </div>
-              </div>
-              <div className="bg-primary-orange/10 p-2 rounded-full">
-                <Package className="w-4 h-4 text-primary-orange" />
-              </div>
-            </div>
-            <p className="text-xl font-bold mb-1">{data.stats.totalOrders}</p>
-            <p className="text-xs text-text/60">All orders</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-card rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">
-                  Products Sold
-                </h3>
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Distinct products and family packs on confirmed orders
-                  </div>
-                </div>
-              </div>
-              <div className="bg-primary-orange/10 p-2 rounded-full">
-                <Package className="w-4 h-4 text-primary-orange" />
-              </div>
-            </div>
-            <p className="text-xl font-bold mb-1">{data.stats.totalProducts}</p>
-            <p className="text-xs text-text/60">Unique products &amp; packs</p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="bg-card rounded-xl p-4"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-montserrat font-bold">
-                  Available Stock Value
-                </h3>
-                <div className="group relative">
-                  <Info className="w-4 h-4 text-text/40 cursor-help" />
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2 bg-card rounded-lg shadow-lg invisible group-hover:visible text-xs">
-                    Sum of (available stock quantity * APR price) across all products
-                  </div>
-                </div>
-              </div>
-              <div className="bg-primary-orange/10 p-2 rounded-full">
-                <TrendingUp className="w-4 h-4 text-primary-orange" />
-              </div>
-            </div>
-            <p className="text-xl font-bold mb-1">
-              ₹{data.stats.availableStockValue.toFixed(2)}
-            </p>
-            <p className="text-xs text-text/60">Inventory value (APR)</p>
-          </motion.div>
-        </div>
-
+        {/* No summary tiles: orders, products and the stock value all repeat
+            figures on the Dashboard overview, where the stock value now is. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Available Stock (compact, inner scroll) with search & sort */}
-          <ExpandablePanel title="Available Stock">
+          {/* Available Stock and Referral Bonuses each take a full row: they
+              are tables, and half a page cut their columns short. The charts
+              below stay two to a row. */}
+          <div className="lg:col-span-2">
+          <ExpandablePanel
+            title="Available Stock"
+            // The whole stock, whatever the search below: how many products,
+            // and what they are worth at cost and at the selling price.
+            summary={
+              <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                <span className="px-2.5 py-1 rounded-full bg-background/60 border border-card-border/20">
+                  <span className="text-text/60">Products </span>
+                  <strong className="tabular-nums">{(data.stockList || []).length}</strong>
+                </span>
+                <span
+                  className="px-2.5 py-1 rounded-full bg-primary-orange/10 text-primary-orange"
+                  title="Available qty × APR (cost), all products"
+                >
+                  <span className="opacity-80">At APR </span>
+                  <strong className="tabular-nums">₹{data.stats.availableStockValue.toFixed(2)}</strong>
+                </span>
+                <span
+                  className="px-2.5 py-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-400"
+                  title="Available qty × this season's selling price, all products"
+                >
+                  <span className="opacity-80">At selling price </span>
+                  <strong className="tabular-nums">₹{data.stats.availableSaleValue.toFixed(2)}</strong>
+                </span>
+              </div>
+            }
+          >
             {(expanded) => (
               <>
 
@@ -600,25 +633,22 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 z-[1] bg-card">
                     <tr className="bg-card/50 text-left">
-                      <th className="p-3">S.No</th>
-                      <th className="p-3">Product</th>
                       <th className="p-3">Code</th>
+                      <th className="p-3">Product</th>
+                      <th className="p-3 text-center">Status</th>
                       <th className="p-3 text-right">Available Qty</th>
                       <th className="p-3 text-right">APR</th>
                       <th className="p-3 text-right">Value (₹)</th>
-                      <th className="p-3 text-center">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredStock.length > 0 ? (
-                      filteredStock.map((p, idx) => (
+                      filteredStock.map((p) => (
                         <tr key={p.id} className="border-t">
-                          <td className="p-3">{idx + 1}</td>
+                          <td className="p-3 font-mono text-sm whitespace-nowrap">{p.product_code || "-"}</td>
                           <td className="p-3">{p.name}</td>
-                          <td className="p-3">{p.product_code || "-"}</td>
-                          <td className={`p-3 text-right ${p.stock < 20 ? "text-red-600 font-bold" : ""}`}>{p.stock}</td>
-                          <td className="p-3 text-right">₹{p.apr?.toFixed(2)}</td>
-                          <td className="p-3 text-right">₹{p.value.toFixed(2)}</td>
+                          {/* Beside the name, so a low line is seen as the
+                              product is read, not at the far end of the row. */}
                           <td className="p-3 text-center">
                             {p.stock < 20 ? (
                               <span className="px-2 py-1 rounded-full bg-red-100 text-red-700 text-xs">Low</span>
@@ -626,23 +656,34 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
                               <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 text-xs">OK</span>
                             )}
                           </td>
+                          <td className={`p-3 text-right ${p.stock < 20 ? "text-red-600 font-bold" : ""}`}>{p.stock}</td>
+                          <td className="p-3 text-right">₹{p.apr?.toFixed(2)}</td>
+                          <td className="p-3 text-right">₹{p.value.toFixed(2)}</td>
                         </tr>
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={7} className="p-6 text-center text-text/60">No products found</td>
+                        <td colSpan={6} className="p-6 text-center text-text/60">No products found</td>
                       </tr>
                     )}
                   </tbody>
+                  {/* Totals follow the search, as the referral table's do; the
+                      figures beside the title are always the whole stock. */}
                   <tfoot>
                     <tr className="border-t">
-                      <td className="p-3 font-bold">Total</td>
+                      <td className="p-3 font-bold" colSpan={3}>
+                        Total{" "}
+                        <span className="font-normal text-text/60">
+                          ({filteredStock.length} product{filteredStock.length === 1 ? "" : "s"})
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-bold tabular-nums">
+                        {filteredStock.reduce((s, p) => s + p.stock, 0)}
+                      </td>
                       <td />
-                      <td />
-                      <td />
-                      <td />
-                      <td className="p-3 text-right font-bold">₹{data.stats.availableStockValue.toFixed(2)}</td>
-                      <td />
+                      <td className="p-3 text-right font-bold tabular-nums">
+                        ₹{filteredStock.reduce((s, p) => s + p.value, 0).toFixed(2)}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
@@ -651,8 +692,10 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
             </>
             )}
           </ExpandablePanel>
+          </div>
 
           {/* Referral Bonuses with search, sort and S.No */}
+          <div className="lg:col-span-2">
           <ExpandablePanel title="Referral Bonuses">
             {(expanded) => (
               <>
@@ -740,6 +783,7 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
             </>
             )}
           </ExpandablePanel>
+          </div>
 
           {/* State-wise Sales */}
           {/* State-wise Sales */}
@@ -748,61 +792,64 @@ export function Analytics({ dateRange }: AnalyticsProps = {}) {
             viewData={stateViewRows}
             exportFileName="state-wise-sales.xlsx"
           >
-            <Bar
-              data={{
-                labels: stateChart.labels,
-                datasets: [{ label: "Sales (₹)", data: stateChart.data, backgroundColor: "#FF5722" }],
-              }}
-              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
-            />
+            <Bar data={stateChart.data} options={stateChart.options} />
           </ExpandableChart>
 
-          {/* District-wise Sales */}
-          {/* District-wise Sales */}
+          {/* District-wise Sales. Orders with no district are placed from
+              their PIN code or city -- see lib/districtResolve. */}
           <ExpandableChart
             title="District-wise Sales"
             viewData={districtViewRows}
             exportFileName="district-wise-sales.xlsx"
           >
-            <Bar
-              data={{
-                labels: districtChart.labels,
-                datasets: [{ label: "Sales (₹)", data: districtChart.data, backgroundColor: "#2196F3" }],
-              }}
-              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
-            />
+            <Bar data={districtChart.data} options={districtChart.options} />
           </ExpandableChart>
 
-          {/* City-wise Sales */}
           {/* City-wise Sales */}
           <ExpandableChart
             title="City-wise Sales"
             viewData={cityViewRows}
             exportFileName="city-wise-sales.xlsx"
           >
-            <Bar
-              data={{
-                labels: cityChart.labels,
-                datasets: [{ label: "Sales (₹)", data: cityChart.data, backgroundColor: "#4CAF50" }],
-              }}
-              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }}
-            />
+            <Bar data={cityChart.data} options={cityChart.options} />
           </ExpandableChart>
 
-          {/* Top Products (Quantity Sold) */}
-          {/* Top Products (Quantity Sold) */}
+          {/* Top Products, ranked by sales amount (the default) or by the
+              quantity sold. Orders is beside either. */}
           <ExpandableChart
-            title="Top Products (Quantity Sold)"
+            title={productMetric === "sales" ? "Top Products (Sales)" : "Top Products (Quantity)"}
             viewData={topProductViewRows}
             exportFileName="top-products-sales.xlsx"
+            actions={
+              <div
+                role="radiogroup"
+                aria-label="Rank top products by"
+                className="flex rounded-full border border-card-border/30 p-0.5 text-xs"
+              >
+                {(
+                  [
+                    ["sales", "Sales ₹"],
+                    ["quantity", "Quantity"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    role="radio"
+                    aria-checked={productMetric === value}
+                    onClick={() => setProductMetric(value)}
+                    className={`px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
+                      productMetric === value
+                        ? "bg-primary-orange text-white"
+                        : "text-text/70 hover:bg-black/5"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
           >
-            <Bar
-              data={{
-                labels: topProducts.labels,
-                datasets: [{ label: "Quantity Sold", data: topProducts.data, backgroundColor: "#FFC107" }],
-              }}
-              options={{ maintainAspectRatio: false, responsive: true, plugins: { legend: { position: "bottom" } }, scales: { y: { beginAtZero: true } } }}
-            />
+            <Bar data={topProducts.data} options={topProducts.options} />
           </ExpandableChart>
         </div>
       </div>

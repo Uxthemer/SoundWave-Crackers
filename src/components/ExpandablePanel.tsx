@@ -11,6 +11,8 @@ interface ExpandablePanelProps {
    */
   children: (expanded: boolean) => ReactNode;
   className?: string;
+  /** Figures for the whole panel (a count, a total), shown beside the title. */
+  summary?: ReactNode;
 }
 
 /**
@@ -19,7 +21,7 @@ interface ExpandablePanelProps {
  * with its own search and sort state cannot be cloned without losing that
  * state, so here the card itself goes full screen.
  */
-export function ExpandablePanel({ title, children, className = "" }: ExpandablePanelProps) {
+export function ExpandablePanel({ title, children, className = "", summary }: ExpandablePanelProps) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -45,9 +47,12 @@ export function ExpandablePanel({ title, children, className = "" }: ExpandableP
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-3 mb-4">
-        <h3 className={`font-montserrat font-bold ${expanded ? "text-2xl" : "text-xl"}`}>
-          {title}
-        </h3>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
+          <h3 className={`font-montserrat font-bold ${expanded ? "text-2xl" : "text-xl"}`}>
+            {title}
+          </h3>
+          {summary}
+        </div>
         <button
           type="button"
           onClick={() => setExpanded((e) => !e)}

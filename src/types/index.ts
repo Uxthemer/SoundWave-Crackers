@@ -101,7 +101,9 @@ export interface OrderItem {
 }
 
 export interface DashboardStats {
-  totalOrders: number;
+  /** Orders confirmed onward (SALE_STATUSES) -- enquiries and cancellations left out. */
+  confirmedOrders: number;
+  cancelledOrders: number;
   totalUsers: number;
   totalRevenue: number;
   totalProfit: number;
@@ -109,6 +111,8 @@ export interface DashboardStats {
   amountReceived: number;
   /** Discount given on those same orders, shown beside it for reference. */
   discountGiven: number;
+  /** Still to come in on those same orders: each one's net value less what it has received. */
+  yetToReceive: number;
 }
 
 export interface ProductImport {

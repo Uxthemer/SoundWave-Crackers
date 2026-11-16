@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   Wallet,
+  FileText,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -46,6 +47,7 @@ import { ExpandableChart } from "../components/ExpandableChart";
 import { useDateRange } from "../hooks/useDateRange";
 import { DateRangeFilter } from "../components/DateRangeFilter";
 import { QuotationsList } from "../components/QuotationsList";
+import SeasonReportModal from "../components/SeasonReportModal";
 
 ChartJS.register(
   CategoryScale,
@@ -94,6 +96,7 @@ export function Dashboard() {
   >("overview");
   // Profit is hidden until the eye is pressed, every time the page opens.
   const [showProfit, setShowProfit] = useState(false);
+  const [showReport, setShowReport] = useState(false);
   const isAdmin = ["admin", "superadmin"].includes(userRole?.name || "");
 
   // recent lists
@@ -255,8 +258,24 @@ export function Dashboard() {
 
 
 
+  /** What the report is of, in words: the season's name, or the dates. */
+  const reportPeriodLabel = (() => {
+    const { startDate, endDate, seasonId } = getDateRange();
+    const season = seasonId ? dateRange.seasons.find((s) => s.id === seasonId) : undefined;
+    if (season) return `Season ${season.name}`;
+    if (range === "all") return "All time";
+    return `${format(startDate, "dd MMM yyyy")} to ${format(endDate, "dd MMM yyyy")}`;
+  })();
+
   return (
     <div className="min-h-screen pt-8 pb-12">
+      {showReport && (
+        <SeasonReportModal
+          range={getDateRange()}
+          periodLabel={reportPeriodLabel}
+          onClose={() => setShowReport(false)}
+        />
+      )}
       {/* Full width with a slim gutter: this page is mostly wide tables, and
           `container` capped it at 1280-1536px with 24px either side. */}
       <div className="dashboard-embed w-full px-2 sm:px-4 lg:px-5">
@@ -288,6 +307,17 @@ export function Dashboard() {
                     onApply={applyCustomRange}
                     isApplying={isApplyingCustom}
                   />
+                  {/* Everything for the season (or dates) picked beside it,
+                      in one CSV or PDF -- see lib/seasonReport. */}
+                  <button
+                    onClick={() => setShowReport(true)}
+                    disabled={!ready}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white font-semibold hover:bg-primary-orange/90 disabled:opacity-50 whitespace-nowrap"
+                    title="Download a report of everything in this period"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Report
+                  </button>
 
                 {/* <div className="flex gap-2">
               <label className="flex items-center gap-2 bg-primary-orange text-white rounded-lg px-4 py-2 hover:bg-primary-red transition-colors cursor-pointer">
@@ -315,7 +345,7 @@ export function Dashboard() {
               {/* Stats Grid. Total Revenue and Expected Revenue moved here
                   from Analytics (lib/revenueStages); the old Revenue tile
                   showed the same figure as Total Revenue and is gone. */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4 mb-8">
                 {/* Orders, users, money received and profit, one tile. Rows
                     rather than a 2x2 grid: with four tiles to a desktop line
                     a tile is ~250px wide, and a lakh figure needs the width. */}
@@ -330,10 +360,16 @@ export function Dashboard() {
                     <button
                       type="button"
                       onClick={() => navigate("/orders")}
-                      className="w-full flex items-baseline justify-between gap-2 hover:text-primary-orange"
+                      className="w-full text-left hover:text-primary-orange"
+                      title="Confirmed onward: confirmed, packing, shipped and delivered. Enquiries and cancelled orders are not counted."
                     >
-                      <span className="text-text/60">Total orders</span>
-                      <span className="text-lg font-bold tabular-nums">{stats.totalOrders}</span>
+                      <span className="flex items-baseline justify-between gap-2">
+                        <span className="text-text/60">Orders</span>
+                        <span className="text-lg font-bold tabular-nums">{stats.confirmedOrders}</span>
+                      </span>
+                      <span className="block text-xs text-text/50 text-right">
+                        Cancelled: {stats.cancelledOrders}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -355,6 +391,12 @@ export function Dashboard() {
                         </span>
                         <span className="text-lg font-bold tabular-nums">₹{stats.amountReceived.toFixed(2)}</span>
                       </div>
+                      <p
+                        className="text-xs text-amber-700 dark:text-amber-400 text-right"
+                        title="Still to come in on every order that is not cancelled, enquiries included: each order's value after discount, less what it has received."
+                      >
+                        Yet to receive: ₹{stats.yetToReceive.toFixed(2)}
+                      </p>
                       <p className="text-xs text-text/50 text-right">
                         Discount given: ₹{stats.discountGiven.toFixed(2)}
                       </p>
@@ -442,6 +484,40 @@ export function Dashboard() {
                   </dl>
                 </div>
 
+                {/* Stock: what is on hand, at cost. Moved here from the
+                    Analytics tab; the item-by-item list is still there. */}
+                <div
+                  className="card"
+                  title="Stock on hand × cost (APR), over every active single product in the season. Analytics → Available Stock lists it product by product."
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-text/60">Available Stock Value</p>
+                      <h3 className="text-2xl font-bold">₹{inventorySummary.stockValue.toFixed(2)}</h3>
+                      <p className="text-xs text-text/50">At cost (APR)</p>
+                    </div>
+                    <div className="bg-primary-orange/10 p-2.5 rounded-full">
+                      <PackageIcon className="w-5 h-5 text-primary-orange" />
+                    </div>
+                  </div>
+                  <dl className="mt-2 pt-2 border-t border-card-border/10 space-y-0.5 text-xs text-text/70">
+                    <div className="flex justify-between gap-2">
+                      <dt>Products on sale</dt>
+                      <dd className="tabular-nums">{inventorySummary.productsOnSale}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Low stock</dt>
+                      <dd className="tabular-nums text-amber-700 dark:text-amber-400">
+                        {inventorySummary.lowStockCount}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Out of stock</dt>
+                      <dd className="tabular-nums text-red-600">{inventorySummary.outOfStockCount}</dd>
+                    </div>
+                  </dl>
+                </div>
+
                 {/* Expenses: total, by person, by type */}
                 <div className="card">
                   <div className="flex items-start justify-between gap-3">
@@ -515,7 +591,7 @@ export function Dashboard() {
                           Recent Sales
                         </h3>
                         <p className="text-text/60 text-sm">
-                          You made {stats.totalOrders} sales
+                          You made {stats.confirmedOrders} sales
                         </p>
                       </div>
                       <div className="text-sm text-text/60">

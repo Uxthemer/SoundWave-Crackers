@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle, Copy } from "lucide-react";
+import { ReceiptText, FileDown, Percent, Printer, Loader2, Eye, Download, X, Search, ChevronDown, ChevronUp, Plus, IndianRupee, CheckCircle2, RotateCcw, TrendingUp, TrendingDown, PackageCheck, Filter, Pencil, MessageCircle, Copy, History, Truck, User, MapPin, Phone } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "../lib/supabase";
 import { attachPackDetails } from "../lib/orderItems";
@@ -38,6 +38,8 @@ import { addPrintToolbar } from "../lib/printWindow";
 import { useCartStore } from "../store/cartStore";
 import { useSeasons } from "../context/SeasonContext";
 import { buildOrderCopy } from "../lib/orderCopy";
+import OrderHistoryModal from "../components/OrderHistoryModal";
+import { PullToRefresh } from "../components/PullToRefresh";
 
 interface OrderItem {
   id: string;
@@ -87,7 +89,22 @@ interface Order {
   confirmed_at?: string | null;
   /** Lorry receipt, set when the order is marked Shipped. */
   lr_number?: string | null;
+  /** The receipts recorded against it; only their notes are read here. */
+  payments?: { note: string | null; created_at: string }[];
 }
+
+/**
+ * The notes typed against an order's receipts in Mark Payment, oldest first,
+ * as one line. They live on each payment (order_payments.note), not on the
+ * order -- orders.payment_note exists but nothing writes it.
+ */
+const paymentNotesOf = (order: Pick<Order, "payments">) =>
+  (order.payments || [])
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
+    .map((p) => (p.note || "").trim())
+    .filter(Boolean)
+    .join(" · ");
 
 /**
  * Fulfilment only.
@@ -134,6 +151,38 @@ const CONFIRMED_NEXT = [
   "Cancelled",
 ];
 
+/**
+ * Put on every order a bulk change marks Shipped. Lorry receipts often arrive
+ * after the goods have gone, and a whole day's dispatch should not wait on
+ * them; the real number is filled in later from the order's details.
+ */
+const PLACEHOLDER_LR_NUMBER = "000-000";
+
+/**
+ * Why an order cannot move to a status, or null if it can. The same rules
+ * enforce_order_status_transition() applies in the database, checked first so
+ * a bulk change can say which orders it will skip before it starts.
+ */
+const statusMoveProblem = (
+  order: { status: string },
+  newStatus: string
+): string | null => {
+  if (order.status === newStatus) return `Already ${newStatus}`;
+  if (order.status === "Cancelled" && newStatus !== "Enquiry Received") {
+    return "Cancelled — reopen it first";
+  }
+  if (
+    REQUIRES_CONFIRMATION.includes(newStatus) &&
+    !COMMITTED_STATUSES.includes(order.status)
+  ) {
+    return "Not confirmed yet — confirm it first";
+  }
+  if (COMMITTED_STATUSES.includes(order.status) && newStatus === "Enquiry Received") {
+    return "Confirmed orders cannot go back to an enquiry — cancel instead";
+  }
+  return null;
+};
+
 /** Confirmed and fully paid: nothing stands between it and the packing table. */
 const isReadyForPacking = (order: { status: string; payment_status?: string | null }) =>
   order.status === "Order Confirmed" && order.payment_status === "received";
@@ -149,6 +198,7 @@ const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
   partial: { label: "Part paid", className: "bg-amber-100 text-amber-700" },
   received: { label: "Paid", className: "bg-green-100 text-green-700" },
   refunded: { label: "Refunded", className: "bg-gray-200 text-gray-700" },
+  extra: { label: "Extra paid", className: "bg-blue-100 text-blue-700" },
 };
 
 /**
@@ -159,6 +209,73 @@ const PAYMENT_LABELS: Record<string, { label: string; className: string }> = {
  */
 const payableAmount = (order: { total_amount: number; discount_amt?: number | null }) =>
   Math.max(Number(order.total_amount || 0) - Number(order.discount_amt || 0), 0);
+
+/** More than a rupee's rounding over the payable amount counts as extra. */
+const EXTRA_TOLERANCE = 0.01;
+
+/** Money received beyond what the order is worth, or 0. */
+const extraReceived = (order: {
+  total_amount: number;
+  discount_amt?: number | null;
+  amount_received?: number | null;
+}) => Math.max(Number(order.amount_received || 0) - payableAmount(order), 0);
+
+/**
+ * The payment flag an order shows. "Extra paid" is not one of the database's
+ * statuses -- there it is simply 'received', which is right for packing and
+ * revenue -- but money to hand back or carry forward must stand out, so it is
+ * worked out here from the figures.
+ */
+const paymentStateOf = (order: {
+  total_amount: number;
+  discount_amt?: number | null;
+  amount_received?: number | null;
+  payment_status?: string | null;
+}) =>
+  order.payment_status !== "refunded" && extraReceived(order) > EXTRA_TOLERANCE
+    ? "extra"
+    : order.payment_status || "pending";
+
+const paymentLabelOf = (order: Parameters<typeof paymentStateOf>[0]) =>
+  PAYMENT_LABELS[paymentStateOf(order)] ?? PAYMENT_LABELS.pending;
+
+const roundRupees = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * The receipt form's figures, as they will stand once it is saved.
+ *
+ * With no discount chosen (the default) the order keeps the discount it
+ * already has. With ₹ or % chosen, the discount is whatever the amount being
+ * received leaves unpaid -- "they paid 9,500 on a 10,000 order, call the rest
+ * a discount" -- worked out as both an amount and a percentage of the order
+ * total. Paying the full balance or more leaves no discount.
+ */
+const paymentFigures = (
+  order: Order,
+  amountNow: number,
+  autoDiscount: boolean
+) => {
+  const total = Number(order.total_amount || 0);
+  const received = Number(order.amount_received || 0);
+  const savedDiscount = Number(order.discount_amt || 0);
+  const discount = autoDiscount
+    ? roundRupees(Math.min(Math.max(total - received - amountNow, 0), total))
+    : savedDiscount;
+  const discountPercentage = total > 0 ? (discount / total) * 100 : 0;
+  const payable = Math.max(total - discount, 0);
+  return {
+    total,
+    received,
+    discount,
+    discountPercentage,
+    payable,
+    /** Before this receipt. */
+    outstanding: payable - received,
+    /** After this receipt; positive means more has come in than is owed. */
+    extraAfter: received + amountNow - payable,
+    discountChanged: autoDiscount && Math.abs(discount - savedDiscount) > 0.005,
+  };
+};
 
 /** The rupee value of a discount entered as an amount or as a % of the order total. */
 const discountValue = (
@@ -178,24 +295,6 @@ const discountInputFor = (order: {
   order.discount_percentage && Number(order.discount_percentage) > 0
     ? { type: "percentage", input: order.discount_percentage }
     : { type: "amount", input: order.discount_amt ?? "" };
-
-/** Whether what is typed would change the discount already on the order. */
-const discountDiffers = (
-  order: { total_amount: number; discount_amt?: number | null; discount_percentage?: string | null },
-  type: "amount" | "percentage",
-  input: number | string
-) => {
-  const saved = discountInputFor(order);
-  const savedPercentage =
-    saved.type === "percentage" ? Number(saved.input) || 0 : null;
-  const typedPercentage = type === "percentage" ? Number(input) || 0 : null;
-  return (
-    Math.abs(
-      discountValue(order.total_amount, type, input) -
-        Number(order.discount_amt || 0)
-    ) > 0.005 || savedPercentage !== typedPercentage
-  );
-};
 
 /** The sentence that explains what the status means, in the customer's terms. */
 const STATUS_NOTES: Record<string, string> = {
@@ -239,12 +338,15 @@ function statusUpdateMessage(order: Order, business: BusinessDetails): string {
     `Status: ${order.status}`,
   ];
 
-  const payment = PAYMENT_LABELS[order.payment_status || "pending"]?.label;
-  if (payment) lines.push(`Payment: ${payment}`);
-  // Worth spelling out only while money is actually outstanding.
+  lines.push(`Payment: ${paymentLabelOf(order).label}`);
+  // Worth spelling out only while money is actually outstanding, or over.
   if (received > 0 && balance > 0) {
     lines.push(
       `Received: Rs. ${received.toFixed(2)} | Balance: Rs. ${balance.toFixed(2)}`
+    );
+  } else if (-balance > EXTRA_TOLERANCE) {
+    lines.push(
+      `Received: Rs. ${received.toFixed(2)} | Extra: Rs. ${(-balance).toFixed(2)}`
     );
   }
   if (order.status === "Shipped" && lrNumber) {
@@ -289,9 +391,8 @@ export function Orders() {
   const [paymentError, setPaymentError] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
   // The same discount the Discount action sets, offered in the receipt form.
-  const [paymentDiscountType, setPaymentDiscountType] = useState<"amount" | "percentage">("amount");
-  const [paymentDiscountInput, setPaymentDiscountInput] = useState<number | string>("");
-  const [paymentAmountTouched, setPaymentAmountTouched] = useState(false);
+  // Null until ₹ or % is picked: only then does the discount follow the amount.
+  const [paymentDiscountMode, setPaymentDiscountMode] = useState<"amount" | "percentage" | null>(null);
   const [sortField, setSortField] = useState<keyof Order>("created_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -317,6 +418,24 @@ export function Orders() {
   const loadOrderCopy = useCartStore((state) => state.loadOrderCopy);
   const { activeSeason } = useSeasons();
   const [copyingOrderId, setCopyingOrderId] = useState<string | null>(null);
+  const [historyOrder, setHistoryOrder] = useState<Order | null>(null);
+  /** Rows whose payment note has been tapped open in full. */
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(() => new Set());
+  /** The LR number being typed in the order details, or null when not editing it. */
+  const [lrEdit, setLrEdit] = useState<string | null>(null);
+  const [savingLr, setSavingLr] = useState(false);
+
+  // Bulk status change: the ticked rows, the status they are moving to, and
+  // once it has run, what happened to each.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const [bulkLrNumber, setBulkLrNumber] = useState(PLACEHOLDER_LR_NUMBER);
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState(0);
+  const [bulkResult, setBulkResult] = useState<{
+    updated: number;
+    failed: { label: string; reason: string }[];
+  } | null>(null);
 
   /**
    * Copy as new order: the same lines for another delivery or another
@@ -430,7 +549,8 @@ export function Orders() {
               categories:categories ( name )
             ),
             pack:combo_packs ( id, name, pack_code )
-          )
+          ),
+          payments:order_payments ( note, created_at )
         `
         )
         .order("created_at", { ascending: false });
@@ -518,7 +638,7 @@ export function Orders() {
       const { data, error } = await supabase
         .from("orders")
         .select(
-          `*, items:order_items ( *, product:products ( id, name, product_code, categories:categories ( name ) ), pack:combo_packs ( id, name, pack_code ) )`
+          `*, items:order_items ( *, product:products ( id, name, product_code, categories:categories ( name ) ), pack:combo_packs ( id, name, pack_code ) ), payments:order_payments ( note, created_at )`
         )
         // An order number is not a uuid, and comparing one against `id` makes
         // Postgres reject the whole query -- so pick the column by its shape.
@@ -595,47 +715,49 @@ export function Orders() {
     setLRError("");
   };
 
+  /**
+   * Moves one order to a status. Shared by the status column and the bulk
+   * change, so both take the same route into the database.
+   *
+   * Stock is not touched here. Confirming and cancelling (and un-cancelling)
+   * move it in the database, through the orders_stock_sync trigger, so the
+   * guest checkout and any other path behave the same way. Doing it here as
+   * well would hand the stock back twice.
+   */
+  const writeStatus = async (order: Order, newStatus: string, lr?: string) => {
+    // Confirming is not a plain status write. confirm_order locks the stock
+    // it is about to spend, so two admins confirming different orders for the
+    // same product at the same moment cannot both succeed against the same
+    // units. An order already holding stock (Packing back to Order Confirmed)
+    // has nothing to check, and confirm_order would leave it where it is, so
+    // that is a plain write.
+    if (newStatus === "Order Confirmed" && !COMMITTED_STATUSES.includes(order.status)) {
+      const { error } = await supabase.rpc("confirm_order", {
+        p_order_id: order.id,
+        p_allow_shortfall: false,
+      });
+      // "Not enough stock: X (need 5, have 2)" is the useful half; it is
+      // shown rather than a generic failure.
+      if (error) throw error;
+      return;
+    }
+    const updateObj: Record<string, string> = { status: newStatus };
+    if (newStatus === "Shipped" && lr !== undefined) updateObj.lr_number = lr;
+    const { error } = await supabase.from("orders").update(updateObj).eq("id", order.id);
+    if (error) throw error;
+  };
+
   const handleConfirmStatusChange = async () => {
     if (!pendingStatus) return;
     if (pendingStatus.newStatus === "Shipped" && !lrNumber.trim()) {
       setLRError("LR Number is required for Shipped status.");
       return;
     }
+    const order = orders.find((o) => o.id === pendingStatus.orderId);
+    if (!order) return;
     setUpdatingStatus(true);
     try {
-      // Confirming is not a plain status write. confirm_order locks the stock
-      // it is about to spend, so two admins confirming different orders for
-      // the same product at the same moment cannot both succeed against the
-      // same units.
-      if (pendingStatus.newStatus === "Order Confirmed") {
-        const { error: confirmError } = await supabase.rpc("confirm_order", {
-          p_order_id: pendingStatus.orderId,
-          p_allow_shortfall: false,
-        });
-        if (confirmError) {
-          // "Not enough stock: X (need 5, have 2)" is the useful half; show
-          // it rather than a generic failure.
-          setLRError(confirmError.message);
-          setUpdatingStatus(false);
-          return;
-        }
-      } else {
-        const updateObj: any = { status: pendingStatus.newStatus };
-        if (pendingStatus.newStatus === "Shipped") {
-          updateObj.lr_number = lrNumber.trim();
-        }
-        const { error } = await supabase
-          .from("orders")
-          .update(updateObj)
-          .eq("id", pendingStatus.orderId);
-
-        if (error) throw error;
-      }
-
-      // Stock is not touched here. Cancelling (and un-cancelling) moves it in
-      // the database, through the orders_stock_sync trigger, so the guest
-      // checkout and any other path behave the same way. Doing it here as
-      // well would hand the stock back twice.
+      await writeStatus(order, pendingStatus.newStatus, lrNumber.trim());
 
       setOrders(
         orders.map((order) =>
@@ -691,37 +813,13 @@ export function Orders() {
   const openPaymentModal = (order: Order) => {
     const outstanding =
       payableAmount(order) - Number(order.amount_received || 0);
-    const discount = discountInputFor(order);
     setPaymentOrder(order);
     setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
-    setPaymentAmountTouched(false);
-    setPaymentDiscountType(discount.type);
-    setPaymentDiscountInput(discount.input);
+    setPaymentDiscountMode(null);
     setPaymentMethodInput(order.payment_method || "UPI");
     setPaymentReference("");
     setPaymentNote("");
     setPaymentError("");
-  };
-
-  /**
-   * A discount typed into the receipt form moves what is outstanding. Until
-   * someone has typed an amount of their own, the amount follows it, so the
-   * usual case -- "settle it at this price" -- is one field, not two.
-   */
-  const changePaymentDiscount = (
-    type: "amount" | "percentage",
-    input: number | string
-  ) => {
-    setPaymentDiscountType(type);
-    setPaymentDiscountInput(input);
-    if (!paymentOrder || paymentAmountTouched) return;
-    const payable = Math.max(
-      Number(paymentOrder.total_amount || 0) -
-        discountValue(paymentOrder.total_amount, type, input),
-      0
-    );
-    const outstanding = payable - Number(paymentOrder.amount_received || 0);
-    setPaymentAmount(outstanding > 0 ? outstanding.toFixed(2) : "");
   };
 
   /**
@@ -736,9 +834,16 @@ export function Orders() {
   const saveDiscount = async (
     order: Order,
     type: "amount" | "percentage",
-    input: number | string
+    input: number | string,
+    /**
+     * The rupee figure to store, when it is known exactly. The receipt form
+     * works the discount out in rupees and shows the % to two places; the %
+     * is kept as a label, and recomputing the amount from it would be off by
+     * the rounding.
+     */
+    exactAmount?: number
   ): Promise<Order> => {
-    const amount = discountValue(order.total_amount, type, input);
+    const amount = exactAmount ?? discountValue(order.total_amount, type, input);
     if (!Number.isFinite(amount) || amount < 0) {
       throw new Error("Enter a discount of zero or more.");
     }
@@ -780,10 +885,17 @@ export function Orders() {
   const handleRecordPayment = async () => {
     if (!paymentOrder) return;
     const amount = paymentAmount.trim() === "" ? 0 : Number(paymentAmount);
-    const discountChanged =
-      canEditDiscount &&
-      discountDiffers(paymentOrder, paymentDiscountType, paymentDiscountInput);
-    if (!Number.isFinite(amount) || (amount === 0 && !discountChanged)) {
+    if (!Number.isFinite(amount)) {
+      setPaymentError("Enter the amount received.");
+      return;
+    }
+    const figures = paymentFigures(
+      paymentOrder,
+      amount,
+      canEditDiscount && paymentDiscountMode !== null
+    );
+    const discountChanged = figures.discountChanged;
+    if (amount === 0 && !discountChanged) {
       setPaymentError("Enter the amount received.");
       return;
     }
@@ -797,8 +909,11 @@ export function Orders() {
       if (discountChanged) {
         order = await saveDiscount(
           paymentOrder,
-          paymentDiscountType,
-          paymentDiscountInput
+          paymentDiscountMode ?? "amount",
+          paymentDiscountMode === "percentage"
+            ? figures.discountPercentage.toFixed(2)
+            : figures.discount,
+          figures.discount
         );
         // If the payment below fails, a retry must not save the discount
         // again -- it is already in.
@@ -826,6 +941,11 @@ export function Orders() {
                 ...o,
                 amount_received: result?.amount_received ?? o.amount_received,
                 payment_status: result?.payment_status ?? o.payment_status,
+                // So the note shows in its column without a reload.
+                payments: [
+                  ...(o.payments || []),
+                  { note: paymentNote.trim() || null, created_at: new Date().toISOString() },
+                ],
               }
             : o
         )
@@ -846,6 +966,110 @@ export function Orders() {
     setPendingStatus(null);
     setLRNumber("");
     setLRError("");
+  };
+
+  const toggleSelected = (orderId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  };
+
+  const openBulkStatus = (status: string) => {
+    setBulkStatus(status);
+    setBulkLrNumber(PLACEHOLDER_LR_NUMBER);
+    setBulkResult(null);
+    setBulkProgress(0);
+  };
+
+  const closeBulkStatus = () => {
+    if (bulkRunning) return;
+    setBulkStatus(null);
+    setBulkResult(null);
+  };
+
+  /**
+   * Moves every ticked order that can make the move, one at a time. One at a
+   * time because confirm_order locks the stock it spends, and because a single
+   * order that is refused -- short of stock, say -- must not stop the rest.
+   * Each refusal is kept with its reason and shown when the run ends.
+   */
+  const runBulkStatus = async (targets: Order[]) => {
+    if (!bulkStatus) return;
+    const lr = bulkLrNumber.trim();
+    if (bulkStatus === "Shipped" && !lr) {
+      toast.error("Enter an LR number, or leave the 000-000 placeholder.");
+      return;
+    }
+    setBulkRunning(true);
+    setBulkProgress(0);
+    const failed: { label: string; reason: string }[] = [];
+    const done: string[] = [];
+    for (const order of targets) {
+      try {
+        await writeStatus(order, bulkStatus, lr);
+        done.push(order.id);
+      } catch (error) {
+        failed.push({
+          label: order.short_id || order.id.slice(0, 8),
+          reason:
+            (error as { message?: string } | null)?.message ?? "Could not be updated",
+        });
+      }
+      setBulkProgress((n) => n + 1);
+    }
+    const updated = done.length;
+    // What moved is done with; what was refused stays ticked to try again.
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      done.forEach((id) => next.delete(id));
+      return next;
+    });
+    setBulkRunning(false);
+    setBulkResult({ updated, failed });
+    if (updated > 0) {
+      toast.success(
+        `${updated} order${updated === 1 ? "" : "s"} moved to ${bulkStatus}.`
+      );
+    }
+    // Tiles, confirmed_at and payment figures can all move with a status, so
+    // the list is read again rather than patched.
+    handleFetch();
+  };
+
+  /**
+   * Corrects or fills in the LR number on its own. A bulk ship puts the
+   * 000-000 placeholder on every order, and this is where the real one goes.
+   */
+  const saveLrNumber = async (order: Order) => {
+    const value = (lrEdit ?? "").trim();
+    if (!value) {
+      toast.error("Enter the LR number.");
+      return;
+    }
+    setSavingLr(true);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ lr_number: value })
+        .eq("id", order.id);
+      if (error) throw error;
+      setOrders((prev) =>
+        prev.map((o) => (o.id === order.id ? { ...o, lr_number: value } : o))
+      );
+      setSelectedOrder((prev) =>
+        prev?.id === order.id ? { ...prev, lr_number: value } : prev
+      );
+      setLrEdit(null);
+      toast.success("LR number saved.");
+    } catch (error) {
+      console.error("Failed to save the LR number:", error);
+      toast.error("Could not save the LR number. Please try again.");
+    } finally {
+      setSavingLr(false);
+    }
   };
 
   const exportOrder = (order: Order) => {
@@ -912,9 +1136,10 @@ export function Orders() {
       city: order.city,
       status: order.status,
       // The label the Payment column shows, not how they paid.
-      payment: PAYMENT_LABELS[order.payment_status || "pending"]?.label ?? "Unpaid",
+      payment: paymentLabelOf(order).label,
       paymentMethod: order.payment_method,
       itemCount: order.items?.length || 0,
+      paymentNote: paymentNotesOf(order),
       total: Number(order.total_amount || 0),
       discount: Number(order.discount_amt || 0),
     }));
@@ -1336,7 +1561,9 @@ export function Orders() {
           ?.toLowerCase()
           .includes(searchTerm.toLowerCase()) ||
         order.city?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        order.short_id?.toLowerCase().includes(searchTerm.toLowerCase())) &&
+        order.short_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.lr_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        paymentNotesOf(order).toLowerCase().includes(searchTerm.toLowerCase())) &&
       (statusFilter.length === 0 ||
         statusFilter.some((status) =>
           status === READY_FOR_PACKING
@@ -1344,7 +1571,7 @@ export function Orders() {
             : order.status === status
         )) &&
       (paymentFilter.length === 0 ||
-        paymentFilter.includes(order.payment_status || "pending")) &&
+        paymentFilter.includes(paymentStateOf(order))) &&
       (customerFilter.length === 0 ||
         customerFilter.includes(order.user_id ? "registered" : "guest"))
   );
@@ -1376,14 +1603,46 @@ export function Orders() {
     });
 
   /**
-   * Cancelled orders that match everything else being asked for. Searching an
-   * order number and getting an empty table, because the order turned out to
-   * be cancelled, looks like the order is gone — so the count is offered with
-   * a way through to it.
+   * Only ticked rows still on screen count. A row ticked and then filtered
+   * away would otherwise be changed without anyone seeing it go.
    */
-  const hiddenCancelled = showingCancelled
-    ? 0
-    : matchingOrders.length - filteredOrders.length;
+  const selectedOrders = filteredOrders.filter((order) => selectedIds.has(order.id));
+  const allVisibleSelected =
+    filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length;
+  const toggleSelectAllVisible = () =>
+    setSelectedIds(
+      allVisibleSelected ? new Set() : new Set(filteredOrders.map((order) => order.id))
+    );
+
+  const bulkPlan = bulkStatus
+    ? selectedOrders.reduce(
+        (plan, order) => {
+          const problem = statusMoveProblem(order, bulkStatus);
+          if (problem) plan.skipped.push({ order, reason: problem });
+          else plan.targets.push(order);
+          return plan;
+        },
+        {
+          targets: [] as Order[],
+          skipped: [] as { order: Order; reason: string }[],
+        }
+      )
+    : null;
+
+  /** Pull-to-refresh is off under any dialog: it would reload the list behind it. */
+  const anyDialogOpen = Boolean(
+    selectedOrder ||
+      paymentOrder ||
+      showConfirmModal ||
+      showDiscountModal ||
+      profitModalOrder ||
+      editOrder ||
+      showEditModal ||
+      showExportModal ||
+      shareRequest ||
+      historyOrder ||
+      bulkStatus
+  );
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1434,32 +1693,15 @@ export function Orders() {
     );
   }
 
-  /**
-   * The receipt form's figures as they will be once it is saved: the discount
-   * being typed is applied here so the outstanding amount moves with it.
-   */
-  const paymentPreview = paymentOrder
-    ? (() => {
-        const total = Number(paymentOrder.total_amount || 0);
-        const discount = canEditDiscount
-          ? discountValue(total, paymentDiscountType, paymentDiscountInput)
-          : Number(paymentOrder.discount_amt || 0);
-        const payable = Math.max(total - discount, 0);
-        const received = Number(paymentOrder.amount_received || 0);
-        return {
-          total,
-          discount,
-          payable,
-          received,
-          outstanding: payable - received,
-          discountChanged:
-            canEditDiscount &&
-            discountDiffers(paymentOrder, paymentDiscountType, paymentDiscountInput),
-        };
-      })()
-    : null;
   const paymentAmountValue =
     paymentAmount.trim() === "" ? 0 : Number(paymentAmount) || 0;
+  const paymentPreview = paymentOrder
+    ? paymentFigures(
+        paymentOrder,
+        paymentAmountValue,
+        canEditDiscount && paymentDiscountMode !== null
+      )
+    : null;
 
   const handleOpenDiscountModal = (order: Order) => {
     setDiscountOrderId(order.id);
@@ -1483,25 +1725,16 @@ export function Orders() {
 
   return (
     <div className="min-h-screen pt-8 pb-12">
-      <div className="container mx-auto px-6">
+      <PullToRefresh onRefresh={handleFetch} enabled={!anyDialogOpen} />
+      <div className="container mx-auto px-4 sm:px-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
-            <h1 className="font-heading text-4xl">All Orders</h1>
+            <h1 className="font-heading text-3xl sm:text-4xl">All Orders</h1>
             <span className="bg-primary-orange/10 text-primary-orange px-3 py-1 rounded-full">
               {filteredOrders.length} orders
             </span>
           </div>
-          <div className="flex flex-wrap gap-4">
-            <div className="relative w-full md:w-64">
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
-            </div>
+          <div className="flex flex-wrap gap-2 sm:gap-4">
             <button
               onClick={() => {
                 setEditOrder(null);
@@ -1606,6 +1839,7 @@ export function Orders() {
                 { value: "pending", label: "Unpaid" },
                 { value: "partial", label: "Part paid" },
                 { value: "received", label: "Paid" },
+                { value: "extra", label: "Extra paid" },
                 { value: "refunded", label: "Refunded" },
               ]}
             />
@@ -1640,31 +1874,81 @@ export function Orders() {
           </div>
         </div>
 
-        {hiddenCancelled > 0 && (
-          <p className="-mt-2 mb-4 text-sm text-text/60">
-            {hiddenCancelled} cancelled{" "}
-            {hiddenCancelled === 1 ? "order is" : "orders are"} not shown.{" "}
-            <button
-              onClick={() => setStatusFilter((current) => [...current, CANCELLED])}
-              className="text-primary-orange font-semibold hover:underline"
-            >
-              Show cancelled
-            </button>
-          </p>
-        )}
+
+        {/* Search sits on the table it searches, at every width. Ticking rows
+            turns the same bar into the bulk actions for them. */}
+        <div className="mb-3 flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type="search"
+              placeholder="Search by order number, name, phone, city, LR number or payment note…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+            />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
+          </div>
+          {selectedOrders.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border border-primary-orange/30 bg-primary-orange/5 px-3 py-1.5">
+              <span className="text-sm font-semibold whitespace-nowrap">
+                {selectedOrders.length} selected
+              </span>
+              <select
+                value=""
+                onChange={(e) => e.target.value && openBulkStatus(e.target.value)}
+                aria-label="Change status of the selected orders"
+                className="flex-1 sm:flex-none px-2 py-1.5 rounded-lg text-sm bg-background border border-card-border/20 focus:outline-none focus:border-primary-orange"
+              >
+                <option value="">Change status to…</option>
+                {ORDER_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="p-1.5 rounded-lg hover:bg-card/70"
+                title="Clear selection"
+                aria-label="Clear selection"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="bg-card/30 rounded-xl overflow-hidden border border-card-border/10 w-full">
           <div className="overflow-x-auto w-full">
             <table className="w-full text-xs sm:text-sm">
               <thead>
                 <tr className="bg-card/50">
+                  <th className="py-3 pl-3 sm:pl-4 pr-0 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      ref={(el) => {
+                        if (el) {
+                          el.indeterminate =
+                            selectedOrders.length > 0 && !allVisibleSelected;
+                        }
+                      }}
+                      onChange={toggleSelectAllVisible}
+                      disabled={filteredOrders.length === 0}
+                      aria-label="Select all orders shown"
+                      className="w-4 h-4 accent-primary-orange align-middle"
+                    />
+                  </th>
+                  {/* The order's date sits under its number, so this header
+                      sorts by date: sorting by a uuid put orders in no order
+                      anyone could use. */}
                   <th className="py-3 px-3 sm:px-6 text-left">
                     <button
                       className="flex items-center space-x-1"
-                      onClick={() => handleSort("id")}
+                      onClick={() => handleSort("created_at")}
                     >
-                      <span className="whitespace-nowrap">Order ID</span>
-                      {sortField === "id" &&
+                      <span className="whitespace-nowrap">Order ID / Date</span>
+                      {sortField === "created_at" &&
                         (sortDirection === "asc" ? (
                           <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" />
                         ) : (
@@ -1690,21 +1974,7 @@ export function Orders() {
                   <th className="py-3 px-3 sm:px-6 text-left">Status</th>
                   <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Amount</th>
                   <th className="py-3 px-3 sm:px-6 text-left whitespace-nowrap">Payment</th>
-                  <th className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">Disc. Amt</th>
-                  <th className="py-3 px-3 sm:px-6 text-left">
-                    <button
-                      className="flex items-center space-x-1"
-                      onClick={() => handleSort("created_at")}
-                    >
-                      <span>Date</span>
-                      {sortField === "created_at" &&
-                        (sortDirection === "asc" ? (
-                          <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
-                        ))}
-                    </button>
-                  </th>
+                  <th className="py-3 px-3 sm:px-6 text-left whitespace-nowrap">Payment note</th>
                   <th className="py-3 px-3 sm:px-6 text-center">Actions</th>
                 </tr>
               </thead>
@@ -1725,8 +1995,19 @@ export function Orders() {
                   filteredOrders.map((order) => (
                     <tr
                       key={order.id}
-                      className="border-t border-card-border/10"
+                      className={`border-t border-card-border/10 ${
+                        selectedIds.has(order.id) ? "bg-primary-orange/5" : ""
+                      }`}
                     >
+                      <td className="py-3 pl-3 sm:pl-4 pr-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(order.id)}
+                          onChange={() => toggleSelected(order.id)}
+                          aria-label={`Select order ${order.short_id || order.id.slice(0, 8)}`}
+                          className="w-4 h-4 accent-primary-orange align-middle"
+                        />
+                      </td>
                       <td className="py-3 px-3 sm:px-6 font-mono text-xs sm:text-sm whitespace-nowrap">
                         {/* The last 4 are the year's sequence, which is what
                             anyone scanning the list goes by; the full number
@@ -1745,6 +2026,11 @@ export function Orders() {
                               : order.short_id
                             : order.id.slice(0, 8) + "…"}
                         </button>
+                        {/* When it was placed, under the number rather than in
+                            a column of its own -- the table is wide enough. */}
+                        <div className="font-sans text-[10px] sm:text-[11px] leading-tight text-text/60">
+                          {format(new Date(order.created_at), "dd MMM yy, h:mm a")}
+                        </div>
                       </td>
                       <td className="py-3 px-3 sm:px-6 min-w-[150px]">
                         {order.full_name}
@@ -1878,9 +2164,7 @@ export function Orders() {
                         {(() => {
                           const received = Number(order.amount_received || 0);
                           const balance = payableAmount(order) - received;
-                          const state =
-                            PAYMENT_LABELS[order.payment_status || "pending"] ??
-                            PAYMENT_LABELS.pending;
+                          const state = paymentLabelOf(order);
 
                           return (
                             <div className="flex items-center gap-2">
@@ -1896,6 +2180,11 @@ export function Orders() {
                                 {balance > 0.01 && (
                                   <p className="text-[11px] text-red-600">
                                     ₹{balance.toFixed(2)} due
+                                  </p>
+                                )}
+                                {-balance > EXTRA_TOLERANCE && (
+                                  <p className="text-[11px] text-blue-700 font-semibold">
+                                    ₹{(-balance).toFixed(2)} extra
                                   </p>
                                 )}
                                 {/* The discount is why "due" is less than the
@@ -1932,20 +2221,37 @@ export function Orders() {
                           );
                         })()}
                       </td>
-                      <td className="py-3 px-3 sm:px-6 text-right whitespace-nowrap">
-                        ₹{(order.discount_amt || 0).toFixed(2)}
-                      </td>
-                      {/* Date over time rather than side by side: the time
-                          tells two orders on the same day apart, and this
-                          column is already the widest thing that is not the
-                          customer's name. */}
-                      <td className="py-3 px-3 sm:px-6 whitespace-nowrap">
-                        <div>
-                          {format(new Date(order.created_at), "MMM dd, yyyy")}
-                        </div>
-                        <div className="text-xs text-text/60">
-                          {format(new Date(order.created_at), "h:mm a")}
-                        </div>
+                      {/* The discount moved under Payment; this column holds
+                          what was noted when money came in. A couple of words
+                          fit, the rest is on hover -- or on a tap, since a
+                          phone has no hover. */}
+                      <td className="py-3 px-3 sm:px-6">
+                        {(() => {
+                          const note = paymentNotesOf(order);
+                          if (!note) return <span className="text-text/40">—</span>;
+                          const open = expandedNotes.has(order.id);
+                          return (
+                            <button
+                              type="button"
+                              title={note}
+                              onClick={() =>
+                                setExpandedNotes((current) => {
+                                  const next = new Set(current);
+                                  if (next.has(order.id)) next.delete(order.id);
+                                  else next.add(order.id);
+                                  return next;
+                                })
+                              }
+                              className={`block text-left text-xs sm:text-sm ${
+                                open
+                                  ? "max-w-[220px] whitespace-normal break-words"
+                                  : "max-w-[110px] truncate"
+                              }`}
+                            >
+                              {note}
+                            </button>
+                          );
+                        })()}
                       </td>
                       <td className="py-3 px-3 sm:px-6">
                         <div className="flex items-center justify-center space-x-1 sm:space-x-2">
@@ -1955,6 +2261,14 @@ export function Orders() {
                             title="View Order Details"
                           >
                             <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setHistoryOrder(order)}
+                            className="p-1 sm:p-2 text-primary-orange hover:bg-card/70 rounded-lg transition-colors"
+                            title="Order history"
+                            aria-label={`History of order ${order.short_id || ""}`}
+                          >
+                            <History className="w-4 h-4" />
                           </button>
 
                           {/* Replace print button with discount button for superadmin */}
@@ -2074,27 +2388,70 @@ export function Orders() {
                   ₹{paymentPreview.outstanding.toFixed(2)}
                 </span>
               </div>
+              {/* Where this receipt leaves the order. Money beyond the
+                  payable amount is called out: it is owed back, or carried
+                  to the customer's next order. */}
+              {paymentAmountValue !== 0 && (
+                <div className="flex justify-between border-t border-card-border/20 pt-1">
+                  <span className="text-text/70">After this payment</span>
+                  {paymentPreview.extraAfter > EXTRA_TOLERANCE ? (
+                    <span className="font-semibold text-blue-700">
+                      ₹{paymentPreview.extraAfter.toFixed(2)} extra
+                    </span>
+                  ) : paymentPreview.extraAfter < -EXTRA_TOLERANCE ? (
+                    <span className="text-red-600">
+                      ₹{(-paymentPreview.extraAfter).toFixed(2)} still due
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-green-700">Fully paid</span>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
-              {/* The same discount as the Discount action, here so one
-                  agreed while the money is being taken is a single save. */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Amount received *
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  autoFocus
+                  className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
+                />
+                {/* Part payments are normal here: an advance now, the
+                    balance on delivery. A refund is a negative amount. */}
+                <p className="text-xs text-text/50 mt-1">
+                  Part payments are fine. Use a negative amount for a refund.
+                </p>
+              </div>
+
+              {/* Off until ₹ or % is picked, because most receipts are part
+                  payments with the balance still to come, and those must not
+                  turn the balance into a discount. Once picked, whatever this
+                  amount leaves unpaid is the discount; tap the same button
+                  again to turn it off. */}
               {canEditDiscount && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium">
+                    <span className="block text-sm font-medium">
                       Discount
-                    </label>
+                    </span>
                     <div className="flex gap-1">
                       {(["amount", "percentage"] as const).map((type) => (
                         <button
                           key={type}
                           type="button"
+                          aria-pressed={paymentDiscountMode === type}
                           onClick={() =>
-                            changePaymentDiscount(type, paymentDiscountInput)
+                            setPaymentDiscountMode((mode) => (mode === type ? null : type))
                           }
                           className={`px-2 py-0.5 rounded-full text-xs border ${
-                            paymentDiscountType === type
+                            paymentDiscountMode === type
                               ? "bg-primary-orange text-white border-primary-orange"
                               : "bg-card border-card-border/20"
                           }`}
@@ -2105,48 +2462,35 @@ export function Orders() {
                     </div>
                   </div>
                   <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={paymentDiscountInput}
-                    onChange={(e) =>
-                      changePaymentDiscount(paymentDiscountType, e.target.value)
+                    type="text"
+                    readOnly
+                    disabled={paymentDiscountMode === null}
+                    value={
+                      paymentDiscountMode === null
+                        ? ""
+                        : paymentDiscountMode === "amount"
+                          ? `₹${paymentPreview.discount.toFixed(2)}`
+                          : `${paymentPreview.discountPercentage.toFixed(2)}%`
                     }
-                    onWheel={(e) => e.currentTarget.blur()}
-                    placeholder={
-                      paymentDiscountType === "amount"
-                        ? "Discount amount"
-                        : "Discount % (e.g. 10)"
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
+                    placeholder="Pick ₹ or % to discount what is left unpaid"
+                    aria-label="Discount, worked out from the amount received"
+                    className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                   />
+                  {paymentDiscountMode !== null && (
+                    <p className="text-xs text-text/60 mt-1">
+                      ₹{paymentPreview.discount.toFixed(2)} ={" "}
+                      {paymentPreview.discountPercentage.toFixed(2)}% of the order
+                      total
+                      {paymentPreview.discountChanged
+                        ? Number(paymentOrder.discount_amt || 0) > 0
+                          ? ` (replaces ₹${Number(paymentOrder.discount_amt).toFixed(2)})`
+                          : ""
+                        : " (no change)"}
+                      .
+                    </p>
+                  )}
                 </div>
               )}
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Amount received *
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => {
-                    setPaymentAmount(e.target.value);
-                    setPaymentAmountTouched(true);
-                  }}
-                  onWheel={(e) => e.currentTarget.blur()}
-                  autoFocus
-                  className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange no-spinner"
-                />
-                {/* Part payments are normal here: an advance now, the
-                    balance on delivery. A refund is a negative amount. */}
-                <p className="text-xs text-text/50 mt-1">
-                  Part payments are fine. Use a negative amount for a refund.
-                  {canEditDiscount &&
-                    " Leave it empty to save only the discount."}
-                </p>
-              </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2229,14 +2573,39 @@ export function Orders() {
 
       {/* Order Details Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-background z-10 flex flex-wrap items-center justify-between gap-3 p-4 sm:p-6 border-b border-card-border/10">
-              <div className="flex items-start sm:items-center gap-4">
-                <h2 className="font-heading text-2xl">Order Details</h2>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-text/60">
-                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Products: <strong className="text-primary-orange ml-1">{selectedTotalProducts}</strong></span>
-                  <span className="bg-card/30 px-3 py-1 rounded-md">Total Quantity: <strong className="text-primary-orange ml-1">{selectedTotalQuantity}</strong></span>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+          <div className="bg-background sm:rounded-xl max-w-4xl w-full max-h-full sm:max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-background z-10 flex flex-wrap items-start justify-between gap-3 p-4 sm:p-6 border-b border-card-border/10">
+              {/* What the order is and where it stands, before anything else:
+                  the full number (the row shows only its last four), the
+                  status, and whether it has been paid for. */}
+              <div className="min-w-0">
+                <h2 className="font-heading text-xl sm:text-2xl">Order Details</h2>
+                <p className="font-mono text-sm sm:text-base text-primary-orange break-all select-all">
+                  {selectedOrder.short_id || selectedOrder.id}
+                </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full font-semibold ${getStatusColor(selectedOrder.status)}`}
+                  >
+                    {selectedOrder.status}
+                  </span>
+                  {(() => {
+                    const state = paymentLabelOf(selectedOrder);
+                    return (
+                      <span className={`px-2.5 py-0.5 rounded-full font-semibold ${state.className}`}>
+                        {state.label}
+                      </span>
+                    );
+                  })()}
+                  {!selectedOrder.user_id && (
+                    <span className="px-2 py-0.5 rounded-full font-bold bg-blue-100 text-blue-700">
+                      GUEST
+                    </span>
+                  )}
+                  <span className="text-text/60">
+                    {format(new Date(selectedOrder.created_at), "dd MMM yyyy, h:mm a")}
+                  </span>
                 </div>
               </div>
               {/* The row's actions, again here: whoever opened the order is
@@ -2276,6 +2645,11 @@ export function Orders() {
                       label: "Send PDF on WhatsApp",
                       icon: <MessageCircle className="w-5 h-5" />,
                       onClick: () => handleShareOrder(selectedOrder),
+                    },
+                    {
+                      label: "Order history",
+                      icon: <History className="w-5 h-5" />,
+                      onClick: () => setHistoryOrder(selectedOrder),
                     },
                     {
                       label: "Edit order",
@@ -2323,7 +2697,10 @@ export function Orders() {
                     </button>
                   ))}
                 <button
-                  onClick={() => setSelectedOrder(null)}
+                  onClick={() => {
+                    setSelectedOrder(null);
+                    setLrEdit(null);
+                  }}
                   className="p-2 hover:bg-card/50 rounded-full transition-colors ml-1"
                   title="Close"
                   aria-label="Close"
@@ -2333,132 +2710,354 @@ export function Orders() {
               </div>
             </div>
 
-            <div className="p-6">
-              {/* Order Items */}
-              <div className="bg-card/30 rounded-lg overflow-auto mb-8">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-card/50">
-                      <th className="py-3 px-4 text-left">S.No</th>
-                      <th className="py-3 px-4 text-left">Code</th>
-                      <th className="py-3 px-4 text-left">Product</th>
-                      <th className="py-3 px-4 text-left">Category</th>
-                      <th className="py-3 px-4 text-center">Quantity</th>
-                      <th className="py-3 px-4 text-right">Price</th>
-                      {/* <th className="py-3 px-4 text-right">APR</th> */}
-                      <th className="py-3 px-4 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedSelectedItems?.map((item, index) => (
-                      <tr
-                        key={item.id}
-                        className="border-t border-card-border/10"
-                      >
-                        <td className="py-3 px-4">{index + 1}</td>
-                        <td className="py-3 px-4">
-                          {item.product?.product_code || "-"}
-                        </td>
-                        <td className="py-3 px-4">{item.product.name}</td>
-                        <td className="py-3 px-4">
-                          {item.product.categories.name}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {item.quantity}
-                        </td>
-                        <td className="py-3 px-4 text-right">₹{item.price}</td>
-                        {/* <td className="py-3 px-4 text-right">₹{(item.product as any)?.apr}</td> */}
-                        <td className="py-3 px-4 text-right">
-                          ₹{item.total_price}
-                        </td>
-                      </tr>
-                    ))}
-                    <tr className="border-t border-card-border/10 bg-card/50">
-                      <td
-                        colSpan={6}
-                        className="py-3 px-4 text-right font-bold"
-                      >
-                        Total Amount:
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold">
-                        ₹{selectedOrder.total_amount}
-                      </td>
-                    </tr>
-
-                    <tr className="border-t border-card-border/10 bg-card/50">
-                      <td
-                        colSpan={6}
-                        className="py-3 px-4 text-right font-bold"
-                      >
-                        Discount:
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-green-700">
-                        -₹{(selectedOrder.discount_amt ?? 0).toFixed(2)}
-                      </td>
-                    </tr>
-
-                    <tr className="border-t border-card-border/10 bg-card/50">
-                      <td
-                        colSpan={6}
-                        className="py-3 px-4 text-right font-bold"
-                      >
-                        Grand Total:
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold">
-                        ₹
-                        {(
-                          selectedOrder.total_amount -
-                          (selectedOrder.discount_amt || 0)
-                        ).toFixed(2)}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Customer Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div>
-                  <h3 className="font-montserrat font-bold text-lg mb-4">
-                    Customer Details
+            <div className="p-4 sm:p-6 space-y-6">
+              {/* Who it is for and where it goes come first: they are what
+                  the person opening an order is usually looking for. */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-card/30 rounded-lg p-4 border border-card-border/10">
+                  <h3 className="font-montserrat font-bold text-sm uppercase tracking-wide text-text/60 mb-2 flex items-center gap-1.5">
+                    <User className="w-4 h-4" /> Customer
                   </h3>
-                  <div className="space-y-2">
-                    <p>
-                      <span className="text-text/60">Name:</span>{" "}
-                      {selectedOrder.full_name}
-                    </p>
-                    <p>
-                      <span className="text-text/60">Email:</span>{" "}
-                      {selectedOrder.email}
-                    </p>
-                    <p>
-                      <span className="text-text/60">Phone:</span>{" "}
-                      {`${selectedOrder.phone}, ${
-                        selectedOrder.alternate_phone || ""
-                      }`}
-                    </p>
-                    <p>
-                      <span className="text-text/60">Referral:</span>{" "}
-                      {selectedOrder.referred_by || ""}
-                    </p>
+                  <p className="font-semibold break-words">{selectedOrder.full_name}</p>
+                  <div className="mt-1 space-y-1 text-sm">
+                    {[selectedOrder.phone, selectedOrder.alternate_phone]
+                      .filter((phone) => phone && phone.trim())
+                      .map((phone) => (
+                        <a
+                          key={phone}
+                          href={`tel:${phone.replace(/\s+/g, "")}`}
+                          className="flex items-center gap-1.5 hover:text-primary-orange"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-text/50" />
+                          {phone}
+                        </a>
+                      ))}
+                    {selectedOrder.email && selectedOrder.email !== "-" && (
+                      <p className="text-text/70 break-all">{selectedOrder.email}</p>
+                    )}
+                    {selectedOrder.referred_by && (
+                      <p className="text-text/70">
+                        <span className="text-text/50">Referred by:</span>{" "}
+                        {selectedOrder.referred_by}
+                      </p>
+                    )}
                   </div>
                 </div>
-                <div>
-                  <h3 className="font-montserrat font-bold text-lg mb-4">
-                    Delivery Address
+
+                <div className="bg-card/30 rounded-lg p-4 border border-card-border/10">
+                  <h3 className="font-montserrat font-bold text-sm uppercase tracking-wide text-text/60 mb-2 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4" /> Delivery address
                   </h3>
-                  <div className="space-y-2">
+                  <div className="text-sm space-y-0.5 break-words">
                     <p>{selectedOrder.address}</p>
                     <p>
-                      {selectedOrder.city}, {selectedOrder.state}
+                      {[selectedOrder.city, selectedOrder.district, selectedOrder.state]
+                        .filter((part) => part && String(part).trim())
+                        .join(", ")}
                     </p>
                     <p>PIN: {selectedOrder.pincode}</p>
                   </div>
+                </div>
+
+                {/* The LR number once there is one -- the customer's first
+                    question after "has it gone". Editable, because a bulk
+                    ship leaves the 000-000 placeholder to be replaced. */}
+                <div className="bg-card/30 rounded-lg p-4 border border-card-border/10">
+                  <h3 className="font-montserrat font-bold text-sm uppercase tracking-wide text-text/60 mb-2 flex items-center gap-1.5">
+                    <Truck className="w-4 h-4" /> Shipment
+                  </h3>
+                  {["Shipped", "Delivered"].includes(selectedOrder.status) ||
+                  selectedOrder.lr_number ? (
+                    lrEdit !== null ? (
+                      <div className="space-y-2">
+                        <input
+                          value={lrEdit}
+                          onChange={(e) => setLrEdit(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && saveLrNumber(selectedOrder)}
+                          autoFocus
+                          placeholder="LR number"
+                          className="w-full px-3 py-2 rounded-lg bg-background border border-card-border/20 focus:outline-none focus:border-primary-orange"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveLrNumber(selectedOrder)}
+                            disabled={savingLr}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-primary-orange text-white disabled:opacity-50"
+                          >
+                            {savingLr && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setLrEdit(null)}
+                            disabled={savingLr}
+                            className="px-3 py-1.5 rounded-lg text-sm bg-card hover:bg-card/70"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm">
+                        <p className="text-text/60">LR number</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono font-semibold text-base break-all">
+                            {selectedOrder.lr_number || "—"}
+                          </p>
+                          <button
+                            onClick={() => setLrEdit(selectedOrder.lr_number || "")}
+                            className="p-1 rounded text-primary-orange hover:bg-card/70"
+                            title="Edit LR number"
+                            aria-label="Edit LR number"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {selectedOrder.lr_number === PLACEHOLDER_LR_NUMBER && (
+                          <p className="mt-1 text-xs text-amber-700">
+                            Placeholder — replace it with the real LR number.
+                          </p>
+                        )}
+                      </div>
+                    )
+                  ) : (
+                    <p className="text-sm text-text/60">Not shipped yet.</p>
+                  )}
+                  <p className="mt-2 text-sm text-text/60">
+                    Payment: {selectedOrder.payment_method || "—"}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <h3 className="font-montserrat font-bold text-lg">Items</h3>
+                  <div className="flex items-center gap-2 text-xs sm:text-sm text-text/60">
+                    <span className="bg-card/30 px-2.5 py-1 rounded-md">
+                      Products: <strong className="text-primary-orange">{selectedTotalProducts}</strong>
+                    </span>
+                    <span className="bg-card/30 px-2.5 py-1 rounded-md">
+                      Quantity: <strong className="text-primary-orange">{selectedTotalQuantity}</strong>
+                    </span>
+                  </div>
+                </div>
+                {/* Code and category give way on a phone; the product name
+                    and the figures are what the table is for. */}
+                <div className="bg-card/30 rounded-lg overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-card/50">
+                        <th className="py-2.5 px-2 sm:px-4 text-left">#</th>
+                        <th className="py-2.5 px-4 text-left hidden sm:table-cell">Code</th>
+                        <th className="py-2.5 px-2 sm:px-4 text-left">Product</th>
+                        <th className="py-2.5 px-4 text-left hidden md:table-cell">Category</th>
+                        <th className="py-2.5 px-2 sm:px-4 text-center">Qty</th>
+                        <th className="py-2.5 px-2 sm:px-4 text-right">Price</th>
+                        <th className="py-2.5 px-2 sm:px-4 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedSelectedItems?.map((item, index) => (
+                        <tr
+                          key={item.id}
+                          className="border-t border-card-border/10"
+                        >
+                          <td className="py-2.5 px-2 sm:px-4">{index + 1}</td>
+                          <td className="py-2.5 px-4 hidden sm:table-cell">
+                            {item.product?.product_code || "-"}
+                          </td>
+                          <td className="py-2.5 px-2 sm:px-4">
+                            {item.product.name}
+                            {item.product?.product_code && (
+                              <span className="block sm:hidden text-[11px] text-text/50">
+                                {item.product.product_code}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 hidden md:table-cell">
+                            {item.product.categories?.name}
+                          </td>
+                          <td className="py-2.5 px-2 sm:px-4 text-center">
+                            {item.quantity}
+                          </td>
+                          <td className="py-2.5 px-2 sm:px-4 text-right whitespace-nowrap">₹{item.price}</td>
+                          <td className="py-2.5 px-2 sm:px-4 text-right whitespace-nowrap">
+                            ₹{item.total_price}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="mt-3 ml-auto max-w-xs space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-text/70">Total amount</span>
+                    <span>₹{Number(selectedOrder.total_amount || 0).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-text/70">Discount</span>
+                    <span className="text-green-700">
+                      -₹{(selectedOrder.discount_amt ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base border-t border-card-border/20 pt-1">
+                    <span>Grand total</span>
+                    <span className="text-primary-orange">₹{payableAmount(selectedOrder).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-text/70">
+                    <span>Received</span>
+                    <span>₹{Number(selectedOrder.amount_received || 0).toFixed(2)}</span>
+                  </div>
+                  {extraReceived(selectedOrder) > EXTRA_TOLERANCE && (
+                    <div className="flex justify-between font-semibold text-blue-700">
+                      <span>Extra received</span>
+                      <span>₹{extraReceived(selectedOrder).toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Bulk status change. Says up front which ticked orders will move and
+          which will not (and why), then reports any the database refused. */}
+      {bulkStatus && bulkPlan && (
+        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center bg-black/60 sm:p-4">
+          <div className="bg-background sm:rounded-xl w-full sm:max-w-lg flex flex-col max-h-full sm:max-h-[90vh]">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-card-border/10">
+              <h2 className="font-heading text-xl">
+                Change status to{" "}
+                <span className="text-primary-orange">{bulkStatus}</span>
+              </h2>
+              <button
+                onClick={closeBulkStatus}
+                disabled={bulkRunning}
+                className="p-2 rounded-full hover:bg-card/60 disabled:opacity-40"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-sm">
+              {bulkResult ? (
+                <>
+                  <p className="text-base">
+                    <strong>{bulkResult.updated}</strong> order
+                    {bulkResult.updated === 1 ? "" : "s"} moved to {bulkStatus}.
+                  </p>
+                  {bulkResult.failed.length > 0 && (
+                    <div className="rounded-lg bg-red-50 text-red-800 px-3 py-2">
+                      <p className="font-semibold mb-1">
+                        {bulkResult.failed.length} could not be changed:
+                      </p>
+                      <ul className="space-y-1">
+                        {bulkResult.failed.map((f) => (
+                          <li key={f.label}>
+                            <span className="font-mono">{f.label}</span> — {f.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p>
+                    <strong>{bulkPlan.targets.length}</strong> of {selectedOrders.length}{" "}
+                    selected order{selectedOrders.length === 1 ? "" : "s"} will move to{" "}
+                    {bulkStatus}.
+                  </p>
+                  {bulkStatus === "Order Confirmed" && bulkPlan.targets.length > 0 && (
+                    <p className="text-teal-700 bg-teal-50 rounded-lg px-3 py-2">
+                      Stock is checked and deducted for each order. Any order
+                      short of stock is left as it is and listed at the end.
+                    </p>
+                  )}
+                  {bulkStatus === "Cancelled" && bulkPlan.targets.length > 0 && (
+                    <p className="text-red-700 bg-red-50 rounded-lg px-3 py-2">
+                      Any stock these orders hold is returned.
+                    </p>
+                  )}
+                  {bulkStatus === "Shipped" && bulkPlan.targets.length > 0 && (
+                    <div>
+                      <label className="block mb-1 font-medium">
+                        LR number for all of them
+                      </label>
+                      <input
+                        value={bulkLrNumber}
+                        onChange={(e) => setBulkLrNumber(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg bg-card border border-card-border/20 focus:outline-none focus:border-primary-orange font-mono"
+                      />
+                      <p className="mt-1 text-xs text-text/60">
+                        {PLACEHOLDER_LR_NUMBER} is a placeholder. Each order's real
+                        LR number can be filled in later from its details.
+                      </p>
+                    </div>
+                  )}
+                  {bulkPlan.skipped.length > 0 && (
+                    <div className="rounded-lg bg-amber-50 text-amber-900 px-3 py-2">
+                      <p className="font-semibold mb-1">
+                        {bulkPlan.skipped.length} will be left as they are:
+                      </p>
+                      <ul className="space-y-1 max-h-40 overflow-y-auto">
+                        {bulkPlan.skipped.map(({ order, reason }) => (
+                          <li key={order.id}>
+                            <span className="font-mono">
+                              {order.short_id || order.id.slice(0, 8)}
+                            </span>{" "}
+                            ({order.full_name}) — {reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {bulkRunning && (
+                    <p className="flex items-center gap-2 text-text/70">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Updating {bulkProgress} of {bulkPlan.targets.length}…
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 px-5 py-4 border-t border-card-border/10">
+              {bulkResult ? (
+                <button
+                  onClick={closeBulkStatus}
+                  className="px-4 py-2 rounded-lg bg-primary-orange text-white"
+                >
+                  Done
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={closeBulkStatus}
+                    disabled={bulkRunning}
+                    className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => runBulkStatus(bulkPlan.targets)}
+                    disabled={bulkRunning || bulkPlan.targets.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white disabled:opacity-40"
+                  >
+                    {bulkRunning && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Update {bulkPlan.targets.length} order
+                    {bulkPlan.targets.length === 1 ? "" : "s"}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {historyOrder && (
+        <OrderHistoryModal order={historyOrder} onClose={() => setHistoryOrder(null)} />
       )}
 
       {/* Confirmation & LR Number Modal */}
@@ -2741,7 +3340,8 @@ export function Orders() {
                           categories:categories ( name )
                         ),
                         pack:combo_packs ( id, name, pack_code )
-                      )
+                      ),
+                      payments:order_payments ( note, created_at )
                     `
                       )
                       .eq("id", updated.id)

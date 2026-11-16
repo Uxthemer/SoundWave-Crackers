@@ -1,4 +1,4 @@
-import { useState, ReactElement, cloneElement, useMemo } from "react";
+import { useState, ReactElement, ReactNode, cloneElement, useMemo } from "react";
 import { Eye, Download, Maximize2, X, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -11,6 +11,8 @@ interface ExpandableChartProps {
   containerHeight?: string;
   viewData?: TableRecord[];
   exportFileName?: string;
+  /** Controls for this chart (a metric switch, say), shown beside the title. */
+  actions?: ReactNode;
 }
 
 interface SortState {
@@ -24,6 +26,7 @@ export function ExpandableChart({
   containerHeight = "h-[300px]",
   viewData = [],
   exportFileName,
+  actions,
 }: ExpandableChartProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isViewing, setIsViewing] = useState(false);
@@ -97,9 +100,10 @@ export function ExpandableChart({
   return (
     <>
       <div className="bg-card rounded-xl p-6 overflow-hidden flex flex-col h-full">
-        <div className="flex items-center justify-between mb-6 gap-3">
+        <div className="flex flex-wrap items-center justify-between mb-6 gap-3">
           <h3 className="font-montserrat font-bold text-xl">{title}</h3>
           <div className="flex items-center gap-2">
+            {actions}
             <button
               onClick={() => setIsViewing(true)}
               disabled={!viewData.length}

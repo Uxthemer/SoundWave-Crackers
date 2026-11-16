@@ -25,12 +25,14 @@ const EMPTY_REVENUE: RevenueSummary = {
 
 export function useDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
-    totalOrders: 0,
+    confirmedOrders: 0,
+    cancelledOrders: 0,
     totalUsers: 0,
     totalRevenue: 0,
     totalProfit: 0,
     amountReceived: 0,
     discountGiven: 0,
+    yetToReceive: 0,
   });
 
   const [salesData, setSalesData] = useState({
@@ -84,6 +86,10 @@ export function useDashboard() {
   const [inventorySummary, setInventorySummary] = useState({
     lowStockList: [] as any[],
     outOfStockCount: 0,
+    /** Stock on hand × cost (APR), over active single products -- moved here from Analytics. */
+    stockValue: 0,
+    productsOnSale: 0,
+    lowStockCount: 0,
   });
 
   const [revenue, setRevenue] = useState<RevenueSummary>(EMPTY_REVENUE);
@@ -222,6 +228,14 @@ export function useDashboard() {
         (sum, o: any) => sum + Number(o.discount_amt || 0),
         0
       );
+      // What is still owed on the live orders, enquiries included -- the money
+      // expected in if everything goes ahead. Per order, and only what is owed:
+      // a customer who paid extra on one order does not reduce what another
+      // still owes. The same figure as the report's "Balance still due".
+      const yetToReceive = liveOrders.reduce(
+        (sum, o: any) => sum + Math.max(netAmount(o) - Number(o.amount_received || 0), 0),
+        0
+      );
 
       // Fetch the customer role id first
       const { data: roles, error: rolesError } = await supabase
@@ -257,13 +271,16 @@ export function useDashboard() {
       setExpenses(summariseExpenses(expenseRows || []));
 
       setStats({
-        // keep totalOrders as total fetched orders in range (matches analytics)
-        totalOrders: orders?.length || 0,
+        // An enquiry is not an order yet, so the count is confirmed onward --
+        // the same line Top SKUs draws. Cancellations are counted beside it.
+        confirmedOrders: (orders || []).filter((o: any) => SALE_STATUSES.includes(statusOf(o))).length,
+        cancelledOrders: (orders || []).filter((o: any) => statusOf(o) === "cancelled").length,
         totalUsers: userCount || 0,
         totalRevenue: revenue,
         totalProfit: profit,
         amountReceived,
         discountGiven,
+        yetToReceive,
       });
 
       // Prepare sales data (use completed orders)
@@ -401,7 +418,46 @@ export function useDashboard() {
           datasets: [{ label: "Revenue", data: topSkus.map((s) => Math.round(s.revenue)), backgroundColor: "#FF8A65" }],
         });
 
-        setInventorySummary({ lowStockList, outOfStockCount: Number(outOfStockCount || 0) });
+        // Available stock value, as the Analytics tab used to show it and its
+        // Available Stock table still totals it: stock × APR over active
+        // single products (group listings are not stock of their own). Cost
+        // is in the admin-only costs table, read separately.
+        const [{ data: catalog }, { data: costs }] = await Promise.all([
+          supabase
+            .from("season_catalog")
+            .select("id, stock, reorder_level, product_type, is_active")
+            .eq("season_id", inventorySeasonId ?? ""),
+          supabase
+            .from("product_season_costs")
+            .select("product_id, apr")
+            .eq("season_id", inventorySeasonId ?? ""),
+        ]);
+        const aprOf = new Map((costs || []).map((c: any) => [c.product_id, Number(c.apr || 0)]));
+        const onSale = (catalog || []).filter(
+          (p: any) => p.is_active && String(p.product_type || "").toLowerCase() !== "group"
+        );
+        const stockValue = onSale.reduce(
+          (sum: number, p: any) => sum + Number(p.stock || 0) * (aprOf.get(p.id) || 0),
+          0
+        );
+        const lowStockCount = onSale.filter((p: any) => {
+          const st = Number(p.stock ?? 0);
+          return st > 0 && st <= Math.max(Number(p.reorder_level ?? 5), 5);
+        }).length;
+
+        if (isStale()) return;
+        setInventorySummary({
+          lowStockList,
+          // Counted over the same products as the value, so the tile adds up;
+          // the count query above also caught group listings and missed
+          // negative stock.
+          outOfStockCount: onSale.length
+            ? onSale.filter((p: any) => Number(p.stock ?? 0) <= 0).length
+            : Number(outOfStockCount || 0),
+          stockValue,
+          productsOnSale: onSale.length,
+          lowStockCount,
+        });
       } catch (e) {
         console.warn("inventory/topSkus calculation failed", e);
         // keep charts empty but don't throw
