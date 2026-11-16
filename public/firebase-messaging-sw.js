@@ -51,7 +51,9 @@ try {
         badge: '/assets/img/logo/logo_2.png',
         // Two pushes for the same order replace each other instead of
         // stacking up on the lock screen.
-        tag: data.orderId ? `order-${data.orderId}` : 'soundwave',
+        // A push may name its own tag (each chit request does), so two
+        // different requests do not replace each other on the lock screen.
+        tag: data.tag || (data.orderId ? `order-${data.orderId}` : 'soundwave'),
         data: { url: data.url || '/orders' },
       });
     });

@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef, type ReactNode } from "react";
 import {
   Search,
   Plus,
@@ -75,6 +75,12 @@ interface Product {
   order?: number;
   is_active?: boolean;
   yt_link?: string;
+  /**
+   * "single" for an ordinary product, "trending" for one featured on the home
+   * page (components/TrendingCrackers shows the first four, in catalogue
+   * order), "group" for a listing that is not stock of its own.
+   */
+  product_type?: string | null;
   /** Set when the row came from the season catalog. */
   season_id?: string;
   product_season_id?: string;
@@ -332,6 +338,21 @@ export function StockManagement() {
   );
   const [bulkAutoActual, setBulkAutoActual] = useState(true);
   const [savingBulk, setSavingBulk] = useState(false);
+  /**
+   * Below md, bulk edit is a list of cards instead of the table: ten input
+   * columns in fixed percentages leave each one a few pixels wide on a phone.
+   * Decided in code rather than by CSS so only one of the two is rendered --
+   * a full price list is several thousand inputs, and doubling them is felt.
+   */
+  const [narrowScreen, setNarrowScreen] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches,
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767.98px)");
+    const update = () => setNarrowScreen(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   // The catalog is arranged, not sorted: categories in a chosen sequence and
   // products in a chosen sequence inside each one, exactly as the price list
@@ -482,6 +503,11 @@ export function StockManagement() {
           // emptied box clears it rather than storing a blank string, so the
           // price list's "has a Tamil name" test stays a NULL check.
           tamil_name: editForm.tamil_name?.trim() || null,
+          // Featured on the home page or not. A group listing keeps its type:
+          // it is not a product to feature, and "single" would unmake it.
+          ...(editingProduct.product_type === "group"
+            ? {}
+            : { product_type: editForm.product_type === "trending" ? "trending" : "single" }),
         })
         .eq("id", editingProduct.id);
 
@@ -1962,14 +1988,28 @@ Offer prices are not changed.`,
   };
 
   /**
+   * The products the home page shows, by the rule TrendingCrackers uses:
+   * active, marked trending, first four in catalogue order. Worked out here so
+   * the table can tell a featured product from one marked but crowded out.
+   */
+  const featuredRows = products
+    .filter((p) => p.product_type === "trending" && p.is_active)
+    .sort((a, b) => (a.order ?? Number.MAX_SAFE_INTEGER) - (b.order ?? Number.MAX_SAFE_INTEGER) || a.name.localeCompare(b.name));
+  const featuredOnHome = new Set(featuredRows.slice(0, 4).map((p) => p.id));
+  const featuredCount = featuredRows.length;
+
+  /**
    * Search and category first, on their own: the stock and status counts on
    * the filter buttons describe this slice, so switching between them does
    * not change the numbers underneath.
    */
   const searchedProducts = products.filter((product) => {
-    const matchesSearch = product.name
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase());
+    // The code too: it is what is printed on the price list and what a
+    // customer quotes back.
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      product.name.toLowerCase().includes(term) ||
+      String(product.product_code ?? "").toLowerCase().includes(term);
     const matchesCategory =
       categoryFilter === "all" || product.category_id === categoryFilter;
     return matchesSearch && matchesCategory;
@@ -2264,6 +2304,22 @@ Offer prices are not changed.`,
                   PACK
                 </span>
               )}
+              {product.product_type === "trending" && (
+                <span
+                  title={
+                    featuredOnHome.has(product.id)
+                      ? "Shown on the home page"
+                      : "Marked for the home page, but only the first four active ones are shown"
+                  }
+                  className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                    featuredOnHome.has(product.id)
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-200 text-gray-600"
+                  }`}
+                >
+                  HOME
+                </span>
+              )}
             </span>
           )}
         </td>
@@ -2497,6 +2553,162 @@ Offer prices are not changed.`,
    * instead of scrolling sideways. Product name gets the most room — it is
    * the only column you navigate by.
    */
+  /**
+   * One product in bulk edit on a phone: the name across the top, every other
+   * field labelled beneath it two to a line. The same draft, the same patch
+   * and the same Save all as the table rows -- only the layout differs.
+   */
+  const renderBulkCard = (product: Product) => {
+    const draft = bulkDraftFor(product);
+    const dirty = bulkChangedIds.includes(product.id);
+    const patch = (fields: Partial<Product>) => patchBulkDraft(product, fields);
+    const autoLocked = bulkAutoActual && discountUsable;
+    // 16px text: iOS zooms the whole page into any smaller field it focuses.
+    const field =
+      "w-full px-3 py-2 rounded-lg border border-card-border/20 bg-background focus:outline-none focus:border-primary-orange no-spinner text-base";
+    const labelled = (text: string, control: ReactNode, wide = false) => (
+      <label className={`block min-w-0 ${wide ? "col-span-2" : ""}`}>
+        <span className="block text-[11px] font-medium text-text/60 mb-0.5">{text}</span>
+        {control}
+      </label>
+    );
+
+    return (
+      <div
+        key={product.id}
+        className={`rounded-xl border p-3 ${
+          dirty ? "border-amber-500/50 bg-amber-500/10" : "border-card-border/15 bg-card"
+        }`}
+      >
+        <div className="flex items-end gap-2">
+          <div className="flex-1 min-w-0">
+            {labelled(
+              product.combo_pack_id ? "Product name (family pack)" : "Product name",
+              <input
+                type="text"
+                value={draft.name ?? ""}
+                onChange={(e) => patch({ name: e.target.value })}
+                className={field}
+              />,
+            )}
+          </div>
+          <button
+            onClick={() => revertBulkRow(product.id)}
+            disabled={!dirty || savingBulk}
+            title={dirty ? "Revert this product" : "No changes on this product"}
+            aria-label={`Revert ${product.name}`}
+            className="p-2.5 rounded-lg border border-card-border/20 text-text/60 disabled:opacity-30"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          {labelled(
+            "Code",
+            <input
+              type="text"
+              value={draft.product_code ?? ""}
+              onChange={(e) => patch({ product_code: e.target.value })}
+              className={field}
+            />,
+          )}
+          {labelled(
+            "Order",
+            <NumberInput
+              min={0}
+              inputMode="numeric"
+              value={draft.order ?? ""}
+              onValueChange={(n) => patch({ order: n })}
+              onClear={() => patch({ order: undefined })}
+              className={field}
+            />,
+          )}
+          {labelled(
+            "Category",
+            <select
+              value={draft.category_id ?? ""}
+              onChange={(e) => patch({ category_id: e.target.value })}
+              className={field}
+            >
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>,
+            true,
+          )}
+          {labelled(
+            "Content",
+            <input
+              type="text"
+              value={draft.content ?? ""}
+              onChange={(e) => patch({ content: e.target.value })}
+              className={field}
+            />,
+            true,
+          )}
+          {labelled(
+            "Stock",
+            <NumberInput
+              min={0}
+              inputMode="numeric"
+              value={draft.stock ?? ""}
+              onValueChange={(n) => patch({ stock: n })}
+              className={field}
+            />,
+          )}
+          {labelled(
+            "Status",
+            <select
+              value={draft.is_active ? "true" : "false"}
+              onChange={(e) => patch({ is_active: e.target.value === "true" })}
+              className={field}
+            >
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>,
+          )}
+          {labelled(
+            "Offer price (₹)",
+            <NumberInput
+              min={0}
+              step="0.01"
+              value={draft.offer_price ?? ""}
+              onValueChange={(n) => handleBulkOfferChange(product, String(n))}
+              className={field}
+            />,
+          )}
+          {labelled(
+            autoLocked ? `Actual price (auto ${formatPrice(seasonDiscount)}%)` : "Actual price (₹)",
+            <NumberInput
+              min={0}
+              step="0.01"
+              value={draft.actual_price ?? ""}
+              onValueChange={(n) => patch({ actual_price: n })}
+              readOnly={autoLocked}
+              className={`${field} ${autoLocked ? "bg-card/40 text-text/70" : ""}`}
+            />,
+          )}
+          {userRole?.name === "superadmin" &&
+            labelled(
+              "APR (cost)",
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="0.01"
+                value={draft.apr ?? ""}
+                onChange={(e) => patch({ apr: e.target.value })}
+                onWheel={(e) => e.currentTarget.blur()}
+                className={field}
+              />,
+            )}
+        </div>
+      </div>
+    );
+  };
+
   const TABLE_COLUMNS: {
     key: string;
     label: string;
@@ -2647,16 +2859,6 @@ Offer prices are not changed.`,
                 </option>
               ))}
             </select>
-            <div className="relative w-full sm:w-auto">
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
-            </div>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
@@ -3206,18 +3408,18 @@ Offer prices are not changed.`,
                 </label>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <button
                 onClick={() => exitBulkEdit()}
                 disabled={savingBulk}
-                className="px-4 py-2 rounded-lg bg-card hover:bg-card/70 border border-card-border/10 transition-colors disabled:opacity-40"
+                className="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-card hover:bg-card/70 border border-card-border/10 transition-colors disabled:opacity-40"
               >
                 Cancel
               </button>
               <button
                 onClick={saveBulkEdit}
                 disabled={savingBulk || bulkChangedIds.length === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 sm:flex-none justify-center flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-orange text-white hover:bg-primary-orange/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {savingBulk ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -3238,6 +3440,45 @@ Offer prices are not changed.`,
           </div>
         )}
 
+        {/* Search sits on the table it searches, at every width. */}
+        <div className="relative mb-3">
+          <input
+            type="search"
+            placeholder="Search by product name or code…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-card border border-card-border/10 focus:outline-none focus:border-primary-orange"
+          />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-text/60" />
+        </div>
+
+        {bulkEditMode && narrowScreen ? (
+          <div className="space-y-5">
+            {loading ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-primary-orange" />
+              </div>
+            ) : sortedProducts.length === 0 ? (
+              <p className="py-8 text-center text-text/60">
+                {filtersActive ? "No products match these filters" : "No products found"}
+              </p>
+            ) : groupByCategory ? (
+              categoryGroups.map((group) => (
+                <section key={group.id ?? "uncategorized"}>
+                  <h3 className="py-1.5 mb-2 font-semibold flex items-baseline gap-2">
+                    <span className="text-primary-orange">{group.name}</span>
+                    <span className="text-xs font-normal text-text/60">
+                      {group.products.length} product{group.products.length === 1 ? "" : "s"}
+                    </span>
+                  </h3>
+                  <div className="space-y-2">{group.products.map(renderBulkCard)}</div>
+                </section>
+              ))
+            ) : (
+              <div className="space-y-2">{sortedProducts.map(renderBulkCard)}</div>
+            )}
+          </div>
+        ) : (
         <div className="bg-card/30 rounded-xl overflow-hidden">
           {/* One scroll container for both axes. The header sticks to its top
               edge, so it stays readable all the way down a several-hundred
@@ -3408,6 +3649,7 @@ Offer prices are not changed.`,
             </table>
           </div>
         </div>
+        )}
       </div>
 
       {/* Edit Modal */}
@@ -3684,9 +3926,35 @@ Offer prices are not changed.`,
                       <option value="false">Inactive</option>
                     </select>
                   </div>
+                  {/* The landing page's product cards are the products marked
+                      here: the first four, active this season, in catalogue
+                      order (the Order field). */}
+                  <div>
+                    <label className="block mb-1 font-medium">Show on home page</label>
+                    {editingProduct?.product_type === "group" ? (
+                      <p className="px-3 py-2 border rounded text-sm text-text/60">
+                        Group listings cannot be featured
+                      </p>
+                    ) : (
+                      <select
+                        value={editForm.product_type === "trending" ? "trending" : "single"}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, product_type: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 border rounded"
+                      >
+                        <option value="single">No</option>
+                        <option value="trending">Yes — feature it</option>
+                      </select>
+                    )}
+                    <p className="mt-1 text-xs text-text/60">
+                      {featuredCount} featured now. The home page shows the first
+                      four active ones, lowest Order first.
+                    </p>
+                  </div>
                   <div>
                     <label className="block mb-1 font-medium">
-                      YouTube Video ID
+                      YouTube link
                     </label>
                     <input
                       type="text"
@@ -3695,7 +3963,7 @@ Offer prices are not changed.`,
                         setEditForm((f) => ({ ...f, yt_link: e.target.value }))
                       }
                       className="w-full px-3 py-2 border rounded"
-                      placeholder="YouTube Link"
+                      placeholder="Paste the YouTube link (watch, youtu.be or Shorts)"
                     />
                   </div>
                   <div>
@@ -4085,7 +4353,7 @@ Offer prices are not changed.`,
 
                   <div>
                     <label className="block mb-1 font-medium">
-                      YouTube Video ID
+                      YouTube link
                     </label>
                     <input
                       type="text"
@@ -4094,7 +4362,7 @@ Offer prices are not changed.`,
                         setAddForm((f) => ({ ...f, yt_link: e.target.value }))
                       }
                       className="w-full px-3 py-2 border rounded"
-                      placeholder="YouTube Link"
+                      placeholder="Paste the YouTube link (watch, youtu.be or Shorts)"
                     />
                   </div>
                 </div>

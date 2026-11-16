@@ -15,6 +15,8 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
 import { WishlistButton } from "../components/WishlistButton";
 import { useProducts } from "../hooks/useProducts";
+import { youtubeVideoId } from "../lib/youtube";
+import { YouTubeVideoModal } from "../components/YouTubeVideoModal";
 import { useCategories } from "../hooks/useCategories";
 import { Cart } from "../components/Cart";
 import { ProductImageSlider } from "../components/ProductImageSlider";
@@ -232,11 +234,15 @@ export function ExploreCrackers() {
                     {product.discount > 0 && <div className="absolute top-2 right-2 bg-primary-orange text-white px-2 py-1 rounded-full text-sm z-[1]">
                       {product.discount}% OFF
                     </div>}
+                    {/* z-[2] like the heart: a product with two or more photos
+                        shows a Swiper carousel, whose own CSS gives it
+                        z-index 1, and an unlayered button sat underneath it --
+                        the icon was there but could not be seen. */}
                     {
-                      product.yt_link && (
+                      youtubeVideoId(product.yt_link) && (
                         <button
                           onClick={() => openVideoModal(product.yt_link)}
-                          className="absolute bottom-2 right-2 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
+                          className="absolute bottom-2 right-2 z-[2] text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
                           aria-label="Youtube"
                           title="Watch video in youtube"
                         >
@@ -468,27 +474,7 @@ export function ExploreCrackers() {
       </div>
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
       {isVideoModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={() => setIsVideoModalOpen(false)}
-        >
-          <div className="relative w-full max-w-3xl max-w-[80vw] max-h-[80vh] h-full">
-            <button
-              className="absolute top-4 right-4 text-white text-2xl"
-              onClick={() => setIsVideoModalOpen(false)}
-            >
-              &times;
-            </button>
-            <iframe
-              className="w-full h-full rounded-lg"
-              src={`https://youtube.com/embed/${videoUrl}`}
-              title="Product Video"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking video
-            ></iframe>
-          </div>
-        </div>
+        <YouTubeVideoModal link={videoUrl} onClose={() => setIsVideoModalOpen(false)} />
       )}
     </>
   );

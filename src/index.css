@@ -349,3 +349,112 @@ textarea {
   padding-left: 0;
   padding-right: 0;
 }
+
+/*
+ * Chit Scheme in the menu: a pill with a turning fire-coloured border, a soft
+ * pulsing glow, shimmering gold text and a "NEW" tag. The older .shining-text
+ * shimmered between black and red, so in dark mode the black half of every
+ * pass vanished into the background; these colours read on both themes.
+ */
+@property --chit-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.chit-menu-highlight {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.85rem;
+  border-radius: 9999px;
+  animation: chit-glow 2.4s ease-in-out infinite;
+}
+
+/* The border: a conic gradient, masked to a 2px ring, turning. */
+.chit-menu-highlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--chit-angle), #ff5722, #ffc107, #ff1744, #ff9100, #ff5722);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: chit-spin 3s linear infinite;
+}
+
+/* A faint warm fill behind the text. */
+.chit-menu-highlight::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -2;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 87, 34, 0.1), rgba(255, 193, 7, 0.12), rgba(255, 87, 34, 0.1));
+}
+
+.chit-menu-text {
+  background: linear-gradient(90deg, #ff5722 0%, #ffb300 25%, #ff1744 50%, #ffb300 75%, #ff5722 100%);
+  background-size: 200% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine-wave 2.5s linear infinite;
+}
+
+.chit-menu-badge {
+  position: absolute;
+  top: -0.55rem;
+  right: -0.5rem;
+  padding: 0 0.3rem;
+  border-radius: 9999px;
+  font-size: 0.55rem;
+  font-weight: 800;
+  line-height: 1rem;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: linear-gradient(135deg, #ff1744, #ff5722);
+  box-shadow: 0 0 0 2px rgb(var(--background, 255 255 255));
+  animation: chit-bounce 1.8s ease-in-out infinite;
+}
+
+.chit-menu-sparkle {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: #ffb300;
+  animation: chit-twinkle 1.6s ease-in-out infinite;
+}
+
+@keyframes chit-spin {
+  to { --chit-angle: 360deg; }
+}
+
+@keyframes chit-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0); }
+  50% { box-shadow: 0 0 14px 2px rgba(255, 87, 34, 0.45); }
+}
+
+@keyframes chit-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes chit-twinkle {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  50% { transform: scale(1.25) rotate(20deg); opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chit-menu-highlight,
+  .chit-menu-highlight::before,
+  .chit-menu-text,
+  .chit-menu-badge,
+  .chit-menu-sparkle {
+    animation: none;
+  }
+}
