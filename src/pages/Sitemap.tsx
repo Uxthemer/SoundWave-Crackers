@@ -8,7 +8,7 @@ export function Sitemap() {
       { title: "Home", path: "/" },
       { title: "Quick Purchase", path: "/quick-online-cracker" },
       { title: "Explore Crackers", path: "/buy-cracker-online" },
-      { title: "Monthly Installment", path: "/payment" },
+      { title: "Chit Scheme", path: "/chit-scheme" },
     ],
     accountPages: [
       { title: "Login", path: "/login" },

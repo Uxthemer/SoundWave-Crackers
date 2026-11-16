@@ -54,7 +54,7 @@ import { useWishlistStore } from "./store/wishlistStore";
 import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { Profile } from "./pages/Profile";
-import { MonthlyInstallment } from "./pages/MonthlyInstallment";
+import { ChitScheme } from "./pages/ChitScheme";
 import { useCartStore } from "./store/cartStore";
 import CancellationPolicy from "./pages/CancellationPolicy";
 import ShippingPolicy from "./pages/ShippingPolicy";
@@ -201,25 +201,19 @@ function BottomNav() {
         </span>
       </button>
       <button
-        onClick={() => navigate("/monthly-installment")}
+        onClick={() => navigate("/chit-scheme")}
         className="flex flex-col items-center text-sm focus:outline-none"
       >
-        <HeartHandshake
-          className={`w-5 h-5 ${
-            isActive("/monthly-installment")
-              ? "text-orange-500"
-              : "text-gray-600 dark:text-gray-400"
-          }`}
-        />
-        <span
-          className={`text-xs ${
-            isActive("/monthly-installment")
-              ? "text-orange-500"
-              : "text-gray-600 dark:text-gray-400"
-          }`}
-        >
-          Chit
+        {/* The same highlight as the menu, sized for the bottom bar: a
+            gradient icon with a pulsing dot, and the shimmering label. */}
+        <span className="relative">
+          <HeartHandshake className="w-5 h-5 text-orange-500 chit-menu-sparkle" />
+          <span className="absolute -top-0.5 -right-1 flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-ping motion-reduce:animate-none" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+          </span>
         </span>
+        <span className="text-xs font-bold chit-menu-text">Chit</span>
       </button>
     </div>
   );
@@ -343,18 +337,16 @@ export function AppContent() {
             >
               Explore Crackers
             </NavLink>
+            {/* Highlighted (index.css, .chit-menu-highlight): the scheme is
+                seasonal and the one thing in the menu worth drawing the eye to. */}
             <NavLink
-              to="/monthly-installment"
-              title="Monthly Installment (Chit)"
-              className={({ isActive }) =>
-                `font-montserrat font-semibold transition-colors relative shining-text cursor-pointer ${
-                  isActive
-                    ? "text-primary-orange"
-                    : "text-primary hover:text-primary-orange"
-                }`
-              }
+              to="/chit-scheme"
+              title="Diwali Chit Scheme — save monthly"
+              className="chit-menu-highlight font-montserrat font-bold cursor-pointer"
             >
-              Chit Scheme
+              <Sparkles className="chit-menu-sparkle" aria-hidden="true" />
+              <span className="chit-menu-text">Chit Scheme</span>
+              <span className="chit-menu-badge" aria-hidden="true">NEW</span>
             </NavLink>
             {/* Open to everyone: a guest tracks with the order number and
                 the phone they ordered with. It used to be reachable only
@@ -480,12 +472,14 @@ export function AppContent() {
                 Explore Crackers
               </Link>
               <Link
-                title="Monthly Installment (Chit)"
-                to="/monthly-installment"
-                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors shining-text cursor-pointer"
+                title="Diwali Chit Scheme — save monthly"
+                to="/chit-scheme"
+                className="chit-menu-highlight self-start mx-4 my-1 font-montserrat font-bold cursor-pointer"
                 onClick={handleMenuItemClick}
               >
-                Chit Scheme
+                <Sparkles className="chit-menu-sparkle" aria-hidden="true" />
+                <span className="chit-menu-text">Chit Scheme</span>
+                <span className="chit-menu-badge" aria-hidden="true">NEW</span>
               </Link>
               <Link
                 to="/track-order"
@@ -572,7 +566,9 @@ export function AppContent() {
         <Route path="/buy-cracker-online" element={<ExploreCrackers />} />
         <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/product/:productId" element={<ProductDetails />} />
-        <Route path="/monthly-installment" element={<MonthlyInstallment />} />
+        <Route path="/chit-scheme" element={<ChitScheme />} />
+        {/* The page's old address, kept for links and search results that still point at it. */}
+        <Route path="/monthly-installment" element={<Navigate to="/chit-scheme" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/blog" element={<Blog />} />

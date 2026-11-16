@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { youtubeVideoId } from "../lib/youtube";
+import { YouTubeVideoModal } from "../components/YouTubeVideoModal";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   ChevronRight,
@@ -332,7 +334,7 @@ export function ProductDetails() {
                 </span>
               </div>
 
-              {product.yt_link && <button
+              {youtubeVideoId(product.yt_link) && <button
                 onClick={() => openVideoModal(product.yt_link || "")}
                 className="absolute top-4 right-4 text-left hover:text-red w-7 h-6 flex items-center justify-center bg-white/80 rounded-md transition-colors"
                 aria-label="Youtube"
@@ -481,28 +483,12 @@ export function ProductDetails() {
           </div>
         </div>
       </div>
-       {isVideoModalOpen && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50"
-          onClick={() => setIsVideoModalOpen(false)}
-        >
-          <div className="relative w-full max-w-3xl max-w-[80vw] max-h-[80vh] h-full">
-            <button
-              className="absolute top-4 right-4 text-white text-2xl"
-              onClick={() => setIsVideoModalOpen(false)}
-            >
-              &times;
-            </button>
-            <iframe
-              className="w-full h-full rounded-lg"
-              src={`https://youtube.com/embed/${videoUrl}`}
-              title="Product Video"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking video
-            ></iframe>
-          </div>
-        </div>
+      {isVideoModalOpen && (
+        <YouTubeVideoModal
+          link={videoUrl}
+          title={product.name}
+          onClose={() => setIsVideoModalOpen(false)}
+        />
       )}
     </div>
   );

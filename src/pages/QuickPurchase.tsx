@@ -8,6 +8,7 @@ import {
   ChevronUp,
   Plus,
   Minus,
+  Youtube,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCartStore } from "../store/cartStore";
@@ -18,6 +19,8 @@ import { useCategories } from "../hooks/useCategories";
 import { ProductImageSlider } from "../components/ProductImageSlider";
 import { NumberInput } from "../components/NumberInput";
 import { crackerImage } from "../lib/productImage";
+import { youtubeVideoId } from "../lib/youtube";
+import { YouTubeVideoModal } from "../components/YouTubeVideoModal";
 import {
   CatalogModeSwitch,
   matchesCatalogMode,
@@ -37,6 +40,8 @@ export function QuickPurchase() {
     {}
   );
   const [searchTerm, setSearchTerm] = useState("");
+  /** The product whose video is playing, if any. */
+  const [videoProduct, setVideoProduct] = useState<{ name: string; yt_link: string } | null>(null);
   const [catalogMode, setCatalogMode] = useState<CatalogMode>("all");
   const [expandedCategories, setExpandedCategories] = useState<
     Record<string, boolean>
@@ -100,6 +105,8 @@ export function QuickPurchase() {
           discount: product.discount_percentage,
           content: product.content,
           stock: product.stock,
+          // Never copied before, so this list could not show a video at all.
+          yt_link: product.yt_link,
           combo_pack_id: product.combo_pack_id ?? null,
         });
         return acc;
@@ -376,6 +383,17 @@ export function QuickPurchase() {
                                     variant="inline"
                                     className="!p-1 !bg-transparent shrink-0"
                                   />
+                                  {youtubeVideoId(product.yt_link) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setVideoProduct(product)}
+                                      className="p-1 shrink-0 rounded hover:bg-red-50"
+                                      aria-label={`Watch the video of ${product.name}`}
+                                      title="Watch video"
+                                    >
+                                      <Youtube className="w-5 h-5 text-red-500" />
+                                    </button>
+                                  )}
                                 </div>
                                 {/* </Link> */}
                                 <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -518,6 +536,14 @@ export function QuickPurchase() {
         </div>
       </div>
       <Cart isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      {videoProduct && (
+        <YouTubeVideoModal
+          link={videoProduct.yt_link}
+          title={videoProduct.name}
+          onClose={() => setVideoProduct(null)}
+        />
+      )}
+
       {modalImage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-block-100 bg-opacity-5">
           <div className="relative bg-white p-4 rounded-lg shadow-sm shadow-gray/90 max-w-3xl w-full flex flex-col items-center border border-[#cac6c6]">
