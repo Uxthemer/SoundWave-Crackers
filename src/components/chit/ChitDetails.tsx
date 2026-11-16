@@ -38,10 +38,13 @@ export function ScheduleGrid({ summary }: { summary: ChitSummary }) {
 export function PaymentList({
   payments,
   renderActions,
+  renderReceipt,
 }: {
   payments: ChitPayment[];
   /** The superadmin's approve/reject controls, for a pending payment. */
   renderActions?: (payment: ChitPayment) => ReactNode;
+  /** Receipt buttons, shown under an approved payment. */
+  renderReceipt?: (payment: ChitPayment) => ReactNode;
 }) {
   if (payments.length === 0) {
     return <p className="text-sm text-text/50 py-2">No payments yet.</p>;
@@ -73,6 +76,7 @@ export function PaymentList({
                   </p>
                 )}
                 <ScreenshotButton path={p.screenshot_path} className="mt-1" />
+                {renderReceipt && p.status === "approved" && renderReceipt(p)}
               </div>
               <div className="flex flex-col items-end gap-1.5 shrink-0">
                 <PaymentPill status={p.status} />

@@ -148,7 +148,9 @@ export function SendPdfOnWhatsAppDialog({
   const disabledLink = "pointer-events-none opacity-40";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    // Above whatever it was opened from -- the order details, a chit member's
+    // panel (z-60) -- since it is always opened from on top of something.
+    <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-xl shadow-xl w-full max-w-md p-5 relative max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}

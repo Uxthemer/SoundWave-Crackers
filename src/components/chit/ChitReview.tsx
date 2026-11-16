@@ -52,11 +52,14 @@ export function PaymentReview({
   payment,
   memberName,
   onDone,
+  onApproved,
 }: {
   payment: ChitPayment;
   /** Named in the confirmation, so the right person's money is being approved. */
   memberName?: string;
   onDone: () => void;
+  /** The approved payment, so its receipt can be offered straight away. */
+  onApproved?: (approved: ChitPayment) => void;
 }) {
   const [amount, setAmount] = useState(String(payment.amount));
   const [note, setNote] = useState("");
@@ -76,10 +79,11 @@ export function PaymentReview({
     const approve = confirming === "approve";
     setBusy(true);
     try {
-      await reviewPayment(payment.id, approve, approve ? value : null, note);
+      const saved = await reviewPayment(payment.id, approve, approve ? value : null, note);
       toast.success(approve ? `${rupees(value)} approved` : "Payment rejected");
       setConfirming(null);
       onDone();
+      if (approve) onApproved?.(saved);
     } catch (error) {
       toast.error(chitError(error));
     } finally {

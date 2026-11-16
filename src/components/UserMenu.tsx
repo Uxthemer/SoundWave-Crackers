@@ -76,8 +76,14 @@ export function UserMenu() {
         className="flex items-center space-x-2 text-primary-orange hover:text-primary-orange/50 transition-colors"
       >
         <UserCircle className="w-6 h-6" />
-        <div className="hidden md:block text-left">
-          <span className="block text-primary-orange">
+        {/* The name is cut to a width, and left out entirely at 1280-1439px:
+            beside the desktop menu, a long name pushed the header row past
+            the screen's width. It is always in the menu that opens. */}
+        <div
+          className="hidden md:block xl:hidden min-[1440px]:block text-left max-w-[120px] 2xl:max-w-[140px]"
+          title={userProfile?.full_name || user.email || undefined}
+        >
+          <span className="block truncate text-primary-orange">
             {userProfile?.full_name || user.email?.split('@')[0]}
           </span>
           {userRole?.name === 'superadmin' && (

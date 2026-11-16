@@ -9,6 +9,7 @@ export function Sitemap() {
       { title: "Quick Purchase", path: "/quick-online-cracker" },
       { title: "Explore Crackers", path: "/buy-cracker-online" },
       { title: "Chit Scheme", path: "/chit-scheme" },
+      { title: "Wholesale", path: "/wholesale" },
     ],
     accountPages: [
       { title: "Login", path: "/login" },
