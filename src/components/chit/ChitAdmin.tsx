@@ -31,6 +31,10 @@ import { EnrollmentPill, ProgressBar, ScreenshotButton } from "./chitUi";
 import { EnrollmentReview, PaymentReview } from "./ChitReview";
 import { ChitMemberSheet } from "./ChitMemberSheet";
 import { ChitPlanForm } from "./ChitPlanForm";
+import { chitReceiptShareRequest } from "./ChitReceiptButtons";
+import { SendPdfOnWhatsAppDialog, type SendPdfRequest } from "../SendPdfOnWhatsAppDialog";
+import { useAppSettings } from "../../context/AppSettingsContext";
+import { businessFromSettings } from "../../lib/businessDetails";
 
 type Tab = "approvals" | "members" | "plans";
 type Row = ChitEnrollment & { payments: ChitPayment[] };
@@ -52,6 +56,11 @@ export function ChitAdmin() {
   const [planFilter, setPlanFilter] = useState("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingPlan, setEditingPlan] = useState<ChitPlan | null | "new">(null);
+  /** The receipt being sent on WhatsApp, if any. */
+  const [shareRequest, setShareRequest] = useState<SendPdfRequest | null>(null);
+  const { settings } = useAppSettings();
+  const business = businessFromSettings(settings);
+
   /** The plan whose activate / delete is in flight, so its buttons can wait. */
   const [planBusy, setPlanBusy] = useState<string | null>(null);
 
@@ -267,7 +276,23 @@ export function ChitAdmin() {
                       </div>
                       <ScreenshotButton path={payment.screenshot_path} className="shrink-0 rounded-lg border border-primary-orange/30 px-2.5 py-1.5" />
                     </div>
-                    <PaymentReview payment={payment} memberName={enrollment.member_name} onDone={load} />
+                    <PaymentReview
+                      payment={payment}
+                      memberName={enrollment.member_name}
+                      onDone={load}
+                      // Straight to sending the receipt: the moment it is
+                      // approved is when the member is waiting to hear.
+                      onApproved={(approved) =>
+                        setShareRequest(
+                          chitReceiptShareRequest(
+                            enrollment,
+                            [...enrollment.payments.filter((p) => p.id !== approved.id), approved],
+                            approved,
+                            business
+                          )
+                        )
+                      }
+                    />
                   </div>
                 ))}
               </div>
@@ -499,10 +524,14 @@ export function ChitAdmin() {
           enrollment={open}
           payments={open.payments}
           plans={plans}
+          business={business}
+          onShare={setShareRequest}
           onClose={() => setOpenId(null)}
           onChanged={load}
         />
       )}
+      <SendPdfOnWhatsAppDialog request={shareRequest} onClose={() => setShareRequest(null)} />
+
       {editingPlan && (
         <ChitPlanForm
           plan={editingPlan === "new" ? null : editingPlan}

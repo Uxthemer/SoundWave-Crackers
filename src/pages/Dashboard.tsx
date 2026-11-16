@@ -49,6 +49,7 @@ import { DateRangeFilter } from "../components/DateRangeFilter";
 import { QuotationsList } from "../components/QuotationsList";
 import SeasonReportModal from "../components/SeasonReportModal";
 import { ChitAdmin } from "../components/chit/ChitAdmin";
+import { WholesaleAdmin } from "../components/wholesale/WholesaleAdmin";
 
 ChartJS.register(
   CategoryScale,
@@ -92,15 +93,20 @@ export function Dashboard() {
   >("idle");
   const [importError, setImportError] = useState("");
   // active in-page tab: overview (dashboard), analytics, orders, stock, expenses
-  // `?tab=chit` opens a tab directly: it is where the chit notifications
-  // (push and email) send a superadmin.
+  // `?tab=chit` / `?tab=wholesale` open a tab directly: it is where the chit
+  // and wholesale notifications (push and email) send a superadmin.
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<
-    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors" | "quotations" | "chit"
-  >(() => (searchParams.get("tab") === "chit" ? "chit" : "overview"));
+    "overview" | "analytics" | "users" | "orders" | "stock" | "expenses" | "vendors" | "quotations" | "chit" | "wholesale"
+  >(() => {
+    const tab = searchParams.get("tab");
+    return tab === "chit" || tab === "wholesale" ? tab : "overview";
+  });
   const isSuperadmin = userRole?.name === "superadmin";
   /** Chit enrolments and payments waiting for a superadmin, for the tab's badge. */
   const [chitWaiting, setChitWaiting] = useState(0);
+  /** Wholesale enquiries nobody has picked up yet, for that tab's badge. */
+  const [wholesaleNew, setWholesaleNew] = useState(0);
   useEffect(() => {
     if (!isSuperadmin) return;
     let live = true;
@@ -110,6 +116,11 @@ export function Dashboard() {
         supabase.from("chit_payments").select("id", { count: "exact", head: true }).eq("status", "pending"),
       ]);
       if (live) setChitWaiting((enrolments.count ?? 0) + (payments.count ?? 0));
+      const { count: fresh } = await supabase
+        .from("wholesale_enquiries")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "new");
+      if (live) setWholesaleNew(fresh ?? 0);
     })();
     return () => {
       live = false;
@@ -259,7 +270,12 @@ export function Dashboard() {
         label: "Quotations",
       },
       // Approving enrolments and payments is a superadmin's call alone.
-      ...(isSuperadmin ? [{ key: "chit", label: "Chit Scheme" }] : []),
+      ...(isSuperadmin
+        ? [
+            { key: "chit", label: "Chit Scheme" },
+            { key: "wholesale", label: "Wholesale" },
+          ]
+        : []),
     ];
     return tabList.map((t) => {
       const active = activeTab === (t.key as any);
@@ -274,6 +290,16 @@ export function Dashboard() {
           }`}
         >
           {t.label}
+          {t.key === "wholesale" && wholesaleNew > 0 && (
+            <span
+              className={`ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-xs font-bold ${
+                active ? "bg-white text-primary-orange" : "bg-red-500 text-white"
+              }`}
+              title={`${wholesaleNew} new enquir${wholesaleNew === 1 ? "y" : "ies"}`}
+            >
+              {wholesaleNew}
+            </span>
+          )}
           {t.key === "chit" && chitWaiting > 0 && (
             <span
               className={`ml-1.5 inline-flex min-w-[1.25rem] justify-center rounded-full px-1.5 text-xs font-bold ${
@@ -730,6 +756,12 @@ export function Dashboard() {
                 </div>
               </div>
             </>
+          )}
+
+          {activeTab === "wholesale" && isSuperadmin && (
+            <div className="pt-2">
+              <WholesaleAdmin onCountChange={setWholesaleNew} />
+            </div>
           )}
 
           {activeTab === "chit" && isSuperadmin && (

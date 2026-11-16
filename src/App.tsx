@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -21,6 +21,9 @@ import {
   User,
   GalleryThumbnails,
   HeartHandshake,
+  ChevronDown,
+  FileDown,
+  Store,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -55,6 +58,7 @@ import { Login } from "./pages/Login";
 import { Signup } from "./pages/Signup";
 import { Profile } from "./pages/Profile";
 import { ChitScheme } from "./pages/ChitScheme";
+import { Wholesale } from "./pages/Wholesale";
 import { useCartStore } from "./store/cartStore";
 import CancellationPolicy from "./pages/CancellationPolicy";
 import ShippingPolicy from "./pages/ShippingPolicy";
@@ -234,6 +238,79 @@ import { useCanonicalUrl } from "./lib/seo";
 import { useForegroundPush } from "./hooks/useForegroundPush";
 import { useCartPriceRefresh } from "./hooks/useCartPriceRefresh";
 
+/**
+ * "Price List" in the desktop menu: the retail list downloads as before; the
+ * wholesale list is an enquiry for now, so it opens the Wholesale page with
+ * that enquiry chosen. A dropdown rather than a second menu item -- the row
+ * is already full at laptop widths.
+ */
+function PriceListMenu({ loading, onRetail }: { loading: boolean; onRetail: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center gap-1 font-montserrat font-semibold transition-colors cursor-pointer px-2 py-1 rounded hover:bg-card/60 text-primary hover:text-primary-orange"
+      >
+        {loading ? "Preparing…" : "Price List"}
+        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 top-full mt-2 w-60 rounded-xl border border-card-border/20 bg-background shadow-xl py-1.5 z-50">
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onRetail();
+            }}
+            disabled={loading}
+            className="w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-card/70 disabled:opacity-50"
+          >
+            <FileDown className="w-4 h-4 mt-0.5 text-primary-orange shrink-0" />
+            <span>
+              <span className="block text-sm font-semibold">Retail price list</span>
+              <span className="block text-xs text-text/60">Download the PDF</span>
+            </span>
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              navigate("/wholesale?type=price-list");
+            }}
+            className="w-full flex items-start gap-3 px-3 py-2 text-left hover:bg-card/70"
+          >
+            <Store className="w-4 h-4 mt-0.5 text-primary-orange shrink-0" />
+            <span>
+              <span className="block text-sm font-semibold">Wholesale price list</span>
+              <span className="block text-xs text-text/60">Request it from our team</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppContent() {
   usePageTracking();
   useCanonicalUrl();
@@ -284,23 +361,36 @@ export function AppContent() {
       <MarqueeText />
 
       {/* Navigation */}
-      <nav className="glass-effect w-full z-50 px-4 py-1 sticky top-0">
-        <div className="container mx-auto flex items-center justify-between">
+      {/* Full width with slim side padding rather than `container`: that
+          capped the row at 1280px and centred it, leaving wide empty margins
+          on a desktop while the links sat squeezed together in the middle. */}
+      <nav className="glass-effect w-full z-50 px-4 xl:px-6 py-1 sticky top-0">
+        <div className="w-full max-w-[1920px] mx-auto flex items-center justify-between gap-6">
           <Link to="/" className="flex items-center -ml-3">
             <img
               src={settings?.logo_url || "/assets/img/logo/logo_2.png"}
               alt={settings?.site_title || "SoundWave Crackers"}
-              className="hidden dark:block h-20 w-auto dark:invert"
+              className="hidden dark:block h-20 xl:h-16 2xl:h-20 w-auto dark:invert"
             />
             <img
               src={settings?.logo_url || "/assets/img/logo/logo_2.png"}
               alt={settings?.site_title || "SoundWave Crackers"}
-              className="block dark:hidden h-20 w-auto light:invert"
+              className="block dark:hidden h-20 xl:h-16 2xl:h-20 w-auto light:invert"
             />
           </Link>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden xl:flex items-center space-x-8">
+          {/* Room between the links grows with the screen; the type and the
+              logo grow with it. Each step was measured against the real
+              Montserrat widths, the logo and the right-hand icons (with the
+              user's name, cut short in UserMenu), so the row never runs past
+              the screen:
+                1280px   14px type, 28px gaps, 64px logo, no name
+                1440px   14px, 32px gaps, name up to 120px
+                1536px   15px, 40px gaps, 80px logo, name up to 140px
+                1700px+  16px, 48px gaps
+              The links inherit the size from here. */}
+          <div className="hidden xl:flex items-center gap-7 min-[1440px]:gap-8 2xl:gap-10 min-[1700px]:gap-12 text-sm 2xl:text-[15px] min-[1700px]:text-base">
             <NavLink
               to="/"
               className={({ isActive }) =>
@@ -352,6 +442,19 @@ export function AppContent() {
                 the phone they ordered with. It used to be reachable only
                 from the footer and the post-checkout screen. */}
             <NavLink
+              to="/wholesale"
+              title="Wholesale enquiries and price list"
+              className={({ isActive }) =>
+                `font-montserrat font-semibold transition-colors cursor-pointer ${
+                  isActive
+                    ? "text-primary-orange"
+                    : "text-primary hover:text-primary-orange"
+                }`
+              }
+            >
+              Wholesale
+            </NavLink>
+            <NavLink
               to="/track-order"
               className={({ isActive }) =>
                 `font-montserrat font-semibold transition-colors ${
@@ -363,14 +466,7 @@ export function AppContent() {
             >
               Track Order
             </NavLink>
-            <button
-              onClick={handleDownloadPriceList}
-              disabled={priceListLoading}
-              title="Download the current price list"
-              className="font-montserrat font-semibold transition-colors cursor-pointer px-3 py-1 rounded hover:bg-card/60 text-primary disabled:opacity-60 disabled:cursor-wait"
-            >
-              {priceListLoading ? "Preparing…" : "Price List"}
-            </button>
+            <PriceListMenu loading={priceListLoading} onRetail={handleDownloadPriceList} />
           </div>
 
           <div className="flex items-center space-x-4">
@@ -482,6 +578,13 @@ export function AppContent() {
                 <span className="chit-menu-badge" aria-hidden="true">NEW</span>
               </Link>
               <Link
+                to="/wholesale"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors cursor-pointer"
+                onClick={handleMenuItemClick}
+              >
+                Wholesale
+              </Link>
+              <Link
                 to="/track-order"
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
                 onClick={handleMenuItemClick}
@@ -503,8 +606,15 @@ export function AppContent() {
                 disabled={priceListLoading}
                 className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange text-left disabled:opacity-60 disabled:cursor-wait"
               >
-                {priceListLoading ? "Preparing…" : "Price List"}
+                {priceListLoading ? "Preparing…" : "Retail Price List"}
               </button>
+              <Link
+                to="/wholesale?type=price-list"
+                className="px-4 py-2 font-montserrat font-semibold text-primary hover:text-primary-orange transition-colors"
+                onClick={handleMenuItemClick}
+              >
+                Wholesale Price List
+              </Link>
 
               {/* The theme, moved off the header on small screens. The menu
                   deliberately stays open: this changes the page behind it, and
@@ -567,6 +677,7 @@ export function AppContent() {
         <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/product/:productId" element={<ProductDetails />} />
         <Route path="/chit-scheme" element={<ChitScheme />} />
+        <Route path="/wholesale" element={<Wholesale />} />
         {/* The page's old address, kept for links and search results that still point at it. */}
         <Route path="/monthly-installment" element={<Navigate to="/chit-scheme" replace />} />
         <Route path="/login" element={<Login />} />

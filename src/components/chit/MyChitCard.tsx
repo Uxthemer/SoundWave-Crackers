@@ -3,6 +3,9 @@ import { format } from "date-fns";
 import { AlertCircle, CalendarClock, ChevronDown, ChevronUp, Clock, Wallet } from "lucide-react";
 import { chitSummary, monthLabel, rupees, type ChitEnrollment, type ChitPayment } from "../../lib/chit";
 import { EnrollmentPill, ProgressBar } from "./chitUi";
+import { ChitReceiptButtons } from "./ChitReceiptButtons";
+import { useAppSettings } from "../../context/AppSettingsContext";
+import { businessFromSettings } from "../../lib/businessDetails";
 import { PaymentList, ScheduleGrid } from "./ChitDetails";
 
 /**
@@ -19,6 +22,8 @@ export function MyChitCard({
   onPay: (enrollment: ChitEnrollment, suggested: number) => void;
 }) {
   const [open, setOpen] = useState(enrollment.status === "active");
+  const { settings } = useAppSettings();
+  const business = businessFromSettings(settings);
   const summary = chitSummary(enrollment, payments);
   const active = enrollment.status === "active";
   const fullyPaid = summary.balance <= 0.005;
@@ -129,7 +134,12 @@ export function MyChitCard({
               <ScheduleGrid summary={summary} />
               <div>
                 <p className="text-sm font-semibold mb-1">Payment requests</p>
-                <PaymentList payments={payments} />
+                <PaymentList
+                  payments={payments}
+                  renderReceipt={(p) => (
+                    <ChitReceiptButtons enrollment={enrollment} payments={payments} payment={p} business={business} />
+                  )}
+                />
               </div>
             </div>
           )}

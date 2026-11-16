@@ -19,6 +19,9 @@ import {
 import { ConfirmDialog, EnrollmentPill, ProgressBar, Sheet, inputClass } from "./chitUi";
 import { PaymentList, ScheduleGrid } from "./ChitDetails";
 import { EnrollmentReview, PaymentReview } from "./ChitReview";
+import { ChitReceiptButtons, chitReceiptShareRequest } from "./ChitReceiptButtons";
+import type { BusinessDetails } from "../../lib/businessDetails";
+import type { SendPdfRequest } from "../SendPdfOnWhatsAppDialog";
 
 type Panel = null | "switch" | "record";
 
@@ -36,15 +39,25 @@ export function ChitMemberSheet({
   enrollment,
   payments,
   plans,
+  business,
+  onShare,
   onClose,
   onChanged,
 }: {
   enrollment: ChitEnrollment;
   payments: ChitPayment[];
   plans: ChitPlan[];
+  business: BusinessDetails;
+  /** Opens the WhatsApp dialog with a receipt. */
+  onShare: (request: SendPdfRequest) => void;
   onClose: () => void;
   onChanged: () => void;
 }) {
+  /** Offers a just-approved payment's receipt, counted with the others. */
+  const offerReceipt = (approved: ChitPayment) => {
+    const all = [...payments.filter((p) => p.id !== approved.id), approved];
+    onShare(chitReceiptShareRequest(enrollment, all, approved, business));
+  };
   const summary = chitSummary(enrollment, payments);
   const [panel, setPanel] = useState<Panel>(null);
   const [busy, setBusy] = useState(false);
@@ -295,15 +308,17 @@ export function ChitMemberSheet({
             <button
               onClick={() =>
                 run(
-                  () =>
-                    recordPayment({
-                      enrollmentId: enrollment.id,
-                      amount: Number(amount),
-                      method,
-                      transactionRef: reference,
-                      paidOn,
-                      note: recordNote,
-                    }),
+                  async () =>
+                    offerReceipt(
+                      await recordPayment({
+                        enrollmentId: enrollment.id,
+                        amount: Number(amount),
+                        method,
+                        transactionRef: reference,
+                        paidOn,
+                        note: recordNote,
+                      })
+                    ),
                   "Payment recorded"
                 )
               }
@@ -324,7 +339,15 @@ export function ChitMemberSheet({
 
         <div>
           <p className="text-sm font-semibold mb-1">Payments ({payments.length})</p>
-          <PaymentList payments={payments} renderActions={(p) => <PaymentReview payment={p} memberName={enrollment.member_name} onDone={onChanged} />} />
+          <PaymentList
+            payments={payments}
+            renderActions={(p) => (
+              <PaymentReview payment={p} memberName={enrollment.member_name} onDone={onChanged} onApproved={offerReceipt} />
+            )}
+            renderReceipt={(p) => (
+              <ChitReceiptButtons enrollment={enrollment} payments={payments} payment={p} business={business} onShare={onShare} />
+            )}
+          />
         </div>
 
         {enrollment.plan_history.length > 0 && (
