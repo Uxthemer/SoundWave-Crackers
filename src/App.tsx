@@ -59,6 +59,7 @@ import { Signup } from "./pages/Signup";
 import { Profile } from "./pages/Profile";
 import { ChitScheme } from "./pages/ChitScheme";
 import { Wholesale } from "./pages/Wholesale";
+import { GlowFrame } from "./components/GlowFrame";
 import { useCartStore } from "./store/cartStore";
 import CancellationPolicy from "./pages/CancellationPolicy";
 import ShippingPolicy from "./pages/ShippingPolicy";
@@ -427,16 +428,18 @@ export function AppContent() {
             >
               Explore Crackers
             </NavLink>
-            {/* Highlighted (index.css, .chit-menu-highlight): the scheme is
+            {/* A button with light running round its border (index.css,
+                .chit-menu-highlight; components/GlowFrame.tsx): the scheme is
                 seasonal and the one thing in the menu worth drawing the eye to. */}
             <NavLink
               to="/chit-scheme"
               title="Diwali Chit Scheme — save monthly"
-              className="chit-menu-highlight font-montserrat font-bold cursor-pointer"
+              // NavLink adds `active` on the chit page; the CSS rings it then.
+              className="chit-menu-highlight font-montserrat font-bold cursor-pointer whitespace-nowrap"
             >
               <Sparkles className="chit-menu-sparkle" aria-hidden="true" />
-              <span className="chit-menu-text">Chit Scheme</span>
-              <span className="chit-menu-badge" aria-hidden="true">NEW</span>
+              <span>Chit Scheme</span>
+              <GlowFrame />
             </NavLink>
             {/* Open to everyone: a guest tracks with the order number and
                 the phone they ordered with. It used to be reachable only
@@ -574,8 +577,8 @@ export function AppContent() {
                 onClick={handleMenuItemClick}
               >
                 <Sparkles className="chit-menu-sparkle" aria-hidden="true" />
-                <span className="chit-menu-text">Chit Scheme</span>
-                <span className="chit-menu-badge" aria-hidden="true">NEW</span>
+                <span>Chit Scheme</span>
+                <GlowFrame />
               </Link>
               <Link
                 to="/wholesale"

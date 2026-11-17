@@ -351,51 +351,107 @@ textarea {
 }
 
 /*
- * Chit Scheme in the menu: a pill with a turning fire-coloured border, a soft
- * pulsing glow, shimmering gold text and a "NEW" tag. The older .shining-text
- * shimmered between black and red, so in dark mode the black half of every
- * pass vanished into the background; these colours read on both themes.
+ * Chit Scheme in the menu: the brand's orange button with a line of light
+ * that travels round its border (components/GlowFrame.tsx draws the line).
+ * The design it follows lit up only on hover, which a phone never does and a
+ * visitor may never try; here the light also makes one lap by itself every
+ * few seconds, and runs continuously while hovered or focused.
+ *
+ * `.chit-menu-text` (shimmering orange-gold text) is for the phone's bottom
+ * bar, where a button does not suit.
  */
-@property --chit-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
 .chit-menu-highlight {
+  /* The light: a pale gold line with an amber glow, on the orange button. */
+  --glow-line-color: #fff3c4;
+  --glow-line-thickness: 2px;
+  --glow-line-length: 20;
+  --glow-blur-color: #ffb300;
+  --glow-blur-size: 10px;
+  --glow-lap: 1200ms;
+  --glow-every: 4s;
   position: relative;
-  isolation: isolate;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.3rem 0.85rem;
-  border-radius: 9999px;
-  animation: chit-glow 2.4s ease-in-out infinite;
+  padding: 0.42rem 0.95rem;
+  border: 2px solid #ffb74d;
+  /* The frame follows this radius, whatever it is set to. */
+  border-radius: 0.5rem;
+  color: #fff;
+  background: linear-gradient(135deg, #ff7a1a 0%, #ff5722 45%, #e53935 100%);
+  box-shadow: 0 4px 14px -4px rgba(255, 87, 34, 0.55);
+  transition: box-shadow 0.2s ease, filter 0.2s ease;
 }
 
-/* The border: a conic gradient, masked to a 2px ring, turning. */
-.chit-menu-highlight::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  padding: 2px;
-  border-radius: inherit;
-  background: conic-gradient(from var(--chit-angle), #ff5722, #ffc107, #ff1744, #ff9100, #ff5722);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: chit-spin 3s linear infinite;
+.chit-menu-highlight:hover,
+.chit-menu-highlight:focus-visible {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 18px -4px rgba(255, 87, 34, 0.75);
+  outline: none;
 }
 
-/* A faint warm fill behind the text. */
-.chit-menu-highlight::after {
-  content: "";
+/* On the chit page itself: a gold outline outside the border. */
+.chit-menu-highlight.active {
+  outline: 2px solid rgba(255, 213, 79, 0.85);
+  outline-offset: 3px;
+}
+
+.chit-menu-highlight .chit-menu-sparkle {
+  color: #fff3c4;
+}
+
+.glow-container {
+  pointer-events: none;
   position: absolute;
-  inset: 2px;
-  z-index: -2;
-  border-radius: inherit;
-  background: linear-gradient(90deg, rgba(255, 87, 34, 0.1), rgba(255, 193, 7, 0.12), rgba(255, 87, 34, 0.1));
+  overflow: visible;
+  opacity: 0;
+  animation: glow-visibility-idle var(--glow-every) ease-in infinite;
+}
+
+.glow-blur,
+.glow-line {
+  fill: transparent;
+  stroke-dasharray: var(--glow-line-length) calc(50 - var(--glow-line-length));
+  animation: glow-run-idle var(--glow-every) ease-in infinite;
+}
+
+.glow-line {
+  stroke: var(--glow-line-color);
+  stroke-width: var(--glow-line-thickness);
+}
+
+.glow-blur {
+  filter: blur(var(--glow-blur-size));
+  stroke: var(--glow-blur-color);
+  stroke-width: var(--glow-blur-size);
+}
+
+/* Hovered or focused: lap after lap, at the design's own speed. */
+.chit-menu-highlight:is(:hover, :focus-visible) .glow-container {
+  animation: glow-visibility var(--glow-lap) ease-in infinite;
+}
+.chit-menu-highlight:is(:hover, :focus-visible) :is(.glow-blur, .glow-line) {
+  animation: glow-run var(--glow-lap) ease-in infinite;
+}
+
+/* One lap: the dashes travel 80 of the path's 100, fading in and out. */
+@keyframes glow-run {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -80; }
+}
+@keyframes glow-visibility {
+  0%, 100% { opacity: 0; }
+  25%, 75% { opacity: 1; }
+}
+
+/* The same lap in the first 30% of --glow-every, then a rest. */
+@keyframes glow-run-idle {
+  0% { stroke-dashoffset: 0; }
+  30%, 100% { stroke-dashoffset: -80; }
+}
+@keyframes glow-visibility-idle {
+  0%, 30%, 100% { opacity: 0; }
+  7.5%, 22.5% { opacity: 1; }
 }
 
 .chit-menu-text {
@@ -407,41 +463,11 @@ textarea {
   animation: shine-wave 2.5s linear infinite;
 }
 
-.chit-menu-badge {
-  position: absolute;
-  top: -0.55rem;
-  right: -0.5rem;
-  padding: 0 0.3rem;
-  border-radius: 9999px;
-  font-size: 0.55rem;
-  font-weight: 800;
-  line-height: 1rem;
-  letter-spacing: 0.04em;
-  color: #fff;
-  background: linear-gradient(135deg, #ff1744, #ff5722);
-  box-shadow: 0 0 0 2px rgb(var(--background, 255 255 255));
-  animation: chit-bounce 1.8s ease-in-out infinite;
-}
-
 .chit-menu-sparkle {
   width: 0.9rem;
   height: 0.9rem;
   color: #ffb300;
   animation: chit-twinkle 1.6s ease-in-out infinite;
-}
-
-@keyframes chit-spin {
-  to { --chit-angle: 360deg; }
-}
-
-@keyframes chit-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 87, 34, 0); }
-  50% { box-shadow: 0 0 14px 2px rgba(255, 87, 34, 0.45); }
-}
-
-@keyframes chit-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
 }
 
 @keyframes chit-twinkle {
@@ -450,11 +476,11 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chit-menu-highlight,
-  .chit-menu-highlight::before,
+  .glow-container,
+  .glow-blur,
+  .glow-line,
   .chit-menu-text,
-  .chit-menu-badge,
   .chit-menu-sparkle {
-    animation: none;
+    animation: none !important;
   }
 }

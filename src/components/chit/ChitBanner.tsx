@@ -39,19 +39,29 @@ export function ChitBanner() {
       >
         {SLIDES.map((slide, i) => (
           <SwiperSlide key={slide.src}>
-            {/* Edge to edge at the banner's own 2:1 shape, so it is never
-                cropped -- it holds the plan table and dates people read.
-                It is tall on a wide screen; that is the price of showing
-                all of it at full width (a capped height cut the title and
-                the dates row off). */}
-            <img
-              src={slide.src}
-              alt={slide.alt}
-              width={1600}
-              height={800}
-              loading={i === 0 ? "eager" : "lazy"}
-              className="block w-full h-auto aspect-[2/1] object-cover"
-            />
+            {/* A full-width band, at most 480px tall. The banner sits in it
+                whole -- scaled to the band, never cropped (it holds the plan
+                table and dates people read), never enlarged -- and the band
+                either side of it is the same picture, blurred. Below 960px
+                wide the banner fills the width exactly, as before.
+                To change the height: the two 480px values here. */}
+            <div className="relative w-full h-[50vw] max-h-[480px] overflow-hidden bg-[#1e2a4a]">
+              <img
+                src={slide.src}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-70"
+              />
+              <div className="absolute inset-0 bg-black/15" />
+              <img
+                src={slide.src}
+                alt={slide.alt}
+                width={1600}
+                height={800}
+                loading={i === 0 ? "eager" : "lazy"}
+                className="relative mx-auto block h-full w-auto max-w-full object-contain shadow-2xl"
+              />
+            </div>
           </SwiperSlide>
         ))}
       </Swiper>
